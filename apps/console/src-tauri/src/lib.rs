@@ -13,6 +13,8 @@ pub fn run() {
             setup::init_keystore,
             config_edit::add_database,
             config_edit::list_databases,
+            config_edit::add_destination,
+            config_edit::list_destinations,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri 애플리케이션 실행 실패");

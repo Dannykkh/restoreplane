@@ -65,11 +65,6 @@ export function Databases() {
 
   return (
     <div>
-      <div className="section-head">
-        <h2>DB · 목적지 등록</h2>
-        <span className="label">데이터베이스 {dbs.length}개</span>
-      </div>
-
       <div className="db-layout">
         <div className="db-list">
           {dbs.length === 0 ? (

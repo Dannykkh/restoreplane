@@ -97,6 +97,63 @@ export async function addDatabase(masterPassword: string, db: NewDatabase): Prom
   });
 }
 
+// --- 목적지 등록 ---
+export interface DestSummary {
+  name: string;
+  kind: string; // local | s3 | ssh
+  immutability: string; // none | server_append_only | object_lock_governance | object_lock_compliance
+  location: string;
+}
+export interface NewDestination {
+  name: string;
+  kind: string;
+  path?: string;
+  endpoint?: string;
+  region?: string;
+  bucket?: string;
+  prefix?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  objectLockMode?: string;
+  retentionDays?: number;
+  host?: string;
+  port?: number;
+  user?: string;
+  privateKeyPath?: string;
+  hostKeyFingerprint?: string;
+}
+
+const MOCK_DESTS: DestSummary[] = [
+  { name: "s3-worm", kind: "s3", immutability: "object_lock_governance", location: "my-backups/prod/" },
+  { name: "bastion-sftp", kind: "ssh", immutability: "server_append_only", location: "svc@bastion:/srv/backups" },
+];
+
+export async function listDestinations(): Promise<DestSummary[]> {
+  if (inTauri()) return tauriInvoke<DestSummary[]>("list_destinations");
+  return MOCK_DESTS;
+}
+
+export async function addDestination(masterPassword: string, dest: NewDestination): Promise<void> {
+  if (inTauri()) return tauriInvoke<void>("add_destination", { masterPassword, dest });
+  if (MOCK_DESTS.some((d) => d.name === dest.name)) throw new Error(`이미 존재하는 목적지 이름입니다: ${dest.name}`);
+  if (dest.kind === "ssh" && !dest.hostKeyFingerprint) throw new Error("ssh 목적지는 host_key_fingerprint가 필요합니다(MITM 방어).");
+  const immut =
+    dest.kind === "ssh"
+      ? "server_append_only"
+      : dest.kind === "s3" && dest.objectLockMode === "governance"
+        ? "object_lock_governance"
+        : dest.kind === "s3" && dest.objectLockMode === "compliance"
+          ? "object_lock_compliance"
+          : "none";
+  const location =
+    dest.kind === "local"
+      ? dest.path ?? ""
+      : dest.kind === "s3"
+        ? `${dest.bucket ?? ""}/${dest.prefix ?? ""}`
+        : `${dest.user ?? ""}@${dest.host ?? ""}:${dest.path ?? ""}`;
+  MOCK_DESTS.push({ name: dest.name, kind: dest.kind, immutability: immut, location });
+}
+
 // --- 브라우저 디자인 검증용 목 데이터 (Tauri 밖에서만 사용) ---
 const MOCK_DASHBOARD: DashboardData = {
   configPresent: true,

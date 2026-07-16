@@ -8,6 +8,7 @@ members = [
   "crates/dbbackup-secrets",
   "crates/dbbackup-pipeline",
   "crates/dbbackup-source-pg",
+  "crates/dbbackup-source-mysql",
   "crates/dbbackup-catalog",
   "crates/dbbackup-verify",
 ]

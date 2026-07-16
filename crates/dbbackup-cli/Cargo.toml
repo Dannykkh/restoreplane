@@ -12,6 +12,7 @@ dbbackup-core = { path = "../dbbackup-core" }
 dbbackup-config = { path = "../dbbackup-config" }
 dbbackup-pipeline = { path = "../dbbackup-pipeline" }
 dbbackup-source-pg = { path = "../dbbackup-source-pg" }
+dbbackup-source-mysql = { path = "../dbbackup-source-mysql" }
 dbbackup-secrets = { path = "../dbbackup-secrets" }
 dbbackup-catalog = { path = "../dbbackup-catalog" }
 dbbackup-verify = { path = "../dbbackup-verify" }

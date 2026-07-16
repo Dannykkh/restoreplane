@@ -510,6 +510,7 @@ dependencies = [
  "dbbackup-core",
  "dbbackup-pipeline",
  "dbbackup-secrets",
+ "dbbackup-source-mysql",
  "dbbackup-source-pg",
  "dbbackup-verify",
  "ed25519-dalek",
@@ -583,6 +584,24 @@ dependencies = [
  "sha2 0.10.8",
  "thiserror",
  "windows-dpapi",
+ "zeroize",
+]
+
+[[package]]
+name = "dbbackup-source-mysql"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "dbbackup-core",
+ "dbbackup-pipeline",
+ "futures",
+ "serde",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
  "zeroize",
 ]
 

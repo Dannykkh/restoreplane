@@ -20,6 +20,9 @@ use dbbackup_pipeline::{
     DumpPlanPart, LocalDest, Manifest, PipelineCfg,
 };
 use dbbackup_secrets::{Dek, Keystore};
+use dbbackup_source_mysql::{
+    binary::MysqldumpBinaryMatrix, dump::MySqlConnCfg, meta::MysqlCliMetaConn, MySqlSource,
+};
 use dbbackup_source_pg::{version::BundledToolMatrix, PgConnCfg, PostgresSource};
 use ed25519_dalek::SigningKey;
 use zeroize::Zeroizing;
@@ -95,10 +98,6 @@ async fn execute_job(
         .find(|d| d.alias == job.source)
         .ok_or_else(|| anyhow::anyhow!("job '{}'의 소스 '{}'를 찾을 수 없음", job.name, job.source))?;
 
-    if db.engine != Engine::Postgresql {
-        anyhow::bail!("슬라이스 1은 postgresql 소스만 배선됨(요청: {:?})", db.engine);
-    }
-
     // 2) 목적지 해석 — local만 실제 배선, 나머지는 미배선 안내.
     let mut dests: Vec<Arc<dyn Destination>> = Vec::new();
     for name in &job.destinations {
@@ -128,33 +127,72 @@ async fn execute_job(
     // 3) 스풀 디렉토리 + 파이프라인 설정.
     let spool_dir = &config.policy.spool_dir;
     std::fs::create_dir_all(spool_dir)?;
-    let cfg = PipelineCfg {
+    let mut cfg = PipelineCfg {
         zstd_level: 3,
         max_parallel_dumps: config.policy.max_parallel_dumps as usize,
         min_free_disk: config.policy.min_free_disk_mb.saturating_mul(1024 * 1024),
         upload_retries: config.policy.retry.attempts,
         ..PipelineCfg::default()
     };
+    // R9(S04): MySQL 소스면 DDL-race stderr 패턴을 파이프라인 fatal_patterns에 병합한다
+    // (exit=0이어도 부분 스키마 덤프를 전체 실패로 강등하는 호출 지점).
+    if matches!(db.engine, Engine::Mysql | Engine::Mariadb) {
+        cfg.fatal_patterns.extend(MySqlSource::fatal_patterns());
+    }
 
-    // 4) PostgresSource 구성. 비밀번호는 PGPASSWORD env로(슬라이스 1 한계 — 위 주석 참조).
-    let password = std::env::var("PGPASSWORD").map_err(|_| {
-        anyhow::anyhow!("슬라이스 1 run은 DB 비밀번호를 PGPASSWORD 환경변수로 요구합니다")
-    })?;
-    let conn = PgConnCfg {
-        host: db.host.clone(),
-        port: db.port,
-        user: db.user.clone(),
-        password: Zeroizing::new(password),
-        admin_database: "postgres".to_string(),
-    };
-    let matrix = BundledToolMatrix::from_base_dir(Path::new("tools/pg"));
-    let source = PostgresSource {
-        job: job.name.clone(),
-        alias: db.alias.clone(),
-        engine_alias: db.alias.clone(),
-        conn,
-        registered_databases: vec![db.dbname.clone()],
-        matrix,
+    // 4) 엔진별 BackupSource 구성. 비밀번호는 엔진 관례 env로 받는다(슬라이스 한계 — 위 주석 참조).
+    let source: Box<dyn BackupSource> = match db.engine {
+        Engine::Postgresql => {
+            let password = std::env::var("PGPASSWORD").map_err(|_| {
+                anyhow::anyhow!("postgresql run은 DB 비밀번호를 PGPASSWORD 환경변수로 요구합니다")
+            })?;
+            let conn = PgConnCfg {
+                host: db.host.clone(),
+                port: db.port,
+                user: db.user.clone(),
+                password: Zeroizing::new(password),
+                admin_database: "postgres".to_string(),
+            };
+            let matrix = BundledToolMatrix::from_base_dir(Path::new("tools/pg"));
+            Box::new(PostgresSource {
+                job: job.name.clone(),
+                alias: db.alias.clone(),
+                engine_alias: db.alias.clone(),
+                conn,
+                registered_databases: vec![db.dbname.clone()],
+                matrix,
+            })
+        }
+        Engine::Mysql | Engine::Mariadb => {
+            // 비밀번호는 MYSQL_PWD env로만 흐른다(R10 — argv 평문 노출 금지).
+            let password = std::env::var("MYSQL_PWD").map_err(|_| {
+                anyhow::anyhow!("mysql/mariadb run은 DB 비밀번호를 MYSQL_PWD 환경변수로 요구합니다")
+            })?;
+            let conn = MySqlConnCfg {
+                host: db.host.clone(),
+                port: db.port,
+                user: db.user.clone(),
+                password: Zeroizing::new(password.clone()),
+                database: db.dbname.clone(),
+            };
+            // 메타 조회 seam: `mysql` CLI(PATH). sqlx 미도입 편차 — meta.rs 주석 참조.
+            let meta = MysqlCliMetaConn {
+                client: std::path::PathBuf::from("mysql"),
+                host: db.host.clone(),
+                port: db.port,
+                user: db.user.clone(),
+                password: Zeroizing::new(password),
+            };
+            let matrix = MysqldumpBinaryMatrix::from_base_dir(Path::new("tools/mysql"));
+            Box::new(MySqlSource::new(
+                job.name.clone(),
+                db.alias.clone(),
+                Box::new(meta),
+                conn,
+                matrix,
+                true, // capture_binlog: 앵커 공백은 영구 재현 불가(R8)
+            ))
+        }
     };
 
     // 5) plan → 각 파트를 봉투 경로로 흘려보낸다(per-backup DEK → KEK-wrap → 서명 매니페스트).

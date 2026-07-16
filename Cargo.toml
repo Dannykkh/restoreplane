@@ -5,7 +5,8 @@ members = [
   "crates/dbbackup-core",
   "crates/dbbackup-config",
   "crates/dbbackup-cli",
-  # S02+ : "crates/dbbackup-secrets", "crates/dbbackup-pipeline",
+  "crates/dbbackup-secrets",
+  # S02+ : "crates/dbbackup-pipeline",
   #        "crates/dbbackup-catalog", "crates/dbbackup-source-pg", ...
 ]
 

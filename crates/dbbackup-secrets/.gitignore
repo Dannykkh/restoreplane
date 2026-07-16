@@ -1,0 +1,6 @@
+# S02 R12/C4 — 키 자료는 리포 밖(비커밋). S11 배포 정합.
+*.key
+dpapi.key
+*.ed25519
+*.wrapset.json
+recovery-code*.txt

@@ -16,6 +16,41 @@ export async function getDashboard(): Promise<DashboardData> {
   return MOCK_DASHBOARD;
 }
 
+// --- 초기 설정(init) ---
+export interface KeystoreStatus {
+  configPath: string;
+  configPresent: boolean;
+  keystorePresent: boolean;
+}
+export interface InitResult {
+  recoveryCode: string;
+  verifyingKeyHex: string;
+  keystorePath: string;
+}
+
+let mockKeystoreCreated = false;
+
+export async function keystoreStatus(): Promise<KeystoreStatus> {
+  if (inTauri()) return tauriInvoke<KeystoreStatus>("keystore_status");
+  return {
+    configPath: "C:\\ProgramData\\dbbackup\\dbbackup.toml",
+    configPresent: mockKeystoreCreated,
+    keystorePresent: mockKeystoreCreated,
+  };
+}
+
+export async function initKeystore(masterPassword: string): Promise<InitResult> {
+  if (inTauri()) return tauriInvoke<InitResult>("init_keystore", { masterPassword });
+  // 브라우저 목: 복구코드 표시 모달 디자인 검증용.
+  if (masterPassword.trim().length < 8) throw new Error("마스터 비밀번호는 8자 이상이어야 합니다.");
+  mockKeystoreCreated = true;
+  return {
+    recoveryCode: "K7QM-2XR9-4TJD-9WFA-M3PN-6HBE",
+    verifyingKeyHex: "a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00",
+    keystorePath: "C:\\ProgramData\\dbbackup\\keystore.json",
+  };
+}
+
 // --- 브라우저 디자인 검증용 목 데이터 (Tauri 밖에서만 사용) ---
 const MOCK_DASHBOARD: DashboardData = {
   configPresent: true,

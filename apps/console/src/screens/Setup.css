@@ -1,0 +1,212 @@
+/* 초기 설정 마법사 — 저밀도/넓은 여백(DESIGN.md: 한 번에 한 결정). */
+
+.wizard {
+  max-width: 620px;
+  margin: 0 auto;
+  padding-top: var(--sp-8);
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-8);
+}
+.step-dot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: var(--fs-body-sm);
+  font-weight: 500;
+}
+.step-dot .num {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  flex: none;
+}
+.step-dot.active {
+  color: var(--primary);
+}
+.step-dot.active .num {
+  border-color: var(--primary);
+  background: color-mix(in oklch, var(--primary) 16%, transparent);
+  color: var(--primary);
+}
+.step-dot.done {
+  color: var(--text-muted);
+}
+.step-dot.done .num {
+  border-color: var(--success);
+  background: color-mix(in oklch, var(--success) 16%, transparent);
+  color: var(--success);
+}
+.step-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  min-width: 12px;
+}
+
+.wizard-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--sp-8);
+  box-shadow: var(--el-card);
+}
+.wizard-panel h1 {
+  font-size: var(--fs-h2);
+  margin-bottom: var(--sp-4);
+}
+.wizard-lead {
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: var(--sp-6);
+}
+
+.trust-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.trust-list li {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: flex-start;
+}
+.trust-list .ti {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklch, var(--immutable) 14%, transparent);
+  color: var(--immutable);
+}
+.trust-list .tt {
+  font-weight: 600;
+  font-size: var(--fs-body);
+}
+.trust-list .td {
+  color: var(--text-muted);
+  font-size: var(--fs-body-sm);
+  margin-top: 2px;
+}
+
+.field {
+  margin-bottom: var(--sp-5);
+}
+.field > label {
+  display: block;
+  margin-bottom: 6px;
+}
+.field-hint {
+  font-size: var(--fs-body-sm);
+  color: var(--text-faint);
+  margin-top: 6px;
+}
+.field-error {
+  color: var(--danger);
+  font-size: var(--fs-body-sm);
+  margin-top: 6px;
+}
+
+.wizard-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-top: var(--sp-7);
+}
+
+/* 복구코드 표시 — 강한 마찰(1회 표시 경고) */
+.recovery-warn {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: flex-start;
+  padding: var(--sp-4);
+  border-radius: var(--r-md);
+  background: color-mix(in oklch, var(--warning) 12%, transparent);
+  border: 1px solid color-mix(in oklch, var(--warning) 40%, transparent);
+  color: var(--warning);
+  font-size: var(--fs-body-sm);
+  line-height: 1.5;
+  margin-bottom: var(--sp-5);
+}
+.recovery-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+  margin-bottom: var(--sp-5);
+}
+.recovery-code {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  word-break: break-all;
+}
+.copy-btn {
+  flex: none;
+}
+.ack {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--fs-body-sm);
+  color: var(--text-muted);
+}
+.ack input {
+  margin-top: 2px;
+  accent-color: var(--primary);
+  width: 16px;
+  height: 16px;
+}
+
+.done-key {
+  padding: var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  margin: var(--sp-5) 0;
+}
+.done-key .k {
+  font-size: var(--fs-label);
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+.done-key .v {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  color: var(--text);
+  word-break: break-all;
+  margin-top: 4px;
+}
+.done-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklch, var(--success) 16%, transparent);
+  color: var(--success);
+  margin-bottom: var(--sp-5);
+}

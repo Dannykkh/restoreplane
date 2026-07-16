@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 import { Dashboard } from "./screens/Dashboard";
+import { Setup } from "./screens/Setup";
+import { keystoreStatus } from "./lib/api";
 import {
   IconCalendar,
   IconDashboard,
@@ -20,8 +22,46 @@ const NAV: { id: View; label: string; icon: typeof IconDashboard }[] = [
   { id: "schedule", label: "스케줄 · 알림", icon: IconCalendar },
 ];
 
+type Boot = "loading" | "setup" | "ready";
+
 export function App() {
+  const [boot, setBoot] = useState<Boot>("loading");
   const [view, setView] = useState<View>("dashboard");
+
+  async function refreshStatus() {
+    try {
+      const s = await keystoreStatus();
+      setBoot(s.keystorePresent ? "ready" : "setup");
+    } catch {
+      // 상태 조회 실패 시에도 앱은 뜨게 — 설정으로 유도.
+      setBoot("setup");
+    }
+  }
+
+  useEffect(() => {
+    refreshStatus();
+  }, []);
+
+  if (boot === "loading") {
+    return <div className="boot-splash muted">불러오는 중…</div>;
+  }
+
+  if (boot === "setup") {
+    return (
+      <div className="firstrun">
+        <div className="firstrun-brand">
+          <span className="brand-mark">
+            <IconShield width={16} height={16} />
+          </span>
+          <div>
+            <div className="brand-name">dbbackup</div>
+            <div className="brand-sub">SECURE CONSOLE · 초기 설정</div>
+          </div>
+        </div>
+        <Setup onComplete={refreshStatus} />
+      </div>
+    );
+  }
 
   return (
     <div className="shell">

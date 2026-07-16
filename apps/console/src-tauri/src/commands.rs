@@ -4,27 +4,13 @@
 //! DashboardData(프론트 types.ts와 camelCase로 형태 일치)를 만든다. 액션(init/run/restore 등)은
 //! 후속 증분에서 dbbackup.exe 사이드카로 배선한다.
 
-use std::path::{Path, PathBuf};
-
 use dbbackup_catalog::{latest_backup_per_job, open_reader_conn, BackupRecord};
 use dbbackup_config::schema::{Config, Destination, Job};
 use dbbackup_core::{DestKind, ObjectLockMode};
 use dbbackup_secrets::Keystore;
 use serde::Serialize;
 
-/// 설정 파일 경로: 환경변수 우선, 없으면 작업 디렉토리의 dbbackup.toml.
-fn config_path() -> PathBuf {
-    std::env::var_os("DBBACKUP_CONFIG")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("dbbackup.toml"))
-}
-
-fn keystore_path(cfg_path: &Path) -> PathBuf {
-    match cfg_path.parent() {
-        Some(dir) if !dir.as_os_str().is_empty() => dir.join("keystore.json"),
-        _ => PathBuf::from("keystore.json"),
-    }
-}
+use crate::paths::{config_path, keystore_path};
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]

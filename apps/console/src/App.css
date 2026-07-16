@@ -268,6 +268,26 @@
   align-items: center;
 }
 
+/* 부팅 스플래시 / 첫 실행(설정) */
+.boot-splash {
+  height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+}
+.firstrun {
+  min-height: 100dvh;
+  padding: var(--sp-7) var(--sp-6) var(--sp-9);
+  overflow-y: auto;
+}
+.firstrun-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 620px;
+  margin: 0 auto var(--sp-4);
+}
+
 /* 준비중 placeholder */
 .placeholder {
   display: grid;

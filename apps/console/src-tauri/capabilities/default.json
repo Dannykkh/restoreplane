@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "메인 윈도우 기본 권한 — 코어 커맨드만. 파일시스템/셸 권한은 액션 배선 증분에서 최소범위로 추가.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

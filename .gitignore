@@ -19,3 +19,16 @@ spool/
 /conversations/
 /MEMORY.md
 /codemap/
+
+# TermSnap (자동 생성 — 코드맵/메모리/대화/핸드오프)
+docs/handoffs/
+
+# GUI(apps/console) 빌드 아티팩트 — 소스만 커밋
+apps/console/node_modules/
+apps/console/dist/
+apps/console/src-tauri/gen/
+apps/console/src-tauri/target/
+.playwright-mcp/
+# 디자인 검증용 스크린샷(로컬 전용)
+/dashboard-*.png
+

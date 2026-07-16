@@ -1,0 +1,26 @@
+[package]
+name = "dbbackup-console"
+version.workspace = true
+edition.workspace = true
+description = "dbbackupsystem 관리 GUI (Tauri 데스크톱 콘솔)"
+
+# GUI 백엔드는 기존 lib 크레이트를 직접 의존해 재사용한다(재구현 금지).
+# 읽기/대시보드는 config + catalog 직접 조회, 액션은 dbbackup.exe 사이드카(후속 증분).
+
+[lib]
+name = "dbbackup_console_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { workspace = true }
+serde_json = "1"
+anyhow = { workspace = true }
+
+dbbackup-core = { path = "../../../crates/dbbackup-core" }
+dbbackup-config = { path = "../../../crates/dbbackup-config" }
+dbbackup-catalog = { path = "../../../crates/dbbackup-catalog" }
+dbbackup-secrets = { path = "../../../crates/dbbackup-secrets" }

@@ -1,0 +1,289 @@
+/* 앱 셸 레이아웃 — 보안 콘솔: 좌측 사이드바 + 본문. */
+
+.shell {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden;
+}
+
+/* --- 사이드바 --- */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-6) var(--sp-4);
+  gap: var(--sp-6);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 var(--sp-3);
+}
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: linear-gradient(150deg, var(--primary), var(--accent));
+  display: grid;
+  place-items: center;
+  color: var(--on-primary);
+  flex: none;
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 40%, transparent);
+}
+.brand-name {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+.brand-sub {
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px var(--sp-3);
+  border-radius: var(--r-md);
+  color: var(--text-muted);
+  font-size: var(--fs-body);
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  text-align: left;
+  width: 100%;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.nav-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.nav-item.active {
+  background: color-mix(in oklch, var(--primary) 15%, transparent);
+  color: var(--primary);
+}
+.nav-item .ico {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  opacity: 0.9;
+}
+.nav-spacer {
+  flex: 1;
+}
+.sidebar-foot {
+  font-size: 11px;
+  color: var(--text-faint);
+  padding: 0 var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* --- 본문 --- */
+.main {
+  overflow-y: auto;
+  padding: var(--sp-7) var(--sp-8);
+}
+.main-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+/* 상단 안심 헤더 */
+.reassure {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-6);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in oklch, var(--primary) 12%, transparent), transparent 55%),
+    var(--surface);
+  margin-bottom: var(--section);
+}
+.reassure.warn {
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in oklch, var(--warning) 12%, transparent), transparent 55%),
+    var(--surface);
+}
+.reassure.danger {
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in oklch, var(--danger) 12%, transparent), transparent 55%),
+    var(--surface);
+}
+.reassure-shield {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: color-mix(in oklch, var(--primary) 16%, transparent);
+  color: var(--primary);
+}
+.reassure.warn .reassure-shield {
+  background: color-mix(in oklch, var(--warning) 16%, transparent);
+  color: var(--warning);
+}
+.reassure.danger .reassure-shield {
+  background: color-mix(in oklch, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+.reassure-title {
+  font-family: var(--font-heading);
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.reassure-sub {
+  color: var(--text-muted);
+  font-size: var(--fs-body);
+  margin-top: 3px;
+}
+.reassure-stats {
+  margin-left: auto;
+  display: flex;
+  gap: var(--sp-7);
+  text-align: right;
+}
+.stat-num {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.1;
+}
+.stat-lbl {
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: 0.03em;
+  margin-top: 4px;
+}
+
+/* 섹션 제목 */
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--sp-5);
+}
+.section-head h2 {
+  font-size: var(--fs-h3);
+}
+
+/* 잡 카드 그리드 — 비대칭 밀도(균일 vague 그리드 지양) */
+.job-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--gutter);
+}
+
+.job-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--sp-5);
+  box-shadow: var(--el-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  border-left: 3px solid var(--border-strong);
+  transition: border-color var(--dur-fast) var(--ease);
+}
+.job-card.ok {
+  border-left-color: var(--success);
+}
+.job-card.warn {
+  border-left-color: var(--warning);
+}
+.job-card.danger {
+  border-left-color: var(--danger);
+}
+.job-card:hover {
+  border-color: var(--border-strong);
+}
+
+.job-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.job-name {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: var(--fs-h3);
+  letter-spacing: -0.01em;
+}
+.job-meta {
+  font-size: var(--fs-body-sm);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.engine-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.kv-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 5px 0;
+  border-top: 1px solid var(--border);
+}
+.kv-row .k {
+  font-size: var(--fs-body-sm);
+  color: var(--text-muted);
+}
+.kv-row .v {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  color: var(--text);
+}
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* 준비중 placeholder */
+.placeholder {
+  display: grid;
+  place-items: center;
+  height: 60vh;
+  text-align: center;
+  gap: var(--sp-4);
+  color: var(--text-muted);
+}
+.placeholder .p-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-faint);
+}

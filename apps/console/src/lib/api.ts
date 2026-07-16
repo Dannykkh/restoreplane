@@ -1,0 +1,134 @@
+// Tauri invoke 얇은 래퍼 + 브라우저 목 폴백.
+// Tauri 런타임이 아니면(=플레인 Vite/브라우저) 목 데이터를 돌려줘 디자인을 단독 렌더/검증한다.
+import type { DashboardData } from "../types";
+
+function inTauri(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<T>(cmd, args);
+}
+
+export async function getDashboard(): Promise<DashboardData> {
+  if (inTauri()) return tauriInvoke<DashboardData>("dashboard");
+  return MOCK_DASHBOARD;
+}
+
+// --- 브라우저 디자인 검증용 목 데이터 (Tauri 밖에서만 사용) ---
+const MOCK_DASHBOARD: DashboardData = {
+  configPresent: true,
+  keystorePresent: true,
+  schemaVersion: 1,
+  overall: "ok",
+  jobs: [
+    {
+      name: "prod-nightly",
+      source: "prod-main",
+      engine: "postgresql",
+      schedule: "매일 03:00",
+      requiredImmutability: "object_lock",
+      destinations: ["s3-worm", "bastion-sftp"],
+      health: "ok",
+      lastBackup: {
+        id: "bk_2026071702593f",
+        job: "prod-nightly",
+        source: "prod-main",
+        engine: "postgresql",
+        startedAt: "2026-07-17 03:00:04",
+        finishedAt: "2026-07-17 03:07:41",
+        status: "success",
+        plaintextBytes: 8_140_291_070,
+        cipherBytes: 2_013_774_338,
+        manifestSigned: true,
+        lastVerifyLevel: 3,
+        lastVerifyResult: "pass",
+        artifacts: [
+          {
+            destName: "s3-worm",
+            destKind: "s3",
+            immutability: "object_lock_governance",
+            retentionUntil: "2026-08-16",
+            status: "uploaded",
+          },
+          {
+            destName: "bastion-sftp",
+            destKind: "ssh",
+            immutability: "server_append_only",
+            retentionUntil: null,
+            status: "uploaded",
+          },
+        ],
+      },
+    },
+    {
+      name: "billing-weekly",
+      source: "billing-mysql",
+      engine: "mysql",
+      schedule: "매주 일 04:15",
+      requiredImmutability: "append_only_or_lock",
+      destinations: ["s3-worm"],
+      health: "warn",
+      lastBackup: {
+        id: "bk_20260712041500a1",
+        job: "billing-weekly",
+        source: "billing-mysql",
+        engine: "mysql",
+        startedAt: "2026-07-12 04:15:00",
+        finishedAt: "2026-07-12 04:19:22",
+        status: "success",
+        plaintextBytes: 1_284_112_004,
+        cipherBytes: 402_118_774,
+        manifestSigned: true,
+        lastVerifyLevel: 1,
+        lastVerifyResult: "pass",
+        artifacts: [
+          {
+            destName: "s3-worm",
+            destKind: "s3",
+            immutability: "object_lock_governance",
+            retentionUntil: "2026-08-11",
+            status: "uploaded",
+          },
+        ],
+      },
+    },
+    {
+      name: "analytics-daily",
+      source: "analytics-pg",
+      engine: "postgresql",
+      schedule: "매일 02:30",
+      requiredImmutability: "none",
+      destinations: ["local-nas"],
+      health: "danger",
+      lastBackup: {
+        id: "bk_20260717023004ff",
+        job: "analytics-daily",
+        source: "analytics-pg",
+        engine: "postgresql",
+        startedAt: "2026-07-17 02:30:04",
+        finishedAt: null,
+        status: "failed",
+        plaintextBytes: null,
+        cipherBytes: null,
+        manifestSigned: false,
+        lastVerifyLevel: null,
+        lastVerifyResult: null,
+        artifacts: [
+          {
+            destName: "local-nas",
+            destKind: "local",
+            immutability: "none",
+            retentionUntil: null,
+            status: "failed",
+          },
+        ],
+      },
+    },
+  ],
+  recent: [],
+};
+MOCK_DASHBOARD.recent = MOCK_DASHBOARD.jobs
+  .map((j) => j.lastBackup)
+  .filter((b): b is NonNullable<typeof b> => b !== null);

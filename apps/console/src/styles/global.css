@@ -1,0 +1,226 @@
+/* global.css — 베이스 + DESIGN.md components 섹션의 재사용 클래스. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* 타이포 역할 */
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--text);
+}
+h1 {
+  font-size: var(--fs-h1);
+}
+h2 {
+  font-size: var(--fs-h2);
+}
+h3 {
+  font-size: var(--fs-h3);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  font-feature-settings: "tnum" 1;
+}
+.label {
+  font-family: var(--font-label);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+.muted {
+  color: var(--text-muted);
+}
+.faint {
+  color: var(--text-faint);
+}
+
+/* 링크/포커스 */
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+:focus-visible {
+  outline: none;
+  box-shadow: var(--el-focus);
+  border-radius: var(--r-sm);
+}
+
+/* --- 버튼 --- */
+.btn {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-weight: 500;
+  border-radius: var(--r-md);
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-strong);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: var(--border-strong);
+}
+.btn-ghost:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+/* 위험 액션: 채움 대신 아웃라인 + 확인 마찰 */
+.btn-danger {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--danger) 14%, transparent);
+}
+
+/* --- 카드 --- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--sp-5);
+  box-shadow: var(--el-card);
+}
+
+/* --- 인풋/셀렉트 --- */
+.input,
+.select {
+  width: 100%;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+}
+.input::placeholder {
+  color: var(--text-faint);
+}
+.input:focus,
+.select:focus {
+  outline: none;
+  box-shadow: var(--el-focus);
+  border-color: var(--accent);
+}
+/* select > option 은 OS 렌더 → color-scheme로 다크 대응(DESIGN.md gotcha) */
+.select option {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* --- 상태 배지 (18% 틴트) --- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--r-full);
+  padding: 2px 10px;
+  font-family: var(--font-label);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.badge-success {
+  background: color-mix(in oklch, var(--success) 18%, transparent);
+  color: var(--success);
+}
+.badge-warning {
+  background: color-mix(in oklch, var(--warning) 18%, transparent);
+  color: var(--warning);
+}
+.badge-danger {
+  background: color-mix(in oklch, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+.badge-immutable {
+  background: color-mix(in oklch, var(--immutable) 18%, transparent);
+  color: var(--immutable);
+}
+.badge-neutral {
+  background: color-mix(in oklch, var(--text-faint) 16%, transparent);
+  color: var(--text-muted);
+}
+
+/* 상태 dot */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-full);
+  display: inline-block;
+  flex: none;
+}
+.dot-success {
+  background: var(--success);
+}
+.dot-warning {
+  background: var(--warning);
+}
+.dot-danger {
+  background: var(--danger);
+}
+
+/* 스크롤바(다크 대응) */
+* {
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--r-full);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

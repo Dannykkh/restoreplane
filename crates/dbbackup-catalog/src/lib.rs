@@ -14,6 +14,7 @@ pub use rusqlite;
 pub mod conn;
 pub mod gate;
 pub mod overlap;
+pub mod query;
 pub mod rebuild;
 pub mod source;
 pub mod upsert;
@@ -25,6 +26,7 @@ pub use gate::{
     ManifestVerifier, PinnedKeyVerifier,
 };
 pub use overlap::{try_acquire_run, OverlapError, RunGuard, MAX_RUN_SECONDS};
+pub use query::{latest_backup_per_job, recent_backups, BackupRecord};
 pub use rebuild::{catalog_rebuild, RebuildArgs, RebuildReport};
 pub use source::{LocalManifestSource, ManifestSource};
 pub use upsert::{upsert_backup_from_manifest, upsert_backup_from_manifest_conn};

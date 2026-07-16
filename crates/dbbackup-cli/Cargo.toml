@@ -10,8 +10,13 @@ path = "src/main.rs"
 [dependencies]
 dbbackup-core = { path = "../dbbackup-core" }
 dbbackup-config = { path = "../dbbackup-config" }
+dbbackup-pipeline = { path = "../dbbackup-pipeline" }
+dbbackup-source-pg = { path = "../dbbackup-source-pg" }
+dbbackup-secrets = { path = "../dbbackup-secrets" }
 clap.workspace = true
 anyhow.workspace = true
 rpassword.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+tokio = { version = "=1.44.2", features = ["rt-multi-thread", "macros"] }
+zeroize = { version = "=1.8.1" }

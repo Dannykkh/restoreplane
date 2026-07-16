@@ -6,6 +6,7 @@
 //! 간주한다(슬라이스 1 단순화 — 정식 JCS는 후속 슬라이스).
 
 use dbbackup_core::Engine;
+use dbbackup_secrets::WrapSet;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -30,6 +31,11 @@ pub struct Manifest {
     pub dek_wrap_gen: u32,
     /// 스풀 객체 파일명(목적지 key).
     pub spool_object: String,
+    /// per-backup DEK를 봉투 최상위 키(KEK)로 감싼 WrapSet(동봉). 키스토어로 KEK를 unlock하면
+    /// 이 WrapSet에서 DEK를 복구할 수 있다. 서명에 포함되어 변조가 감지된다.
+    /// 하위호환: 옛 매니페스트(WrapSet 미동봉)는 None으로 파싱되며, None이면 직렬화에서 생략한다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wrap_set: Option<WrapSet>,
 }
 
 impl Manifest {
@@ -57,7 +63,14 @@ impl Manifest {
                 .file_name()
                 .map(|s| s.to_string_lossy().into_owned())
                 .unwrap_or_default(),
+            wrap_set: None,
         }
+    }
+
+    /// KEK로 감싼 per-backup DEK WrapSet을 동봉한다(서명 대상에 포함됨).
+    pub fn with_wrap_set(mut self, wrap_set: WrapSet) -> Self {
+        self.wrap_set = Some(wrap_set);
+        self
     }
 
     /// canonical 직렬화(서명 대상 바이트).
@@ -105,6 +118,16 @@ impl SignedManifest {
     pub fn to_json(&self) -> anyhow::Result<String> {
         Ok(serde_json::to_string_pretty(self)?)
     }
+}
+
+/// KEK로 감싼 DEK WrapSet을 동봉해 서명 매니페스트를 쓴다(run/verify 봉투 경로의 정본).
+pub fn write_signed_manifest_with_wrapset(
+    spool_path: &std::path::Path,
+    manifest: Manifest,
+    wrap_set: WrapSet,
+    sk: &SigningKey,
+) -> anyhow::Result<(std::path::PathBuf, SignedManifest)> {
+    write_signed_manifest(spool_path, manifest.with_wrap_set(wrap_set), sk)
 }
 
 /// 스풀 객체 옆에 서명 매니페스트 JSON을 쓴다(`<spool>.manifest.json`).

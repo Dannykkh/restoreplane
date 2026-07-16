@@ -2,9 +2,13 @@
 //! S05/S03/S06 walking skeleton 배선: config → PostgresSource → 파이프라인 → LocalDest.
 //! 슬라이스 1 범위: Postgres 소스 + Local 목적지만 실제 배선. S3/SSH는 명확한 메시지로 미배선.
 //!
+//! 봉투 경로(키스토어 연동):
+//! - 키스토어를 로드하고 KEK를 unlock(무인: DBBACKUP_MASTER_PASSWORD env, 또는 DPAPI Machine-scope).
+//! - 백업마다 per-backup DEK를 발급 → KEK로 감싼 WrapSet을 매니페스트에 동봉 → 지속 서명키로 서명.
+//! - payload 암호화는 그 per-backup DEK로 수행(파이프라인 인코딩 체인).
+//!
 //! 편차/한계(슬라이스 1):
 //! - DB 접속 비밀번호는 PGPASSWORD 환경변수로 받는다(EncField 시크릿 unwrap 전체 플로우는 후속 슬라이스).
-//! - 매니페스트 서명키는 config에 핀되기 전이라 임시 키페어로 서명한다(공개키는 매니페스트에 동봉).
 
 use std::path::Path;
 use std::sync::Arc;
@@ -12,14 +16,16 @@ use std::sync::Arc;
 use dbbackup_config::Config;
 use dbbackup_core::{DestKind, Engine};
 use dbbackup_pipeline::{
-    fan_out, run_artifact, write_signed_manifest, BackupSource, Destination, DumpPlanPart,
-    LocalDest, Manifest, PipelineCfg,
+    fan_out, run_artifact, write_signed_manifest_with_wrapset, BackupSource, Destination,
+    DumpPlanPart, LocalDest, Manifest, PipelineCfg,
 };
-use dbbackup_secrets::{generate_signing_keypair, Dek};
+use dbbackup_secrets::{Dek, Keystore};
 use dbbackup_source_pg::{version::BundledToolMatrix, PgConnCfg, PostgresSource};
+use ed25519_dalek::SigningKey;
 use zeroize::Zeroizing;
 
 use crate::cli::RunArgs;
+use crate::commands::keystore_util;
 
 pub fn run(config_path: &Path, args: RunArgs) -> anyhow::Result<()> {
     let config = Config::load(config_path)?;
@@ -47,18 +53,41 @@ pub fn run(config_path: &Path, args: RunArgs) -> anyhow::Result<()> {
         return Ok(());
     }
 
+    // 키스토어 로드 + KEK unlock(무인: env 비번 또는 DPAPI) + 지속 서명키 복구.
+    let ks_path = keystore_util::keystore_path(config_path);
+    if !Keystore::exists(&ks_path) {
+        anyhow::bail!(
+            "키스토어가 없습니다({}) — 먼저 `dbbackup init`을 실행하세요.",
+            ks_path.display()
+        );
+    }
+    let keystore = Keystore::load(&ks_path)?;
+    let cred = keystore_util::resolve_unlock_credential(false, false)?;
+    let kek = keystore
+        .unlock_kek(&cred)
+        .map_err(|e| anyhow::anyhow!("KEK unlock 실패(자격증명 확인): {e}"))?;
+    let signing_key = keystore
+        .signing_key(&kek)
+        .map_err(|e| anyhow::anyhow!("서명키 복구 실패: {e}"))?;
+
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
     rt.block_on(async move {
         for job in &jobs {
-            execute_job(&config, job).await?;
+            execute_job(&config, job, &keystore, &kek, &signing_key).await?;
         }
         Ok::<_, anyhow::Error>(())
     })
 }
 
-async fn execute_job(config: &Config, job: &dbbackup_config::schema::Job) -> anyhow::Result<()> {
+async fn execute_job(
+    config: &Config,
+    job: &dbbackup_config::schema::Job,
+    keystore: &Keystore,
+    kek: &Dek,
+    signing_key: &SigningKey,
+) -> anyhow::Result<()> {
     // 1) 소스 DB 해석.
     let db = config
         .databases
@@ -128,9 +157,8 @@ async fn execute_job(config: &Config, job: &dbbackup_config::schema::Job) -> any
         matrix,
     };
 
-    // 5) plan → 각 파트를 파이프라인으로 흘려보낸다.
+    // 5) plan → 각 파트를 봉투 경로로 흘려보낸다(per-backup DEK → KEK-wrap → 서명 매니페스트).
     let plan = source.plan().await?;
-    let (sk, _vk) = generate_signing_keypair(); // 슬라이스 1: 임시 서명키(공개키는 매니페스트 동봉)
 
     let mut parts: Vec<DumpPlanPart> = Vec::new();
     if let Some(g) = plan.globals_part {
@@ -140,12 +168,16 @@ async fn execute_job(config: &Config, job: &dbbackup_config::schema::Job) -> any
 
     for part in &parts {
         let dek = Dek::generate();
+        let wrap_set = keystore
+            .wrap_dek(kek, &dek, 1)
+            .map_err(|e| anyhow::anyhow!("DEK wrap 실패: {e}"))?;
         let spool_path = spool_dir.join(format!("{}.spool", part.backup_id));
         let artifact = source.spawn(part)?;
         let commit = run_artifact(artifact, spool_path, dek, &cfg).await?;
 
         let manifest = Manifest::from_commit(part, db.engine, &commit, 1);
-        let (manifest_path, _signed) = write_signed_manifest(&commit.spool_path, manifest, &sk)?;
+        let (manifest_path, _signed) =
+            write_signed_manifest_with_wrapset(&commit.spool_path, manifest, wrap_set, signing_key)?;
 
         let outcomes = fan_out(&commit, dests.clone(), &cfg).await;
         let ok = outcomes.iter().filter(|o| o.result.is_ok()).count();

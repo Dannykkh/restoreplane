@@ -73,6 +73,9 @@ pub enum CatalogAction {
 pub struct InitArgs {
     #[arg(long)]
     pub yes: bool,
+    /// 기존 키스토어를 덮어쓴다(기본은 거부).
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Args, Debug)]

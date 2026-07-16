@@ -5,6 +5,7 @@ pub mod dek;
 pub mod error;
 pub mod field;
 pub mod kdf;
+pub mod keystore;
 pub mod sign;
 pub mod wrap;
 
@@ -108,6 +109,30 @@ impl SecretManager {
             keyfile_id: dpapi::keyfile_fingerprint(&kf),
             blob,
         })
+    }
+
+    /// 봉투 최상위 키(KEK)로 per-backup DEK를 감싼 WrapSet을 만든다(매니페스트 동봉용).
+    /// 스탠자는 KEK 없이는 열 수 없으므로, KEK 자체를 3경로로 감싼 키스토어와 짝을 이룬다.
+    pub fn wrap_dek_with_kek(
+        &self,
+        kek: &Dek,
+        dek: &Dek,
+        gen: u32,
+    ) -> Result<WrapSet, SecretError> {
+        Ok(WrapSet {
+            dek_wrap_gen: gen,
+            stanzas: vec![wrap::wrap_with_kek(kek, dek)?],
+        })
+    }
+
+    /// KEK로 감싼 WrapSet에서 DEK를 복구한다(Kek 스탠자만 처리).
+    pub fn unwrap_dek_with_kek(&self, kek: &Dek, set: &WrapSet) -> Result<Dek, SecretError> {
+        for st in &set.stanzas {
+            if let Ok(d) = wrap::unwrap_with_kek(kek, st) {
+                return Ok(d);
+            }
+        }
+        Err(SecretError::NoUsableStanza)
     }
 
     /// 복원/rotate 시: 자격증명에 맞는 스탠자로 DEK를 복구한다.

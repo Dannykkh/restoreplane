@@ -5,6 +5,8 @@ prune.toml
 *.dek
 *.recovery-code
 *.keyfile
+keystore.json
+*.keystore.json
 catalog.sqlite*
 spool/
 .staging/

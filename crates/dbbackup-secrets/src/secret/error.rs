@@ -26,6 +26,8 @@ pub enum SecretError {
     Dpapi(String),
     #[error("이 플랫폼에서는 DPAPI 경로를 사용할 수 없음")]
     DpapiUnavailable,
+    #[error("키스토어 오류: {0}")]
+    Keystore(String),
     #[error("입출력 오류: {0}")]
     Io(#[from] std::io::Error),
 }

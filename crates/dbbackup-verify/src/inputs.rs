@@ -63,12 +63,15 @@ pub fn load_trusted_inputs(
     // (1) DB 매니페스트: 서명 검증 통과해야만 반환됨(미서명/위조는 여기서 Err).
     let db_manifest = load_and_verify_manifest_for_restore(source, verifier, db_manifest_key)?;
 
-    // (2) WrapSet 사이드카(선택): <spool_object>.wrapset.json. 없으면 None(호출부가 DEK 직접 공급).
-    let wrapset_key = format!("{}.wrapset.json", db_manifest.spool_object);
-    let wrap_set = match source.read_bytes(&wrapset_key) {
-        Ok(bytes) => serde_json::from_slice::<WrapSet>(&bytes).ok(),
-        Err(_) => None,
-    };
+    // (2) WrapSet: 매니페스트 동봉본(서명 보호)을 우선한다. 없으면 사이드카
+    //     <spool_object>.wrapset.json로 폴백(하위호환). 둘 다 없으면 None(호출부가 DEK 직접 공급).
+    let wrap_set = db_manifest.wrap_set.clone().or_else(|| {
+        let wrapset_key = format!("{}.wrapset.json", db_manifest.spool_object);
+        match source.read_bytes(&wrapset_key) {
+            Ok(bytes) => serde_json::from_slice::<WrapSet>(&bytes).ok(),
+            Err(_) => None,
+        }
+    });
 
     let mut inputs = RestoreInputs::from_manifest(db_manifest);
     inputs.wrap_set = wrap_set;

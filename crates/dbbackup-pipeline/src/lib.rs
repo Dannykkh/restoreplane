@@ -31,7 +31,9 @@ pub use dest::{
     ImmutabilityKind, LocalDest, RequiredImmutability, UploadError, UploadReceipt,
 };
 pub use fanout::{fan_out, DestOutcome};
-pub use manifest::{write_signed_manifest, Manifest, SignedManifest};
+pub use manifest::{
+    write_signed_manifest, write_signed_manifest_with_wrapset, Manifest, SignedManifest,
+};
 pub use source::{
     BackupSource, DumpPartKind, DumpPlan, DumpPlanPart, ExtensionInfo, PlanWarning,
 };

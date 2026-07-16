@@ -12,6 +12,7 @@ pub use secret::dek::Dek;
 pub use secret::error::SecretError;
 pub use secret::field::DekEncryptor;
 pub use secret::kdf::{generate_recovery_code, RecoveryVerifier};
+pub use secret::keystore::{Keystore, KEYSTORE_VERSION};
 pub use secret::rotate::RotateReport;
 pub use secret::sign::{generate_signing_keypair, sign_manifest, verify_manifest};
 pub use secret::wrap::{WrapSet, WrapStanza};

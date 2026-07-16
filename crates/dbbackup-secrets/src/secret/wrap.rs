@@ -14,7 +14,7 @@ use crate::secret::error::SecretError;
 use crate::secret::kdf::{derive_kek, M_COST, P_COST, T_COST};
 
 /// DEK 1개를 감싼 self-describing 스탠자. 각 경로는 독립적으로 DEK를 복구할 수 있다(R2).
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "kind")]
 pub enum WrapStanza {
     /// (a) 마스터 비밀번호 Argon2id-KEK로 wrap.
@@ -41,10 +41,17 @@ pub enum WrapStanza {
         keyfile_id: String,
         blob: Vec<u8>,
     },
+    /// (d) 봉투 최상위 키(KEK)로 32B 키(per-backup DEK 또는 서명 seed)를 직접 wrap.
+    /// 키스토어의 KEK를 unlock한 뒤에만 unwrap 가능 — 매니페스트 동봉 WrapSet과
+    /// 키스토어의 서명키 보관에 쓴다(자격증명 파라미터가 없어 KEK 없이는 열 수 없다).
+    Kek {
+        nonce: [u8; 12],
+        ct: Vec<u8>,
+    },
 }
 
 /// 한 백업의 DEK를 감싼 다경로 스탠자 묶음. 매니페스트에 동봉되어 서명된다.
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct WrapSet {
     /// rotate-key 세대(R8). unwrap은 최고 세대를 우선한다.
     pub dek_wrap_gen: u32,
@@ -76,6 +83,21 @@ fn aead_unwrap(kek: &[u8; 32], nonce: &[u8; 12], ct: &[u8]) -> Result<Dek, Secre
         .try_into()
         .map_err(|_| SecretError::BadDekLen)?;
     Ok(Dek::from_bytes(arr))
+}
+
+/// (d) KEK로 32B 키(DEK/서명 seed)를 직접 wrap. KDF 없이 KEK 바이트를 그대로 AEAD 키로 쓴다.
+pub(crate) fn wrap_with_kek(kek: &Dek, target: &Dek) -> Result<WrapStanza, SecretError> {
+    let (nonce, ct) = aead_wrap(kek.expose(), target)?;
+    Ok(WrapStanza::Kek { nonce, ct })
+}
+
+/// (d) KEK로 wrap된 스탠자를 unwrap. Kek 스탠자가 아니면 WrongStanza.
+pub(crate) fn unwrap_with_kek(kek: &Dek, st: &WrapStanza) -> Result<Dek, SecretError> {
+    if let WrapStanza::Kek { nonce, ct } = st {
+        aead_unwrap(kek.expose(), nonce, ct)
+    } else {
+        Err(SecretError::WrongStanza)
+    }
 }
 
 /// (a) 비밀번호 경로 wrap.

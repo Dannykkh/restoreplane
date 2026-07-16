@@ -11,6 +11,7 @@ members = [
   "crates/dbbackup-source-mysql",
   "crates/dbbackup-catalog",
   "crates/dbbackup-verify",
+  "crates/dbbackup-scheduler",
 ]
 
 [workspace.package]

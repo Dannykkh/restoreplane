@@ -11,12 +11,12 @@ edition.workspace = true
 dbbackup-pipeline = { path = "../dbbackup-pipeline" }
 dbbackup-core = { path = "../dbbackup-core" }
 
-tokio = { version = "=1.44.2", features = ["process", "io-util", "rt-multi-thread", "macros"] }
+tokio = { version = "=1.52.3", features = ["process", "io-util", "rt-multi-thread", "macros"] }
 tokio-postgres = "0.7"
 async-trait = "0.1"
 uuid = { version = "=1.11.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
-zeroize = { version = "=1.8.1", features = ["derive"] }
+zeroize = { version = "=1.9.0", features = ["derive"] }
 futures = "=0.3.31"
 thiserror = { workspace = true }
 tracing = { workspace = true }

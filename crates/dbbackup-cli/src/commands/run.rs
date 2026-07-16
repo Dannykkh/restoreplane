@@ -14,10 +14,13 @@ use std::path::Path;
 use std::sync::Arc;
 
 use dbbackup_config::Config;
-use dbbackup_core::{DestKind, Engine};
+use dbbackup_core::{ChecksumAlgo, DestKind, Engine, ImmutabilityCapability, ObjectLockMode};
+use dbbackup_dest_s3::{S3Cfg, S3Dest, S3Provider};
+use dbbackup_dest_ssh::{HostKeyPolicy, SshAuth, SshDest};
 use dbbackup_pipeline::{
-    fan_out, run_artifact, write_signed_manifest_with_wrapset, BackupSource, Destination,
-    DumpPlanPart, LocalDest, Manifest, PipelineCfg,
+    assert_job_immutability, fan_out, run_artifact, write_signed_manifest_with_wrapset,
+    BackupSource, Destination, DumpPlanPart, ImmutabilityKind, LocalDest, Manifest, PipelineCfg,
+    RequiredImmutability,
 };
 use dbbackup_secrets::{Dek, Keystore};
 use dbbackup_source_mysql::{
@@ -98,7 +101,7 @@ async fn execute_job(
         .find(|d| d.alias == job.source)
         .ok_or_else(|| anyhow::anyhow!("job '{}'의 소스 '{}'를 찾을 수 없음", job.name, job.source))?;
 
-    // 2) 목적지 해석 — local만 실제 배선, 나머지는 미배선 안내.
+    // 2) 목적지 해석 — kind별로 Local/S3/SSH를 실제 배선(옵션 C 팬아웃).
     let mut dests: Vec<Arc<dyn Destination>> = Vec::new();
     for name in &job.destinations {
         let dest = config
@@ -114,15 +117,28 @@ async fn execute_job(
                     .ok_or_else(|| anyhow::anyhow!("local 목적지 '{name}'에 path가 없음"))?;
                 dests.push(Arc::new(LocalDest::new(dest.name.clone(), path)));
             }
-            DestKind::S3 | DestKind::Ssh => {
-                tracing::warn!(dest = %name, kind = ?dest.kind, "이 목적지 종류는 아직 배선되지 않음(슬라이스 2+)");
-                println!("[skip] 목적지 '{name}'({:?})는 아직 배선되지 않았습니다.", dest.kind);
+            DestKind::S3 => {
+                dests.push(build_s3_dest(dest).await?);
+            }
+            DestKind::Ssh => {
+                dests.push(build_ssh_dest(dest)?);
             }
         }
     }
     if dests.is_empty() {
-        anyhow::bail!("job '{}'에 배선 가능한 local 목적지가 없음", job.name);
+        anyhow::bail!("job '{}'에 배선 가능한 목적지가 없음", job.name);
     }
+
+    // 2b) Job 불변성 assert(P1-2/R12): required_immutability를 목적지 능력에 대해 검증. 미충족이면
+    // 팬아웃 전에 **요란히 실패**한다(Local/SSH만으로 ObjectLock을 요구하는 오인 구성을 배선 시점에 차단).
+    let required = map_required_immutability(job.required_immutability);
+    assert_job_immutability(required, &dests).map_err(|e| {
+        anyhow::anyhow!(
+            "job '{}'의 required_immutability={:?}를 만족하는 목적지가 없음(랜섬웨어 방어 오인 방지): {e}",
+            job.name,
+            job.required_immutability
+        )
+    })?;
 
     // 3) 스풀 디렉토리 + 파이프라인 설정.
     let spool_dir = &config.policy.spool_dir;
@@ -234,4 +250,123 @@ async fn execute_job(
     }
 
     Ok(())
+}
+
+/// config의 job.required_immutability(core 어휘)를 파이프라인 assert 어휘로 매핑(P1-2/R12).
+fn map_required_immutability(cap: ImmutabilityCapability) -> RequiredImmutability {
+    match cap {
+        ImmutabilityCapability::None => RequiredImmutability::None,
+        ImmutabilityCapability::Governance => RequiredImmutability::ObjectLock,
+        ImmutabilityCapability::Compliance => RequiredImmutability::ComplianceOnly,
+        ImmutabilityCapability::ServerAppendOnly => RequiredImmutability::AppendOnlyOrLock,
+    }
+}
+
+/// S3 목적지 배선. 자격증명은 (기존 DB 비번 편차와 동일하게) 환경변수로 받는다 —
+/// AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY. config EncField unwrap 전체 플로우는 후속 슬라이스.
+/// 배선 직후 **매 run 자가테스트**(deny-check + 락 상태 단언)를 수행하고, 실패(과권한/미잠금/전송오류)면
+/// 백업을 시작하지 않는다(S06 불변식 (a) — 자가테스트 Ok일 때만 run 진행).
+async fn build_s3_dest(
+    dest: &dbbackup_config::schema::Destination,
+) -> anyhow::Result<Arc<dyn Destination>> {
+    let name = dest.name.clone();
+    let access_key_id = std::env::var("AWS_ACCESS_KEY_ID").map_err(|_| {
+        anyhow::anyhow!("s3 목적지 '{name}'는 AWS_ACCESS_KEY_ID 환경변수(append-only writer 신원)를 요구합니다")
+    })?;
+    let secret_access_key = std::env::var("AWS_SECRET_ACCESS_KEY")
+        .map_err(|_| anyhow::anyhow!("s3 목적지 '{name}'는 AWS_SECRET_ACCESS_KEY 환경변수를 요구합니다"))?;
+
+    let (object_lock_mode, retention_days) = match &dest.object_lock {
+        Some(cfg) => (map_object_lock_mode(cfg.mode), cfg.retention_days),
+        None => (ImmutabilityKind::None, 0),
+    };
+    let checksum_algo = dest.checksum_algo.map(|c| match c {
+        ChecksumAlgo::Crc32c => "crc32c".to_string(),
+        ChecksumAlgo::Sha256 => "sha256".to_string(),
+    });
+
+    let s3cfg = S3Cfg {
+        endpoint: dest.endpoint.clone().unwrap_or_default(),
+        region: dest.region.clone().unwrap_or_else(|| "us-east-1".to_string()),
+        bucket: dest
+            .bucket
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("s3 목적지 '{name}'에 bucket이 없음"))?,
+        prefix: dest.prefix.clone(),
+        access_key_id,
+        secret_access_key,
+        object_lock_mode,
+        retention_days,
+        // config에 per-dest dwell이 없어 0으로 둔다(가드 통과). dwell 검증은 자가테스트 경고로도 노출.
+        min_dwell_days: 0,
+        checksum_algo,
+        // Compliance opt-in은 환경변수로 명시(M5 — 되돌릴 수 없는 긴 보존의 오설정 방지).
+        compliance_opt_in: std::env::var("DBBACKUP_S3_COMPLIANCE_OPT_IN").is_ok(),
+        provider: S3Provider::Aws,
+    };
+    let s3 = S3Dest::new(name.clone(), s3cfg)
+        .map_err(|e| anyhow::anyhow!("s3 목적지 '{name}' 구성 실패: {e}"))?;
+
+    // 매 run 자가테스트(H1/H2). 과권한/미잠금이면 여기서 요란히 실패 → 백업 시작 안 함.
+    s3.self_test().await.map_err(|e| {
+        anyhow::anyhow!("s3 목적지 '{name}' 자가테스트 실패 — 백업 거부(랜섬웨어 방어 미검증): {e}")
+    })?;
+
+    Ok(Arc::new(s3))
+}
+
+fn map_object_lock_mode(mode: ObjectLockMode) -> ImmutabilityKind {
+    match mode {
+        ObjectLockMode::None => ImmutabilityKind::None,
+        ObjectLockMode::Governance => ImmutabilityKind::ObjectLockGovernance,
+        ObjectLockMode::Compliance => ImmutabilityKind::ObjectLockCompliance,
+    }
+}
+
+/// SSH(SFTP) 목적지 배선. host-key 지문은 config 필수(blind-accept 금지, R1). 개인키는 파일 경로,
+/// passphrase/password는 환경변수(DBBACKUP_SSH_PASSPHRASE/DBBACKUP_SSH_PASSWORD)로 받는다 —
+/// config EncField unwrap 전체 플로우는 후속 슬라이스(기존 DB 비번 편차와 정합).
+fn build_ssh_dest(
+    dest: &dbbackup_config::schema::Destination,
+) -> anyhow::Result<Arc<dyn Destination>> {
+    let name = dest.name.clone();
+    let host = dest
+        .host
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("ssh 목적지 '{name}'에 host가 없음"))?;
+    let port = dest.port.unwrap_or(22);
+    let user = dest
+        .user
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("ssh 목적지 '{name}'에 user가 없음"))?;
+    let fpr = dest
+        .host_key_fingerprint
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("ssh 목적지 '{name}'에 host_key_fingerprint가 없음(MITM 방어 필수)"))?;
+    let remote_dir = dest
+        .path
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("ssh 목적지 '{name}'에 원격 경로(path)가 없음"))?
+        .to_string_lossy()
+        .into_owned();
+
+    let policy = HostKeyPolicy::new(fpr, format!("{host}:{port}"));
+
+    // 인증: 개인키 파일 우선, 없으면 password 환경변수.
+    let auth = if let Some(key_path) = &dest.private_key_path {
+        let pem = std::fs::read_to_string(key_path)
+            .map_err(|e| anyhow::anyhow!("ssh 개인키 읽기 실패({}): {e}", key_path.display()))?;
+        let passphrase = std::env::var("DBBACKUP_SSH_PASSPHRASE").ok().map(Zeroizing::new);
+        SshAuth::PublicKey { identity_pem: Zeroizing::new(pem), passphrase }
+    } else {
+        let password = std::env::var("DBBACKUP_SSH_PASSWORD").map_err(|_| {
+            anyhow::anyhow!("ssh 목적지 '{name}'는 개인키(private_key_path) 또는 DBBACKUP_SSH_PASSWORD를 요구합니다")
+        })?;
+        SshAuth::Password { password: Zeroizing::new(password) }
+    };
+
+    // append_only는 서버측 보장을 config로 표현할 수단이 아직 없어 false(None caps). 서버 append-only가
+    // 외부 보장될 때만 true로 올려야 하며, 그 전까지 ObjectLock 요구 Job은 이 목적지에서 실패한다(R9).
+    let ssh = SshDest::new(name, host, port, user, policy, auth, remote_dir, false);
+    Ok(Arc::new(ssh))
 }

@@ -28,7 +28,7 @@ pub use commit::{
 pub use crypto::decrypt_and_decompress;
 pub use dest::{
     assert_job_immutability, upload_resumable, DestCaps, DestError, DestWriter, Destination,
-    ImmutabilityKind, LocalDest, RequiredImmutability, UploadError, UploadReceipt,
+    ImmutabilityKind, LocalDest, RequiredImmutability, UploadError, UploadReceipt, WriterBackend,
 };
 pub use fanout::{fan_out, DestOutcome};
 pub use manifest::{

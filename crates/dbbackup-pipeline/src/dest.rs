@@ -31,6 +31,16 @@ pub enum DestError {
     WriterClosed,
     #[error("불변성 요구 미충족: required={required}, have={have:?}")]
     ImmutabilityUnmet { required: String, have: Vec<String> },
+    /// 원격 목적지(S3/SSH) 백엔드가 매핑해 넘기는 일반 오류. key는 로그/영수증용(시크릿 아님).
+    #[error("목적지 백엔드 오류({key}): {msg}")]
+    Backend { key: String, msg: String },
+}
+
+impl DestError {
+    /// 외부 목적지 크레이트(S3/SSH)가 자신의 오류를 DestError로 매핑할 때 쓰는 헬퍼.
+    pub fn backend(key: impl Into<String>, msg: impl std::fmt::Display) -> Self {
+        DestError::Backend { key: key.into(), msg: msg.to_string() }
+    }
 }
 
 /// 업로드 성공 영수증(→ S08 artifacts).
@@ -117,8 +127,70 @@ pub trait Destination: Send + Sync {
     async fn writer(&self, key: &str) -> Result<DestWriter, DestError>;
 }
 
-/// 로컬 파일 목적지의 writer. `.part` 임시파일에 쓰고 commit 시 rename → 부분 객체 미노출.
+/// multipart-only-commit 규율의 백엔드 경계.
+///
+/// LocalDest는 `.part` 임시파일+rename, S3Dest는 opendal 멀티파트 close/abort, SshDest는 SFTP
+/// 임시키+rename으로 각각 이 규율을 구현한다. 백엔드는 별도 크레이트(dbbackup-dest-s3/-ssh)에
+/// 살 수 있으므로(순환의존 방지) trait object로 추상화한다. **commit()만이 유일한 커밋 지점**이고,
+/// 실패/미완료 경로는 abort() 또는 Drop이 부분 객체를 노출 없이 정리한다.
+#[async_trait]
+pub trait WriterBackend: Send {
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), DestError>;
+    /// 완전 성공 경로에서만 호출 → 원자적 커밋(rename/CompleteMultipartUpload). 이후에야 객체가 보인다.
+    async fn commit(self: Box<Self>) -> Result<UploadReceipt, DestError>;
+    /// 실패 경로: 부분 객체가 최종 위치에 보이지 않게 정리.
+    async fn abort(self: Box<Self>);
+    /// commit 없이 drop될 때 경고 로그에 쓸 key(시크릿 아님).
+    fn key_for_log(&self) -> String;
+}
+
+/// 목적지 writer. 내부적으로 [`WriterBackend`] trait object를 감싸 Local/S3/SSH를 동형으로 다룬다.
+/// 공개 API(`write_all`/`commit`/`abort`)는 백엔드 종류와 무관하게 동일 — S05 팬아웃이 바뀌지 않는다.
 pub struct DestWriter {
+    backend: Option<Box<dyn WriterBackend>>,
+    committed: bool,
+}
+
+impl DestWriter {
+    /// 외부/내부 목적지가 자신의 백엔드로 DestWriter를 구성한다.
+    pub fn from_backend(backend: Box<dyn WriterBackend>) -> Self {
+        Self { backend: Some(backend), committed: false }
+    }
+
+    pub async fn write_all(&mut self, buf: &[u8]) -> Result<(), DestError> {
+        let b = self.backend.as_mut().ok_or(DestError::WriterClosed)?;
+        b.write_all(buf).await
+    }
+
+    /// 완전 성공 경로에서만 호출 → 백엔드의 원자적 커밋. 이후에야 객체가 보인다.
+    pub async fn commit(mut self) -> Result<UploadReceipt, DestError> {
+        let b = self.backend.take().ok_or(DestError::WriterClosed)?;
+        let receipt = b.commit().await?;
+        self.committed = true;
+        Ok(receipt)
+    }
+
+    /// 실패 경로: 백엔드가 부분 객체를 노출 없이 정리.
+    pub async fn abort(mut self) {
+        if let Some(b) = self.backend.take() {
+            b.abort().await;
+        }
+    }
+}
+
+impl Drop for DestWriter {
+    fn drop(&mut self) {
+        if let Some(b) = self.backend.take() {
+            if !self.committed {
+                // commit 없이 drop → 백엔드 Drop이 부분 객체를 정리(+경고). async abort는 Drop에서 불가.
+                tracing::warn!(key = %b.key_for_log(), "DestWriter가 commit 없이 drop — 백엔드가 부분 객체 정리");
+            }
+        }
+    }
+}
+
+/// LocalDest의 WriterBackend. `.part` 임시파일에 쓰고 commit 시 rename → 부분 객체 미노출.
+struct LocalBackend {
     final_path: PathBuf,
     part_path: PathBuf,
     file: Option<std::fs::File>,
@@ -126,8 +198,15 @@ pub struct DestWriter {
     committed: bool,
 }
 
-impl DestWriter {
-    pub async fn write_all(&mut self, buf: &[u8]) -> Result<(), DestError> {
+impl LocalBackend {
+    fn io_err(&self, e: std::io::Error) -> DestError {
+        DestError::Io { key: self.final_path.display().to_string(), source: e }
+    }
+}
+
+#[async_trait]
+impl WriterBackend for LocalBackend {
+    async fn write_all(&mut self, buf: &[u8]) -> Result<(), DestError> {
         use std::io::Write;
         let f = self.file.as_mut().ok_or(DestError::WriterClosed)?;
         f.write_all(buf).map_err(|e| DestError::Io {
@@ -138,8 +217,7 @@ impl DestWriter {
         Ok(())
     }
 
-    /// 완전 성공 경로에서만 호출 → rename(원자적 노출). 이후에야 객체가 보인다.
-    pub async fn commit(mut self) -> Result<UploadReceipt, DestError> {
+    async fn commit(mut self: Box<Self>) -> Result<UploadReceipt, DestError> {
         let mut f = self.file.take().ok_or(DestError::WriterClosed)?;
         {
             use std::io::Write;
@@ -155,28 +233,24 @@ impl DestWriter {
         })
     }
 
-    /// 실패 경로: 부분 객체(.part)가 최종 위치에 보이지 않게 제거.
-    pub async fn abort(mut self) {
+    async fn abort(mut self: Box<Self>) {
         if let Some(f) = self.file.take() {
             drop(f);
         }
         let _ = std::fs::remove_file(&self.part_path);
+        self.committed = true; // Drop 중복 정리/경고 방지
     }
 
-    fn io_err(&self, e: std::io::Error) -> DestError {
-        DestError::Io {
-            key: self.final_path.display().to_string(),
-            source: e,
-        }
+    fn key_for_log(&self) -> String {
+        self.final_path.display().to_string()
     }
 }
 
-impl Drop for DestWriter {
+impl Drop for LocalBackend {
     fn drop(&mut self) {
         if self.file.is_some() && !self.committed {
-            // commit 없이 drop → 부분 파일이 남을 수 있으므로 정리 시도(+경고).
+            // commit/abort 없이 drop → 부분 파일이 남을 수 있으므로 정리 시도.
             let _ = std::fs::remove_file(&self.part_path);
-            tracing::warn!(key = %self.final_path.display(), "DestWriter가 commit 없이 drop");
         }
     }
 }
@@ -219,13 +293,13 @@ impl Destination for LocalDest {
             key: key.to_string(),
             source: e,
         })?;
-        Ok(DestWriter {
+        Ok(DestWriter::from_backend(Box::new(LocalBackend {
             final_path,
             part_path,
             file: Some(file),
             bytes: 0,
             committed: false,
-        })
+        })))
     }
 }
 

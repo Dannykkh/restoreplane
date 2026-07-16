@@ -1,0 +1,39 @@
+# cargo-deny 설정 — 공급망 정책(team-review H6)
+# 실행: cargo deny check
+
+[advisories]
+version = 2
+# RustSec 권고: 취약점/미유지보수는 CI에서 실패시킨다.
+yanked = "deny"
+ignore = []
+
+[licenses]
+version = 2
+# 허용 라이선스 화이트리스트(백업 도구가 흔히 끌어오는 것들).
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "MPL-2.0",
+    "CC0-1.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+# 동일 크레이트 다중 버전은 경고(공급망 표면 축소). 보안 크리티컬은 아래에서 deny로 승격 가능.
+multiple-versions = "warn"
+wildcards = "deny"
+# 알려진 위험/중복 크레이트를 여기서 차단할 수 있다.
+deny = []
+
+[sources]
+# crates.io 외 소스는 거부(의존성 치환 방지).
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

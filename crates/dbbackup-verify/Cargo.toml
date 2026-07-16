@@ -1,0 +1,35 @@
+[package]
+name = "dbbackup-verify"
+version.workspace = true
+edition.workspace = true
+
+# S09 — Restorer + Verifier(L1-L3, Docker 샌드박스).
+# 복호 체인은 dbbackup-pipeline 인코딩 체인의 정확한 역순(chacha20poly1305 STREAM → zstd)이며
+# 청크 상수를 pipeline::chain에서 공유한다. 서명 게이트는 dbbackup-catalog gate를 재사용한다(C3/H5).
+
+[dependencies]
+dbbackup-core = { path = "../dbbackup-core" }
+dbbackup-pipeline = { path = "../dbbackup-pipeline" }
+dbbackup-secrets = { path = "../dbbackup-secrets" }
+dbbackup-catalog = { path = "../dbbackup-catalog" }
+
+# 복호 체인(pipeline 인코딩과 동일 핀).
+zstd = "=0.13.3"
+blake3 = "=1.5.5"
+
+# 샌드박스(docker CLI) 구동.
+tokio = { version = "=1.44.2", features = ["rt-multi-thread", "process", "io-util", "fs", "macros", "time"] }
+
+serde = { workspace = true }
+serde_json = "1"
+uuid = { version = "=1.11.0", features = ["v4"] }
+zeroize = { version = "=1.8.1" }
+ed25519-dalek = { version = "=2.2.0" }
+
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+dbbackup-secrets = { path = "../dbbackup-secrets" }
+tempfile = "=3.14.0"

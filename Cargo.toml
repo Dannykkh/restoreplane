@@ -8,7 +8,8 @@ members = [
   "crates/dbbackup-secrets",
   "crates/dbbackup-pipeline",
   "crates/dbbackup-source-pg",
-  # S02+ : "crates/dbbackup-catalog", ...
+  "crates/dbbackup-catalog",
+  "crates/dbbackup-verify",
 ]
 
 [workspace.package]

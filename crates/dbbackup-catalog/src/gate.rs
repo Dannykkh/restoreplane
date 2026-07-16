@@ -36,7 +36,9 @@ impl PinnedKeyVerifier {
 
 impl ManifestVerifier for PinnedKeyVerifier {
     fn verify_signed(&self, signed: &SignedManifest) -> Result<(), GateError> {
-        signed.verify(&self.key).map_err(|_| GateError::TamperedOrForged)
+        signed
+            .verify(&self.key)
+            .map_err(|_| GateError::TamperedOrForged)
     }
 }
 
@@ -68,13 +70,9 @@ fn hex_decode_32(s: &str) -> Option<[u8; 32]> {
 }
 
 /// 바이트 → (파싱 + 서명 검증) → 신뢰된 Manifest. 서명 봉투가 아니면 Unsigned.
-pub fn verify_bytes(
-    bytes: &[u8],
-    verifier: &dyn ManifestVerifier,
-) -> Result<Manifest, GateError> {
+pub fn verify_bytes(bytes: &[u8], verifier: &dyn ManifestVerifier) -> Result<Manifest, GateError> {
     // 봉투(SignedManifest)로 파싱되지 않으면 = 서명이 없는 것으로 간주(미서명 거부).
-    let signed: SignedManifest =
-        serde_json::from_slice(bytes).map_err(|_| GateError::Unsigned)?;
+    let signed: SignedManifest = serde_json::from_slice(bytes).map_err(|_| GateError::Unsigned)?;
     verifier.verify_signed(&signed)?;
     Ok(signed.manifest)
 }

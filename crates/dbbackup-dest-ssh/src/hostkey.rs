@@ -17,12 +17,19 @@ pub struct HostKeyPolicy {
 #[derive(Debug, thiserror::Error)]
 pub enum HostKeyError {
     #[error("host key가 핀과 불일치(MITM 가능): {label} 지문={got} != 핀={want} — 연결 거부")]
-    Changed { label: String, got: String, want: String },
+    Changed {
+        label: String,
+        got: String,
+        want: String,
+    },
 }
 
 impl HostKeyPolicy {
     pub fn new(pinned_fpr: impl Into<String>, label: impl Into<String>) -> Self {
-        Self { pinned_fpr: pinned_fpr.into(), label: label.into() }
+        Self {
+            pinned_fpr: pinned_fpr.into(),
+            label: label.into(),
+        }
     }
 
     /// 서버가 제시한 공개키의 SHA256 지문을 핀과 비교. **정확 일치만 통과**(R1/R2).
@@ -53,9 +60,11 @@ mod tests {
     use russh::keys::ssh_key::PublicKey;
 
     // ssh-keygen -t ed25519로 생성한 실제 공개키 2개 + 각 SHA256 지문(ssh-keygen -lf).
-    const PUB1: &str = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINZYGo0V+QYJLqcDcwtClgQ8Nm2X+2JDP/qDDuQ80XS8";
+    const PUB1: &str =
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINZYGo0V+QYJLqcDcwtClgQ8Nm2X+2JDP/qDDuQ80XS8";
     const FPR1: &str = "SHA256:+vEomyD3wxLe7sD8Pl/AWl81+S3J8DK9M38CNrsaD/4";
-    const PUB2: &str = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOtj6vRyJ5dSKqUWyK/O2JuEAWuGX7+J1SJU24iBIcEx";
+    const PUB2: &str =
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOtj6vRyJ5dSKqUWyK/O2JuEAWuGX7+J1SJU24iBIcEx";
     const FPR2: &str = "SHA256:0OWPeFQDediccU5/UOiz3ukINh8qnhYMvb3d+Ctbt7I";
 
     #[test]

@@ -14,8 +14,13 @@ fn env(k: &str) -> String {
 #[tokio::test]
 #[ignore = "needs OpenSSH sshd 컨테이너 (SSH_* env) — SFTP 업로드 + rename-commit"]
 async fn ssh_sftp_upload_rename_commit() {
-    let policy = HostKeyPolicy::new(env("SSH_HOST_FPR"), format!("{}:{}", env("SSH_HOST"), env("SSH_PORT")));
-    let auth = SshAuth::Password { password: Zeroizing::new(env("SSH_PASSWORD")) };
+    let policy = HostKeyPolicy::new(
+        env("SSH_HOST_FPR"),
+        format!("{}:{}", env("SSH_HOST"), env("SSH_PORT")),
+    );
+    let auth = SshAuth::Password {
+        password: Zeroizing::new(env("SSH_PASSWORD")),
+    };
     let dest = SshDest::new(
         "ssh-live",
         env("SSH_HOST"),
@@ -37,14 +42,30 @@ async fn ssh_sftp_upload_rename_commit() {
 #[tokio::test]
 #[ignore = "needs 바스티온 sshd + 뒤단 DB (SSH_* env) — direct-tcpip 터널 개통"]
 async fn ssh_tunnel_direct_tcpip() {
-    let policy = HostKeyPolicy::new(env("SSH_HOST_FPR"), format!("{}:{}", env("SSH_HOST"), env("SSH_PORT")));
-    let auth = SshAuth::Password { password: Zeroizing::new(env("SSH_PASSWORD")) };
-    let handle = ssh_connect(&env("SSH_HOST"), env("SSH_PORT").parse().unwrap(), &env("SSH_USER"), policy, auth)
-        .await
-        .expect("바스티온 접속");
-    let tunnel = open_tunnel(handle, env("DB_HOST"), env("DB_PORT").parse().unwrap(), "127.0.0.1:0")
-        .await
-        .expect("터널 개통");
+    let policy = HostKeyPolicy::new(
+        env("SSH_HOST_FPR"),
+        format!("{}:{}", env("SSH_HOST"), env("SSH_PORT")),
+    );
+    let auth = SshAuth::Password {
+        password: Zeroizing::new(env("SSH_PASSWORD")),
+    };
+    let handle = ssh_connect(
+        &env("SSH_HOST"),
+        env("SSH_PORT").parse().unwrap(),
+        &env("SSH_USER"),
+        policy,
+        auth,
+    )
+    .await
+    .expect("바스티온 접속");
+    let tunnel = open_tunnel(
+        handle,
+        env("DB_HOST"),
+        env("DB_PORT").parse().unwrap(),
+        "127.0.0.1:0",
+    )
+    .await
+    .expect("터널 개통");
     // 로컬 바인드 주소로 접속 가능한지 확인(실제 DB 핸드셰이크는 소스 테스트 소관).
     assert!(tunnel.local_addr.port() > 0);
     let _ = tokio::net::TcpStream::connect(tunnel.local_addr).await;

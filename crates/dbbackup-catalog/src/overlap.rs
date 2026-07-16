@@ -73,14 +73,11 @@ fn short_hash(s: &str) -> String {
 }
 
 /// job에 대한 실행권을 획득한다. 이미 실행 중이면 OverlapError::AlreadyRunning.
-pub fn try_acquire_run(
-    writer: &CatalogWriterHandle,
-    job: &str,
-) -> Result<RunGuard, OverlapError> {
+pub fn try_acquire_run(writer: &CatalogWriterHandle, job: &str) -> Result<RunGuard, OverlapError> {
     // 1차: 뮤텍스로 acquire 임계구간 직렬화(같은 호스트 동시 기동 빠른 실패).
     let lock_name = format!("dbbackup-run-{}", short_hash(job));
-    let named = NamedLock::create(&lock_name)
-        .map_err(|e| OverlapError::MutexUnavailable(e.to_string()))?;
+    let named =
+        NamedLock::create(&lock_name).map_err(|e| OverlapError::MutexUnavailable(e.to_string()))?;
     let _mutex = match named.try_lock() {
         Ok(g) => g,
         Err(_) => return Err(OverlapError::AlreadyRunning(job.to_string())),

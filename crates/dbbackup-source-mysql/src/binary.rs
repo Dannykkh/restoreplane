@@ -28,7 +28,10 @@ impl MysqldumpBinaryMatrix {
         oracle_mysql: BTreeMap<u32, PathBuf>,
         mariadb: BTreeMap<u32, PathBuf>,
     ) -> Self {
-        Self { oracle_mysql, mariadb }
+        Self {
+            oracle_mysql,
+            mariadb,
+        }
     }
 
     /// 디렉토리 관례: `tools/mysql/{mysql|mariadb}{major}/mysqldump[.exe]`.
@@ -48,7 +51,10 @@ impl MysqldumpBinaryMatrix {
                 mariadb.insert(major, dir.join(bin_name()));
             }
         }
-        Self { oracle_mysql, mariadb }
+        Self {
+            oracle_mysql,
+            mariadb,
+        }
     }
 
     /// 서버 종류에 대응하는 **같은 배포판 축**에서, 서버 메이저 이상인 최소 클라이언트를 고른다.
@@ -62,13 +68,12 @@ impl MysqldumpBinaryMatrix {
             ServerKind::OracleMySql => (&self.oracle_mysql, ClientKind::OracleMySql),
             ServerKind::MariaDb => (&self.mariadb, ClientKind::MariaDb),
         };
-        let (_, path) = table
-            .range(server.major..)
-            .next()
-            .ok_or(MySqlSourceError::NoBundledClientForServer {
+        let (_, path) = table.range(server.major..).next().ok_or(
+            MySqlSourceError::NoBundledClientForServer {
                 server_kind: server.kind,
                 server_major: server.major,
-            })?;
+            },
+        )?;
         Ok((kind, path.clone()))
     }
 }
@@ -88,7 +93,13 @@ mod tests {
     use crate::version::ServerVersionInfo;
 
     fn server(kind: ServerKind, major: u32) -> ServerVersionInfo {
-        ServerVersionInfo { raw: format!("{major}.0.0"), kind, major, minor: 0, patch: 0 }
+        ServerVersionInfo {
+            raw: format!("{major}.0.0"),
+            kind,
+            major,
+            minor: 0,
+            patch: 0,
+        }
     }
 
     fn matrix() -> MysqldumpBinaryMatrix {
@@ -103,7 +114,9 @@ mod tests {
 
     #[test]
     fn resolve_oracle_axis_exact() {
-        let (kind, path) = matrix().resolve(&server(ServerKind::OracleMySql, 8)).unwrap();
+        let (kind, path) = matrix()
+            .resolve(&server(ServerKind::OracleMySql, 8))
+            .unwrap();
         assert_eq!(kind, ClientKind::OracleMySql);
         assert!(path.to_string_lossy().contains("mysql8"));
     }
@@ -119,14 +132,18 @@ mod tests {
     #[test]
     fn resolve_lowest_ge_server_on_axis() {
         // Oracle 서버 major=6, 축엔 5와 8만 존재 → 6 이상 최소인 8 선택.
-        let (_, path) = matrix().resolve(&server(ServerKind::OracleMySql, 6)).unwrap();
+        let (_, path) = matrix()
+            .resolve(&server(ServerKind::OracleMySql, 6))
+            .unwrap();
         assert!(path.to_string_lossy().contains("mysql8"));
     }
 
     #[test]
     fn t9_no_client_covering_server_hard_fails() {
         // Oracle 서버 major=9, 축 최대는 8 → 하드 실패(가장 가까운 걸로 강행 금지, R6).
-        let err = matrix().resolve(&server(ServerKind::OracleMySql, 9)).unwrap_err();
+        let err = matrix()
+            .resolve(&server(ServerKind::OracleMySql, 9))
+            .unwrap_err();
         assert!(matches!(
             err,
             MySqlSourceError::NoBundledClientForServer {

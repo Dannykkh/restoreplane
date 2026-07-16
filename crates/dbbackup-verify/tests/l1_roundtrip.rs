@@ -7,7 +7,7 @@ use dbbackup_pipeline::{
     run_artifact, write_signed_manifest, BackupSource, Manifest, PipelineCfg, StubSource,
 };
 use dbbackup_secrets::{generate_signing_keypair, Dek};
-use dbbackup_verify::{load_trusted_inputs, ImagePolicy, Restorer, VerifyResult, Verifier};
+use dbbackup_verify::{load_trusted_inputs, ImagePolicy, Restorer, Verifier, VerifyResult};
 
 fn deterministic_payload(len: usize) -> Vec<u8> {
     (0..len).map(|i| (i * 31 + 7) as u8).collect()
@@ -52,7 +52,12 @@ async fn l1_passes_on_valid_backup_and_fails_on_corruption() {
     let verifier = Verifier { restorer };
 
     let ok = verifier.l1_file_integrity(&inputs).await.unwrap();
-    assert_eq!(ok.result, VerifyResult::Pass, "정상 백업 L1 통과: {}", ok.notes);
+    assert_eq!(
+        ok.result,
+        VerifyResult::Pass,
+        "정상 백업 L1 통과: {}",
+        ok.notes
+    );
     assert_eq!(ok.label(), "verified(L1)");
 
     // 4) 스풀 1바이트 변조 → L1 실패(STREAM 인증 실패 또는 blake3 불일치).
@@ -62,5 +67,9 @@ async fn l1_passes_on_valid_backup_and_fails_on_corruption() {
     std::fs::write(&spool_path, &bytes).unwrap();
 
     let bad = verifier.l1_file_integrity(&inputs).await.unwrap();
-    assert_eq!(bad.result, VerifyResult::Fail, "변조된 스풀은 L1 실패해야 함");
+    assert_eq!(
+        bad.result,
+        VerifyResult::Fail,
+        "변조된 스풀은 L1 실패해야 함"
+    );
 }

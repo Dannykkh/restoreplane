@@ -29,7 +29,10 @@ impl client::Handler for PinnedClientHandler {
 
     /// 핵심: 이 콜백이 host key 수용 여부를 결정한다. 지문 핀 검증 실패 시 절대 true를 반환하지 않는다.
     /// `Ok(false)`면 russh가 연결을 거부한다(R1/R11).
-    async fn check_server_key(&mut self, server_public_key: &PublicKey) -> Result<bool, Self::Error> {
+    async fn check_server_key(
+        &mut self,
+        server_public_key: &PublicKey,
+    ) -> Result<bool, Self::Error> {
         match self.policy.verify(server_public_key) {
             Ok(()) => Ok(true),
             Err(e) => {
@@ -40,7 +43,12 @@ impl client::Handler for PinnedClientHandler {
     }
 
     /// 데이터는 SFTP 서브시스템/터널 스트림으로 처리하므로 여기서는 무시(기본 동작 명시).
-    async fn data(&mut self, _channel: ChannelId, _data: &[u8], _session: &mut Session) -> Result<(), Self::Error> {
+    async fn data(
+        &mut self,
+        _channel: ChannelId,
+        _data: &[u8],
+        _session: &mut Session,
+    ) -> Result<(), Self::Error> {
         Ok(())
     }
 }

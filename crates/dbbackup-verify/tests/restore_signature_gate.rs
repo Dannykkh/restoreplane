@@ -55,8 +55,11 @@ fn unsigned_manifest_is_rejected_before_decrypt() {
         stderr_tail: String::new(),
     };
     let bare = Manifest::from_commit(&part, Engine::Postgresql, &commit, 1);
-    std::fs::write(dir.path().join("x.spool.manifest.json"), serde_json::to_vec(&bare).unwrap())
-        .unwrap();
+    std::fs::write(
+        dir.path().join("x.spool.manifest.json"),
+        serde_json::to_vec(&bare).unwrap(),
+    )
+    .unwrap();
 
     let source = LocalManifestSource::new(dir.path());
     let res = load_trusted_inputs(&source, &verifier, "x.spool.manifest.json");
@@ -72,7 +75,8 @@ fn tampered_manifest_is_rejected() {
 
     // 서명 후 본체 1필드 변조 → 서명 검증 실패.
     let path = dir.path().join(&key);
-    let mut signed: SignedManifest = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    let mut signed: SignedManifest =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     signed.manifest.plaintext_bytes += 1;
     std::fs::write(&path, serde_json::to_vec(&signed).unwrap()).unwrap();
 

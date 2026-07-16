@@ -1,7 +1,9 @@
 // validate() 교차참조/필수필드 검증 케이스.
 use dbbackup_config::schema::{Config, Database, Destination, Job, Retention, VerifyPolicy};
 use dbbackup_config::{validate, ValidationError};
-use dbbackup_core::{ChecksumAlgo, DestKind, EncField, Engine, ImmutabilityCapability, ObjectLockMode};
+use dbbackup_core::{
+    ChecksumAlgo, DestKind, EncField, Engine, ImmutabilityCapability, ObjectLockMode,
+};
 
 fn enc() -> EncField {
     EncField::new(1, b"secret".to_vec())
@@ -133,7 +135,11 @@ fn s3_object_lock_without_checksum_is_caught() {
     });
     config.destinations.push(d);
     let errors = validate(&config).unwrap_err();
-    assert!(errors.contains(&ValidationError::S3ChecksumRequiredForObjectLock("s3".to_string())));
+    assert!(
+        errors.contains(&ValidationError::S3ChecksumRequiredForObjectLock(
+            "s3".to_string()
+        ))
+    );
 }
 
 #[test]
@@ -144,10 +150,19 @@ fn s3_missing_required_fields_are_all_collected() {
     d.path = None;
     config.destinations.push(d);
     let errors = validate(&config).unwrap_err();
-    assert!(errors.contains(&ValidationError::MissingS3Field("s3".to_string(), "endpoint")));
+    assert!(errors.contains(&ValidationError::MissingS3Field(
+        "s3".to_string(),
+        "endpoint"
+    )));
     assert!(errors.contains(&ValidationError::MissingS3Field("s3".to_string(), "bucket")));
-    assert!(errors.contains(&ValidationError::MissingS3Field("s3".to_string(), "access_key_id")));
-    assert!(errors.contains(&ValidationError::MissingS3Field("s3".to_string(), "secret_access_key")));
+    assert!(errors.contains(&ValidationError::MissingS3Field(
+        "s3".to_string(),
+        "access_key_id"
+    )));
+    assert!(errors.contains(&ValidationError::MissingS3Field(
+        "s3".to_string(),
+        "secret_access_key"
+    )));
 }
 
 #[test]
@@ -158,9 +173,18 @@ fn ssh_dest_missing_fields_are_caught() {
     d.path = None;
     config.destinations.push(d);
     let errors = validate(&config).unwrap_err();
-    assert!(errors.contains(&ValidationError::MissingSshField("ssh1".to_string(), "path")));
-    assert!(errors.contains(&ValidationError::MissingSshField("ssh1".to_string(), "user")));
-    assert!(errors.contains(&ValidationError::MissingSshField("ssh1".to_string(), "host_key_fingerprint")));
+    assert!(errors.contains(&ValidationError::MissingSshField(
+        "ssh1".to_string(),
+        "path"
+    )));
+    assert!(errors.contains(&ValidationError::MissingSshField(
+        "ssh1".to_string(),
+        "user"
+    )));
+    assert!(errors.contains(&ValidationError::MissingSshField(
+        "ssh1".to_string(),
+        "host_key_fingerprint"
+    )));
 }
 
 #[test]
@@ -179,7 +203,10 @@ fn invalid_verify_level_is_caught() {
     config.databases.push(db("app"));
     config.destinations.push(local_dest("local1"));
     let mut j = job("nightly", "app", &["local1"]);
-    j.verify = VerifyPolicy { level: 4, schedule: "every_run".to_string() };
+    j.verify = VerifyPolicy {
+        level: 4,
+        schedule: "every_run".to_string(),
+    };
     config.jobs.push(j);
     let errors = validate(&config).unwrap_err();
     assert!(errors.contains(&ValidationError::InvalidVerifyLevel("nightly".to_string())));

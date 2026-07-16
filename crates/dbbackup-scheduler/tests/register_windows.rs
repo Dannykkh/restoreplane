@@ -77,7 +77,10 @@ async fn t4_t16_t17_register_query_delete_lifecycle() {
         xml.contains("StartWhenAvailable") && xml.to_lowercase().contains("true"),
         "재조회 XML에 StartWhenAvailable가 없음"
     );
-    assert!(xml.contains("IgnoreNew"), "재조회 XML에 MultipleInstancesPolicy=IgnoreNew가 없음");
+    assert!(
+        xml.contains("IgnoreNew"),
+        "재조회 XML에 MultipleInstancesPolicy=IgnoreNew가 없음"
+    );
 
     // --- 멱등 재등록(T16) ---
     let outcome = register_idempotent(&selftest_params(&job), dir.path())

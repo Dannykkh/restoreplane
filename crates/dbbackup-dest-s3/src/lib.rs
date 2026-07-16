@@ -85,13 +85,17 @@ pub enum S3Provider {
 pub enum S3Error {
     #[error("opendal 오류: {0}")]
     Opendal(#[from] opendal::Error),
-    #[error("보존일수({retention})가 dwell({dwell})보다 짧음 — 불변 사본이 필요할 때 이미 만료(M4)")]
+    #[error(
+        "보존일수({retention})가 dwell({dwell})보다 짧음 — 불변 사본이 필요할 때 이미 만료(M4)"
+    )]
     RetentionBelowDwell { retention: u32, dwell: u32 },
     #[error("Compliance 모드는 opt-in 없이 생성 불가(M5)")]
     ComplianceNotOptedIn,
     #[error("Compliance preflight는 명시적 확인(confirm) 없이 진행 불가(M5)")]
     ComplianceNeedsConfirm,
-    #[error("과권한 신원 — 이 자격증명으로 다음 파괴 동작이 가능함(랜섬웨어 위험, 실행 거부): {0:?}")]
+    #[error(
+        "과권한 신원 — 이 자격증명으로 다음 파괴 동작이 가능함(랜섬웨어 위험, 실행 거부): {0:?}"
+    )]
     OverPrivileged(Vec<String>),
     #[error("버킷이 잠기지 않음(versioning/기본보존 미비, P1 미충족, 실행 거부): {0:?}")]
     BucketNotLocked(Vec<String>),
@@ -114,7 +118,7 @@ pub struct S3Cfg {
     pub retention_days: u32,
     pub min_dwell_days: u32,
     pub checksum_algo: Option<String>, // "crc32c" 등 — Object Lock가 요구 시(R5)
-    pub compliance_opt_in: bool,        // M5
+    pub compliance_opt_in: bool,       // M5
     pub provider: S3Provider,
 }
 
@@ -146,7 +150,8 @@ impl S3Dest {
             });
         }
         // M5: Compliance는 opt-in 없이 생성 거부.
-        if cfg.object_lock_mode == ImmutabilityKind::ObjectLockCompliance && !cfg.compliance_opt_in {
+        if cfg.object_lock_mode == ImmutabilityKind::ObjectLockCompliance && !cfg.compliance_opt_in
+        {
             return Err(S3Error::ComplianceNotOptedIn);
         }
 
@@ -164,7 +169,11 @@ impl S3Dest {
         }
         // opendal 0.58: Operator::new(builder)?는 Operator를 직접 반환(구버전의 .finish() 불필요 — 실측).
         let op = opendal::Operator::new(builder)?;
-        Ok(Self { name: name.into(), op, cfg })
+        Ok(Self {
+            name: name.into(),
+            op,
+            cfg,
+        })
     }
 
     /// 매 run 자가테스트(R7). 동일 writer 자격증명으로 SigV4 관리 요청을 보내 deny-check + 락 상태 단언.
@@ -236,7 +245,10 @@ impl WriterBackend for S3Backend {
         w.close()
             .await
             .map_err(|e| DestError::backend(&self.key, e))?;
-        Ok(UploadReceipt { key: self.key.clone(), bytes: self.bytes })
+        Ok(UploadReceipt {
+            key: self.key.clone(),
+            bytes: self.bytes,
+        })
     }
 
     /// 실패 경로: 멀티파트 abort → 부분 객체가 절대 보이지 않음. abort 실패 시 lifecycle이 회수(R6 fallback).
@@ -283,7 +295,8 @@ mod tests {
 
     #[test]
     fn iam_policy_is_well_formed_json_with_explicit_deny() {
-        let v: serde_json::Value = serde_json::from_str(APPEND_ONLY_IAM_POLICY).expect("IAM 템플릿은 유효한 JSON이어야 함");
+        let v: serde_json::Value = serde_json::from_str(APPEND_ONLY_IAM_POLICY)
+            .expect("IAM 템플릿은 유효한 JSON이어야 함");
         let stmts = v["Statement"].as_array().expect("Statement 배열");
         // Allow + Deny 두 문장.
         assert_eq!(stmts.len(), 2);
@@ -291,7 +304,12 @@ mod tests {
             .iter()
             .find(|s| s["Effect"] == "Deny")
             .expect("명시 Deny 문장이 있어야 함(H2)");
-        let actions: Vec<&str> = deny["Action"].as_array().unwrap().iter().map(|a| a.as_str().unwrap()).collect();
+        let actions: Vec<&str> = deny["Action"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a.as_str().unwrap())
+            .collect();
         // 파괴 동작들이 Deny에 포함돼야 함.
         for must in [
             "s3:DeleteObject",
@@ -305,7 +323,12 @@ mod tests {
         }
         // Allow에는 PutObject만(파괴 동작 없음).
         let allow = stmts.iter().find(|s| s["Effect"] == "Allow").unwrap();
-        let allow_actions: Vec<&str> = allow["Action"].as_array().unwrap().iter().map(|a| a.as_str().unwrap()).collect();
+        let allow_actions: Vec<&str> = allow["Action"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a.as_str().unwrap())
+            .collect();
         assert!(allow_actions.contains(&"s3:PutObject"));
         assert!(!allow_actions.iter().any(|a| a.starts_with("s3:Delete")));
     }
@@ -323,14 +346,20 @@ mod tests {
         let cfg = base_cfg(ImmutabilityKind::ObjectLockGovernance, 3, 7, false);
         assert!(matches!(
             S3Dest::new("s3", cfg).err(),
-            Some(S3Error::RetentionBelowDwell { retention: 3, dwell: 7 })
+            Some(S3Error::RetentionBelowDwell {
+                retention: 3,
+                dwell: 7
+            })
         ));
     }
 
     #[test]
     fn new_rejects_compliance_without_opt_in() {
         let cfg = base_cfg(ImmutabilityKind::ObjectLockCompliance, 30, 7, false);
-        assert!(matches!(S3Dest::new("s3", cfg).err(), Some(S3Error::ComplianceNotOptedIn)));
+        assert!(matches!(
+            S3Dest::new("s3", cfg).err(),
+            Some(S3Error::ComplianceNotOptedIn)
+        ));
     }
 
     #[test]
@@ -352,7 +381,10 @@ mod tests {
     fn governance_dest_reports_object_lock_capability() {
         let cfg = base_cfg(ImmutabilityKind::ObjectLockGovernance, 30, 7, false);
         let dest = S3Dest::new("s3", cfg).unwrap();
-        assert_eq!(dest.capabilities().immutability, ImmutabilityKind::ObjectLockGovernance);
+        assert_eq!(
+            dest.capabilities().immutability,
+            ImmutabilityKind::ObjectLockGovernance
+        );
     }
 
     #[test]
@@ -360,13 +392,26 @@ mod tests {
         use dbbackup_pipeline::{assert_job_immutability, LocalDest, RequiredImmutability};
         use std::sync::Arc;
 
-        let s3 = Arc::new(S3Dest::new("s3", base_cfg(ImmutabilityKind::ObjectLockGovernance, 30, 7, false)).unwrap())
-            as Arc<dyn Destination>;
+        let s3 = Arc::new(
+            S3Dest::new(
+                "s3",
+                base_cfg(ImmutabilityKind::ObjectLockGovernance, 30, 7, false),
+            )
+            .unwrap(),
+        ) as Arc<dyn Destination>;
         let local = Arc::new(LocalDest::new("local", std::env::temp_dir())) as Arc<dyn Destination>;
 
         // ObjectLock 요구: S3(Governance)는 통과, Local-only는 실패(R12/P1-2).
-        assert!(assert_job_immutability(RequiredImmutability::ObjectLock, &[s3.clone()]).is_ok());
-        assert!(assert_job_immutability(RequiredImmutability::ObjectLock, &[local.clone()]).is_err());
+        assert!(assert_job_immutability(
+            RequiredImmutability::ObjectLock,
+            std::slice::from_ref(&s3)
+        )
+        .is_ok());
+        assert!(assert_job_immutability(
+            RequiredImmutability::ObjectLock,
+            std::slice::from_ref(&local)
+        )
+        .is_err());
         // 혼합(Local+S3)이면 락 목적지 >=1이므로 통과.
         assert!(assert_job_immutability(RequiredImmutability::ObjectLock, &[local, s3]).is_ok());
     }
@@ -376,10 +421,20 @@ mod tests {
         use dbbackup_pipeline::{assert_job_immutability, RequiredImmutability};
         use std::sync::Arc;
 
-        let gov = Arc::new(S3Dest::new("s3g", base_cfg(ImmutabilityKind::ObjectLockGovernance, 30, 7, false)).unwrap())
-            as Arc<dyn Destination>;
-        let comp = Arc::new(S3Dest::new("s3c", base_cfg(ImmutabilityKind::ObjectLockCompliance, 30, 7, true)).unwrap())
-            as Arc<dyn Destination>;
+        let gov = Arc::new(
+            S3Dest::new(
+                "s3g",
+                base_cfg(ImmutabilityKind::ObjectLockGovernance, 30, 7, false),
+            )
+            .unwrap(),
+        ) as Arc<dyn Destination>;
+        let comp = Arc::new(
+            S3Dest::new(
+                "s3c",
+                base_cfg(ImmutabilityKind::ObjectLockCompliance, 30, 7, true),
+            )
+            .unwrap(),
+        ) as Arc<dyn Destination>;
         // ComplianceOnly는 Governance로는 불충분, Compliance만 통과.
         assert!(assert_job_immutability(RequiredImmutability::ComplianceOnly, &[gov]).is_err());
         assert!(assert_job_immutability(RequiredImmutability::ComplianceOnly, &[comp]).is_ok());

@@ -14,7 +14,12 @@ pub struct ToolVersion {
 
 /// "pg_dump (PostgreSQL) 16.3" → 16. 마지막 토큰의 첫 '.' 앞부분만 취함.
 pub fn parse_version_major(raw: &str) -> Option<u32> {
-    raw.split_whitespace().last()?.split('.').next()?.parse().ok()
+    raw.split_whitespace()
+        .last()?
+        .split('.')
+        .next()?
+        .parse()
+        .ok()
 }
 
 /// 선택된 pg_dump 바이너리를 실제 실행해 버전을 재확인한다(공급망 치환 방어, R4).
@@ -132,6 +137,9 @@ mod tests {
     fn t7_unsupported_major_hard_fail() {
         let m = roots(&[13, 14, 15, 16, 17]);
         let err = m.select_pg_dump(18).unwrap_err();
-        assert!(matches!(err, PgSourceError::NoBundledClientForServer { server_major: 18 }));
+        assert!(matches!(
+            err,
+            PgSourceError::NoBundledClientForServer { server_major: 18 }
+        ));
     }
 }

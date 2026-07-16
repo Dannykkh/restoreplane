@@ -2,11 +2,11 @@
 //! S02 통합 테스트(T1~T15 부분집합). wrap 3경로 라운드트립, payload STREAM, 서명/변조,
 //! rotate-key, 복구코드 생성/검증을 커버한다.
 
+use dbbackup_core::SecretEncryptor;
 use dbbackup_secrets::{
     generate_recovery_code, generate_signing_keypair, sign_manifest, verify_manifest, Credential,
     DekEncryptor, RecoveryVerifier, SecretManager,
 };
-use dbbackup_core::SecretEncryptor;
 use std::path::PathBuf;
 use zeroize::Zeroizing;
 
@@ -53,9 +53,7 @@ fn t2_password_wrap_unwrap() {
     let pw = Zeroizing::new("correct horse battery".to_string());
     let (dek, set) = mgr.issue_and_wrap(&pw, &code, 1).unwrap();
 
-    let recovered = mgr
-        .unwrap(&set, &Credential::Password(pw.clone()))
-        .unwrap();
+    let recovered = mgr.unwrap(&set, &Credential::Password(pw.clone())).unwrap();
     assert_eq!(expose(&dek), expose(&recovered));
 
     let bad = Zeroizing::new("wrong password".to_string());
@@ -165,9 +163,7 @@ fn t11_rotate_key_rewraps_without_changing_dek() {
         .unwrap();
     assert_eq!(expose(&dek), expose(&re));
     // 구 비번은 새 세대에서 실패.
-    assert!(mgr
-        .unwrap(&new_set, &Credential::Password(old_pw))
-        .is_err());
+    assert!(mgr.unwrap(&new_set, &Credential::Password(old_pw)).is_err());
 }
 
 // T13: 3경로 중 손상 후 남은 경로로 복구(독립성). 여기서는 비번 스탠자만 남겨 복구.
@@ -179,9 +175,8 @@ fn t13_independent_paths() {
     let (dek, mut set) = mgr.issue_and_wrap(&pw, &code, 1).unwrap();
 
     // 복구코드 스탠자를 손상시켜도 비번 경로로 복구 가능해야 한다.
-    set.stanzas.retain(|s| {
-        matches!(s, dbbackup_secrets::WrapStanza::Argon2id { .. })
-    });
+    set.stanzas
+        .retain(|s| matches!(s, dbbackup_secrets::WrapStanza::Argon2id { .. }));
     assert!(!set.stanzas.is_empty());
     let re = mgr.unwrap(&set, &Credential::Password(pw)).unwrap();
     assert_eq!(expose(&dek), expose(&re));

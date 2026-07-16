@@ -27,16 +27,19 @@ fn assert_wellformed(xml: &str) {
     while i < bytes.len() {
         match bytes[i] {
             b'<' => {
-                let end = xml[i..].find('>').map(|o| i + o).unwrap_or_else(|| {
-                    panic!("닫히지 않은 태그(< 뒤에 > 없음) at {i}")
-                });
+                let end = xml[i..]
+                    .find('>')
+                    .map(|o| i + o)
+                    .unwrap_or_else(|| panic!("닫히지 않은 태그(< 뒤에 > 없음) at {i}"));
                 let inner = &xml[i + 1..end];
                 if let Some(rest) = inner.strip_prefix('?') {
                     // 선언 <?xml ... ?> — 무시
                     let _ = rest;
                 } else if let Some(name) = inner.strip_prefix('/') {
                     // 닫힘 태그
-                    let expected = stack.pop().unwrap_or_else(|| panic!("여는 태그 없이 닫힘: {name}"));
+                    let expected = stack
+                        .pop()
+                        .unwrap_or_else(|| panic!("여는 태그 없이 닫힘: {name}"));
                     assert_eq!(expected, name.trim(), "태그 불균형: {expected} vs {name}");
                 } else if inner.ends_with('/') {
                     // self-closing <Foo /> — 스택 변화 없음
@@ -57,7 +60,10 @@ fn assert_wellformed(xml: &str) {
 
 #[test]
 fn daily_xml_contains_required_flags() {
-    let xml = render_task_xml(&params("nightly", ScheduleSpec::Daily { hour: 3, minute: 0 }));
+    let xml = render_task_xml(&params(
+        "nightly",
+        ScheduleSpec::Daily { hour: 3, minute: 0 },
+    ));
     assert_wellformed(&xml);
     assert!(xml.contains("<StartWhenAvailable>true</StartWhenAvailable>"));
     assert!(xml.contains("<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>"));
@@ -76,7 +82,11 @@ fn daily_xml_contains_required_flags() {
 fn weekly_xml_uses_dayofweek() {
     let xml = render_task_xml(&params(
         "weekly",
-        ScheduleSpec::Weekly { hour: 4, minute: 15, day: Weekday::Wed },
+        ScheduleSpec::Weekly {
+            hour: 4,
+            minute: 15,
+            day: Weekday::Wed,
+        },
     ));
     assert_wellformed(&xml);
     assert!(xml.contains("<ScheduleByWeek>"));

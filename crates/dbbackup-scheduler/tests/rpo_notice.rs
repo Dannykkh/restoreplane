@@ -44,7 +44,11 @@ fn weekly_target_is_seven_days() {
     // 주간 목표(7일*1.5=10.5일) 이내이므로 8일 경과는 within_target.
     let n = build_notice(
         "j",
-        &ScheduleSpec::Weekly { hour: 3, minute: 0, day: dbbackup_scheduler::cron::Weekday::Mon },
+        &ScheduleSpec::Weekly {
+            hour: 3,
+            minute: 0,
+            day: dbbackup_scheduler::cron::Weekday::Mon,
+        },
         Some(&last),
         now,
     );

@@ -37,7 +37,10 @@ spool_dir = "spool"
 "#;
     let err = load_and_migrate(raw).unwrap_err();
     match err {
-        ConfigError::UnsupportedSchemaVersion { found, max_supported } => {
+        ConfigError::UnsupportedSchemaVersion {
+            found,
+            max_supported,
+        } => {
             assert_eq!(found, 99);
             assert_eq!(max_supported, 1);
         }

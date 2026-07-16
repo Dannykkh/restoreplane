@@ -36,6 +36,10 @@ pub fn run(config_path: &Path, args: AddDbArgs) -> anyhow::Result<()> {
         .map_err(|errs| anyhow::anyhow!("config invalid after add-db: {errs:?}"))?;
     config.save(config_path)?;
 
-    println!("added database '{}' to {}", args.alias, config_path.display());
+    println!(
+        "added database '{}' to {}",
+        args.alias,
+        config_path.display()
+    );
     Ok(())
 }

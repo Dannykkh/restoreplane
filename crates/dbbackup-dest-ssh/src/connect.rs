@@ -38,7 +38,10 @@ pub async fn ssh_connect(
     let mut handle = client::connect(config, (host, port), handler).await?;
 
     let authed: AuthResult = match auth {
-        SshAuth::PublicKey { identity_pem, passphrase } => {
+        SshAuth::PublicKey {
+            identity_pem,
+            passphrase,
+        } => {
             let key = russh::keys::decode_secret_key(
                 identity_pem.as_str(),
                 passphrase.as_ref().map(|s| s.as_str()),
@@ -47,7 +50,9 @@ pub async fn ssh_connect(
             handle.authenticate_publickey(user, key).await?
         }
         SshAuth::Password { password } => {
-            handle.authenticate_password(user, password.as_str().to_string()).await?
+            handle
+                .authenticate_password(user, password.as_str().to_string())
+                .await?
         }
     };
 

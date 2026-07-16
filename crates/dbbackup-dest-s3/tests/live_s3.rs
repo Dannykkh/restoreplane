@@ -42,7 +42,10 @@ async fn s3_self_test_denies_destructive_ops() {
     // 올바른 append-only 자격 + 잠긴 버킷이면 Ok(모든 파괴동작 DENIED, versioning ON, 기본 보존).
     // 과권한 자격이면 OverPrivileged로, 미잠금이면 BucketNotLocked로 실행 거부돼야 한다.
     let dest = S3Dest::new("s3-live", cfg_from_env()).unwrap();
-    let report = dest.self_test().await.expect("append-only+잠긴 버킷이면 자가테스트 통과");
+    let report = dest
+        .self_test()
+        .await
+        .expect("append-only+잠긴 버킷이면 자가테스트 통과");
     assert!(report.denied_delete);
     assert!(report.denied_put_retention);
     assert!(report.denied_put_lifecycle);

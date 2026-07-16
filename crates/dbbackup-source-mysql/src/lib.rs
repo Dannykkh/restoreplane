@@ -20,9 +20,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use dbbackup_pipeline::artifact::{DumpArtifact, DumpExit, DumpStream};
-use dbbackup_pipeline::source::{
-    BackupSource, DumpPartKind, DumpPlan, DumpPlanPart,
-};
+use dbbackup_pipeline::source::{BackupSource, DumpPartKind, DumpPlan, DumpPlanPart};
 use uuid::Uuid;
 
 use anchor::{AnchorScanningReader, BinlogAnchor};
@@ -31,22 +29,29 @@ use dump::{drain_stderr_tail, render_dump_flags, spawn_mysqldump, MySqlConnCfg};
 use engine_scan::{classify_non_transactional, ensure_not_system_schema, NonTransactionalTable};
 use flags::{build_flags, DDL_RACE_FATAL_PATTERNS};
 use meta::MySqlMetaConn;
-use version::{
-    enforce_client_not_older, probe_client_version, ServerKind, ServerVersionInfo,
-};
+use version::{enforce_client_not_older, probe_client_version, ServerKind, ServerVersionInfo};
 
 #[derive(thiserror::Error, Debug)]
 pub enum MySqlSourceError {
     #[error("VERSION() 파싱 실패, 원문 유지 필요: {0}")]
     VersionParseFailed(String),
     #[error("서버 종류 {server_kind:?} 메이저 {server_major}을(를) 커버하는 번들 mysqldump 없음 — 가장 가까운 걸로 강행하지 않음(하드 실패)")]
-    NoBundledClientForServer { server_kind: ServerKind, server_major: u32 },
+    NoBundledClientForServer {
+        server_kind: ServerKind,
+        server_major: u32,
+    },
     #[error("클라이언트 메이저({client_major}) < 서버 메이저({server_major}) — 하드 실패(DT 버전 재검증)")]
-    ClientTooOld { client_major: u32, server_major: u32 },
+    ClientTooOld {
+        client_major: u32,
+        server_major: u32,
+    },
     #[error("add-db 대상이 시스템 스키마입니다: {0}")]
     SystemSchemaRejected(String),
     #[error("mysqldump 실행 실패({path}): {source}")]
-    DumpToolSpawnFailed { path: std::path::PathBuf, source: std::io::Error },
+    DumpToolSpawnFailed {
+        path: std::path::PathBuf,
+        source: std::io::Error,
+    },
 }
 
 /// S04 소스. meta(경량 메타 조회)와 conn(mysqldump CLI 인증)을 분리해 둔다.
@@ -103,7 +108,10 @@ impl MySqlSource {
     /// S05 PipelineCfg 구성 시 이 잡의 fatal_patterns에 병합해야 하는 MySQL 전용 패턴(R9).
     /// 단순 상수 정의가 아니라 run 배선(commands/run.rs)에서 실제로 cfg에 병합된다.
     pub fn fatal_patterns() -> Vec<String> {
-        DDL_RACE_FATAL_PATTERNS.iter().map(|s| s.to_string()).collect()
+        DDL_RACE_FATAL_PATTERNS
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
     }
 
     /// 커밋 직후 정확히 1회 호출해 매니페스트용 메타데이터를 회수한다. plan()을 다시 호출하면
@@ -185,7 +193,11 @@ impl BackupSource for MySqlSource {
             collation: Some(collation),
         };
 
-        Ok(DumpPlan { globals_part: None, db_parts: vec![part], warnings: Vec::new() })
+        Ok(DumpPlan {
+            globals_part: None,
+            db_parts: vec![part],
+            warnings: Vec::new(),
+        })
     }
 
     fn spawn(&self, part: &DumpPlanPart) -> anyhow::Result<DumpArtifact> {
@@ -202,7 +214,11 @@ impl BackupSource for MySqlSource {
             let report = guard
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("spawn 전에 plan()이 호출되지 않음"))?;
-            (report.binary.clone(), report.spawn_args.clone(), report.binlog_anchor.clone())
+            (
+                report.binary.clone(),
+                report.spawn_args.clone(),
+                report.binlog_anchor.clone(),
+            )
         };
 
         let mut child = spawn_mysqldump(&binary, &spawn_args, &self.conn)?;
@@ -215,10 +231,17 @@ impl BackupSource for MySqlSource {
         let wait = Box::pin(async move {
             let stderr_tail = drain_stderr_tail(stderr).await;
             let status = child.wait().await?;
-            Ok(DumpExit { code: status.code(), success: status.success(), stderr_tail })
+            Ok(DumpExit {
+                code: status.code(),
+                success: status.success(),
+                stderr_tail,
+            })
         });
 
-        Ok(DumpArtifact::Stream(DumpStream { reader: Box::new(reader), wait }))
+        Ok(DumpArtifact::Stream(DumpStream {
+            reader: Box::new(reader),
+            wait,
+        }))
     }
 }
 

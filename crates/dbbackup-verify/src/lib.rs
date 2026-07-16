@@ -29,4 +29,4 @@ pub use restorer::{RestoreOutcome, RestoreTarget, Restorer};
 pub use sandbox::{ImagePolicy, Sandbox, SandboxSpec};
 pub use sqlscan::scan_dangerous_sql;
 pub use unlock::{unwrap_dek, UnlockMode};
-pub use verify::{VerifyLevel, VerifyOutcome, VerifyResult, Verifier};
+pub use verify::{Verifier, VerifyLevel, VerifyOutcome, VerifyResult};

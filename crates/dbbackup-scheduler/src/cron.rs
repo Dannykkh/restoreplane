@@ -51,7 +51,9 @@ impl Weekday {
 pub enum CronError {
     #[error("cron 표현식은 정확히 5개 필드가 필요함(분 시 일 월 요일): '{0}'")]
     WrongFieldCount(String),
-    #[error("v1은 'M H * * *'(매일) 또는 'M H * * D'(매주 요일 D)만 지원함. 지원 안 되는 표현: {0}")]
+    #[error(
+        "v1은 'M H * * *'(매일) 또는 'M H * * D'(매주 요일 D)만 지원함. 지원 안 되는 표현: {0}"
+    )]
     Unsupported(String),
     #[error("숫자 필드 파싱 실패: {0}")]
     InvalidNumber(#[source] std::num::ParseIntError),
@@ -68,12 +70,16 @@ pub fn parse_cron_subset(expr: &str) -> Result<ScheduleSpec, CronError> {
         [fields[0], fields[1], fields[2], fields[3], fields[4]];
 
     if day_of_month != "*" || month != "*" {
-        return Err(CronError::Unsupported(format!("일/월 필드는 '*'만 지원: '{expr}'")));
+        return Err(CronError::Unsupported(format!(
+            "일/월 필드는 '*'만 지원: '{expr}'"
+        )));
     }
     // 리스트/범위/스텝 방어(조용한 오해석 금지).
     for f in [minute, hour, day_of_week] {
         if f.contains(',') || f.contains('-') || f.contains('/') {
-            return Err(CronError::Unsupported(format!("리스트/범위/스텝 미지원: '{expr}'")));
+            return Err(CronError::Unsupported(format!(
+                "리스트/범위/스텝 미지원: '{expr}'"
+            )));
         }
     }
     let m: u8 = minute.parse().map_err(CronError::InvalidNumber)?;

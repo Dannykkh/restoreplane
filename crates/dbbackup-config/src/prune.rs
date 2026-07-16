@@ -28,7 +28,8 @@ pub struct PruneIdentity {
 
 impl PruneProfile {
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
-        let raw = std::fs::read_to_string(path).map_err(|e| ConfigError::Io(path.to_path_buf(), e))?;
+        let raw =
+            std::fs::read_to_string(path).map_err(|e| ConfigError::Io(path.to_path_buf(), e))?;
         let raw = raw.strip_prefix('\u{FEFF}').unwrap_or(&raw);
         toml::from_str(raw).map_err(ConfigError::Parse)
     }

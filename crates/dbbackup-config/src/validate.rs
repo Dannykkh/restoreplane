@@ -74,19 +74,30 @@ pub fn validate(config: &Config) -> Result<(), Vec<ValidationError>> {
         match dest.kind {
             DestKind::S3 => {
                 if dest.endpoint.is_none() {
-                    errors.push(ValidationError::MissingS3Field(dest.name.clone(), "endpoint"));
+                    errors.push(ValidationError::MissingS3Field(
+                        dest.name.clone(),
+                        "endpoint",
+                    ));
                 }
                 if dest.bucket.is_none() {
                     errors.push(ValidationError::MissingS3Field(dest.name.clone(), "bucket"));
                 }
                 if dest.access_key_id.is_none() {
-                    errors.push(ValidationError::MissingS3Field(dest.name.clone(), "access_key_id"));
+                    errors.push(ValidationError::MissingS3Field(
+                        dest.name.clone(),
+                        "access_key_id",
+                    ));
                 }
                 if dest.secret_access_key.is_none() {
-                    errors.push(ValidationError::MissingS3Field(dest.name.clone(), "secret_access_key"));
+                    errors.push(ValidationError::MissingS3Field(
+                        dest.name.clone(),
+                        "secret_access_key",
+                    ));
                 }
                 if dest.object_lock.is_some() && dest.checksum_algo.is_none() {
-                    errors.push(ValidationError::S3ChecksumRequiredForObjectLock(dest.name.clone()));
+                    errors.push(ValidationError::S3ChecksumRequiredForObjectLock(
+                        dest.name.clone(),
+                    ));
                 }
             }
             DestKind::Ssh => {
@@ -105,7 +116,10 @@ pub fn validate(config: &Config) -> Result<(), Vec<ValidationError>> {
                     errors.push(ValidationError::MissingSshField(dest.name.clone(), "user"));
                 }
                 if dest.host_key_fingerprint.is_none() {
-                    errors.push(ValidationError::MissingSshField(dest.name.clone(), "host_key_fingerprint"));
+                    errors.push(ValidationError::MissingSshField(
+                        dest.name.clone(),
+                        "host_key_fingerprint",
+                    ));
                 }
             }
             DestKind::Local => {
@@ -140,5 +154,9 @@ pub fn validate(config: &Config) -> Result<(), Vec<ValidationError>> {
         }
     }
 
-    if errors.is_empty() { Ok(()) } else { Err(errors) }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }

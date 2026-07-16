@@ -56,8 +56,20 @@ impl SshDest {
 
     /// 매 업로드마다 새 SSH 연결 → session 채널 → sftp 서브시스템 → SftpSession.
     /// Handle을 함께 반환해 업로드 동안 연결이 살아있게 한다(drop 시 세션 종료).
-    async fn open_sftp(&self) -> anyhow::Result<(russh::client::Handle<crate::handler::PinnedClientHandler>, SftpSession)> {
-        let handle = ssh_connect(&self.host, self.port, &self.user, self.policy.clone(), self.auth.clone()).await?;
+    async fn open_sftp(
+        &self,
+    ) -> anyhow::Result<(
+        russh::client::Handle<crate::handler::PinnedClientHandler>,
+        SftpSession,
+    )> {
+        let handle = ssh_connect(
+            &self.host,
+            self.port,
+            &self.user,
+            self.policy.clone(),
+            self.auth.clone(),
+        )
+        .await?;
         let channel = handle.channel_open_session().await?;
         channel.request_subsystem(true, "sftp").await?;
         let sftp = SftpSession::new(channel.into_stream()).await?;
@@ -68,7 +80,11 @@ impl SshDest {
     /// append_only=true여도 "외부 보장 필요" 경고를 남긴다(오인 방지, R9).
     pub async fn self_test(&self) -> anyhow::Result<()> {
         let (_handle, sftp) = self.open_sftp().await?;
-        let probe = format!("{}/.selftest-{}", self.remote_dir.trim_end_matches('/'), uuid::Uuid::new_v4());
+        let probe = format!(
+            "{}/.selftest-{}",
+            self.remote_dir.trim_end_matches('/'),
+            uuid::Uuid::new_v4()
+        );
         let mut f = sftp.create(&probe).await?;
         f.write_all(b"ok").await?;
         f.flush().await?;
@@ -141,7 +157,9 @@ struct SftpBackend {
 impl WriterBackend for SftpBackend {
     async fn write_all(&mut self, buf: &[u8]) -> Result<(), DestError> {
         let f = self.file.as_mut().ok_or(DestError::WriterClosed)?;
-        f.write_all(buf).await.map_err(|e| DestError::backend(&self.tmp_path, e))?;
+        f.write_all(buf)
+            .await
+            .map_err(|e| DestError::backend(&self.tmp_path, e))?;
         self.bytes += buf.len() as u64;
         Ok(())
     }
@@ -149,14 +167,19 @@ impl WriterBackend for SftpBackend {
     /// 완전 성공 경로에서만: flush → 닫기 → 임시→최종 rename(= 유일한 커밋 지점).
     async fn commit(mut self: Box<Self>) -> Result<UploadReceipt, DestError> {
         let mut f = self.file.take().ok_or(DestError::WriterClosed)?;
-        f.flush().await.map_err(|e| DestError::backend(&self.tmp_path, e))?;
+        f.flush()
+            .await
+            .map_err(|e| DestError::backend(&self.tmp_path, e))?;
         f.shutdown().await.ok(); // 핸들 닫기(서버가 파일 확정)
         drop(f);
         self.sftp
             .rename(&self.tmp_path, &self.final_path)
             .await
             .map_err(|e| DestError::backend(&self.final_path, e))?;
-        Ok(UploadReceipt { key: self.final_path.clone(), bytes: self.bytes })
+        Ok(UploadReceipt {
+            key: self.final_path.clone(),
+            bytes: self.bytes,
+        })
     }
 
     /// 실패 경로: 임시 파일 삭제 → 최종 key엔 아무것도 나타나지 않음.

@@ -39,7 +39,10 @@ pub enum DestError {
 impl DestError {
     /// 외부 목적지 크레이트(S3/SSH)가 자신의 오류를 DestError로 매핑할 때 쓰는 헬퍼.
     pub fn backend(key: impl Into<String>, msg: impl std::fmt::Display) -> Self {
-        DestError::Backend { key: key.into(), msg: msg.to_string() }
+        DestError::Backend {
+            key: key.into(),
+            msg: msg.to_string(),
+        }
     }
 }
 
@@ -89,7 +92,10 @@ impl RequiredImmutability {
                 ServerAppendOnly | ObjectLockGovernance | ObjectLockCompliance
             ),
             RequiredImmutability::ObjectLock => {
-                matches!(caps.immutability, ObjectLockGovernance | ObjectLockCompliance)
+                matches!(
+                    caps.immutability,
+                    ObjectLockGovernance | ObjectLockCompliance
+                )
             }
             RequiredImmutability::ComplianceOnly => {
                 matches!(caps.immutability, ObjectLockCompliance)
@@ -154,7 +160,10 @@ pub struct DestWriter {
 impl DestWriter {
     /// 외부/내부 목적지가 자신의 백엔드로 DestWriter를 구성한다.
     pub fn from_backend(backend: Box<dyn WriterBackend>) -> Self {
-        Self { backend: Some(backend), committed: false }
+        Self {
+            backend: Some(backend),
+            committed: false,
+        }
     }
 
     pub async fn write_all(&mut self, buf: &[u8]) -> Result<(), DestError> {
@@ -200,7 +209,10 @@ struct LocalBackend {
 
 impl LocalBackend {
     fn io_err(&self, e: std::io::Error) -> DestError {
-        DestError::Io { key: self.final_path.display().to_string(), source: e }
+        DestError::Io {
+            key: self.final_path.display().to_string(),
+            source: e,
+        }
     }
 }
 
@@ -263,7 +275,10 @@ pub struct LocalDest {
 
 impl LocalDest {
     pub fn new(name: impl Into<String>, root: impl Into<PathBuf>) -> Self {
-        Self { name: name.into(), root: root.into() }
+        Self {
+            name: name.into(),
+            root: root.into(),
+        }
     }
 }
 

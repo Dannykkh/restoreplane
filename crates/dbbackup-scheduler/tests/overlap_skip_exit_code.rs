@@ -35,7 +35,11 @@ impl NotificationSink for RecordingSink {
     }
 }
 
-fn ctx(db: std::path::PathBuf, writer: CatalogWriterHandle, rec: Arc<Mutex<Vec<RunOutcome>>>) -> SchedulerContext {
+fn ctx(
+    db: std::path::PathBuf,
+    writer: CatalogWriterHandle,
+    rec: Arc<Mutex<Vec<RunOutcome>>>,
+) -> SchedulerContext {
     SchedulerContext {
         catalog_writer: writer,
         catalog_db_path: db,
@@ -58,9 +62,21 @@ async fn t6_normal_run_invokes_pipeline_once_and_exits_success() {
     let rec = Arc::new(Mutex::new(Vec::new()));
     let c = ctx(db, writer, rec.clone());
 
-    let code = run_scheduled_job("job-a", &DAILY, &c, &MockRunner { calls: calls.clone() }).await;
+    let code = run_scheduled_job(
+        "job-a",
+        &DAILY,
+        &c,
+        &MockRunner {
+            calls: calls.clone(),
+        },
+    )
+    .await;
     assert_eq!(code, EXIT_SUCCESS);
-    assert_eq!(calls.load(Ordering::SeqCst), 1, "파이프라인은 정확히 1회 호출");
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "파이프라인은 정확히 1회 호출"
+    );
     assert_eq!(rec.lock().unwrap().as_slice(), &[RunOutcome::Success]);
 }
 
@@ -77,12 +93,23 @@ async fn t7_t8_overlap_skips_without_running_pipeline_and_exits_zero() {
     let rec = Arc::new(Mutex::new(Vec::new()));
     let c = ctx(db, writer, rec.clone());
 
-    let code = run_scheduled_job("job-b", &DAILY, &c, &MockRunner { calls: calls.clone() }).await;
+    let code = run_scheduled_job(
+        "job-b",
+        &DAILY,
+        &c,
+        &MockRunner {
+            calls: calls.clone(),
+        },
+    )
+    .await;
 
     // 스킵은 exit 0 (RestartOnFailure 유발 금지).
     assert_eq!(code, EXIT_SKIPPED_OVERLAP);
     // 파이프라인은 절대 실행되지 않음.
     assert_eq!(calls.load(Ordering::SeqCst), 0);
     // 스킵도 알림 채널에 SkippedOverlap outcome으로 가시화됨(실패로 오인되지 않음).
-    assert_eq!(rec.lock().unwrap().as_slice(), &[RunOutcome::SkippedOverlap]);
+    assert_eq!(
+        rec.lock().unwrap().as_slice(),
+        &[RunOutcome::SkippedOverlap]
+    );
 }

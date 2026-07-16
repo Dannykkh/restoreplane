@@ -39,7 +39,10 @@ fn config_serialization_roundtrip_is_stable() {
     let reparsed: Config = toml::from_str(&first).expect("serialized Config must reparse");
     let second = toml::to_string_pretty(&reparsed).expect("reparsed Config must serialize again");
 
-    assert_eq!(first, second, "serialize -> parse -> serialize must be a fixed point");
+    assert_eq!(
+        first, second,
+        "serialize -> parse -> serialize must be a fixed point"
+    );
 }
 
 #[test]

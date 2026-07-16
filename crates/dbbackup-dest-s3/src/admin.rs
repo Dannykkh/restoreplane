@@ -72,14 +72,20 @@ impl S3Admin {
 
     /// 매 run 자가테스트(R7). 읽기 단언(versioning/락) + deny-check(5개 파괴동작) + enforce.
     pub async fn run_self_test(&self, cfg: &S3Cfg) -> Result<SelfTestReport, S3Error> {
-        let probe = format!("{}/.selftest/{}", cfg.prefix.trim_end_matches('/'), uuid::Uuid::new_v4());
+        let probe = format!(
+            "{}/.selftest/{}",
+            cfg.prefix.trim_end_matches('/'),
+            uuid::Uuid::new_v4()
+        );
 
         // (A) 읽기 단언: versioning ON + Object Lock 기본 보존(M4/H2).
         let versioning_on = self.get_versioning_enabled().await?;
         let (lock_mode, default_retention_days) = self.get_object_lock().await?;
 
         // (B) deny-check: 403이면 DENIED(정상), 그 외(2xx/400/404)면 과권한.
-        let denied_delete = self.expect_denied(Method::Delete, &format!("/{}", probe), "", b"").await?;
+        let denied_delete = self
+            .expect_denied(Method::Delete, &format!("/{}", probe), "", b"")
+            .await?;
         let denied_put_retention = self
             .expect_denied(Method::Put, &format!("/{}", probe), "retention=", b"<x/>")
             .await?;
@@ -112,13 +118,18 @@ impl S3Admin {
 
         let mut warnings = Vec::new();
         if !versioning_on {
-            warnings.push("versioning이 ON이 아님 — Object Lock가 아무 것도 보호 못 함(M4)".to_string());
+            warnings.push(
+                "versioning이 ON이 아님 — Object Lock가 아무 것도 보호 못 함(M4)".to_string(),
+            );
         }
         match default_retention_days {
-            None => warnings.push("기본 보존(default retention) 미설정 — 새 객체가 즉시 삭제 가능(H2)".to_string()),
-            Some(d) if d < self.min_dwell_days => {
-                warnings.push(format!("기본 보존 {d}일 < dwell {}일(M4)", self.min_dwell_days))
-            }
+            None => warnings.push(
+                "기본 보존(default retention) 미설정 — 새 객체가 즉시 삭제 가능(H2)".to_string(),
+            ),
+            Some(d) if d < self.min_dwell_days => warnings.push(format!(
+                "기본 보존 {d}일 < dwell {}일(M4)",
+                self.min_dwell_days
+            )),
             _ => {}
         }
 
@@ -154,7 +165,13 @@ impl S3Admin {
     }
 
     /// 403 → true(DENIED). 2xx/400/404 등 비-403 → false(=할 수 있음 = 과권한).
-    async fn expect_denied(&self, method: Method, path: &str, query: &str, body: &[u8]) -> Result<bool, S3Error> {
+    async fn expect_denied(
+        &self,
+        method: Method,
+        path: &str,
+        query: &str,
+        body: &[u8],
+    ) -> Result<bool, S3Error> {
         match self.send_signed(method, path, query, body).await {
             Ok((status, _)) => Ok(status == 403),
             Err(HttpErr::Status(403)) => Ok(true),
@@ -167,12 +184,17 @@ impl S3Admin {
         match self.send_signed(Method::Get, "/", "versioning=", b"").await {
             Ok((_, body)) => Ok(body.contains("<Status>Enabled</Status>")),
             Err(HttpErr::Transport(e)) => Err(S3Error::SelfTestTransport(e)),
-            Err(HttpErr::Status(s)) => Err(S3Error::SelfTest(format!("GetBucketVersioning HTTP {s}"))),
+            Err(HttpErr::Status(s)) => {
+                Err(S3Error::SelfTest(format!("GetBucketVersioning HTTP {s}")))
+            }
         }
     }
 
     async fn get_object_lock(&self) -> Result<(Option<ImmutabilityKind>, Option<u32>), S3Error> {
-        match self.send_signed(Method::Get, "/", "object-lock=", b"").await {
+        match self
+            .send_signed(Method::Get, "/", "object-lock=", b"")
+            .await
+        {
             Ok((_, body)) => {
                 let mode = if body.contains("<Mode>COMPLIANCE</Mode>") {
                     Some(ImmutabilityKind::ObjectLockCompliance)
@@ -191,7 +213,13 @@ impl S3Admin {
     }
 
     /// SigV4(AWS4-HMAC-SHA256) path-style 서명 요청 전송. (status, body)를 반환.
-    async fn send_signed(&self, method: Method, path: &str, query: &str, body: &[u8]) -> Result<(u16, String), HttpErr> {
+    async fn send_signed(
+        &self,
+        method: Method,
+        path: &str,
+        query: &str,
+        body: &[u8],
+    ) -> Result<(u16, String), HttpErr> {
         let now = OffsetDateTime::now_utc();
         let amz_date = format!(
             "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
@@ -202,7 +230,12 @@ impl S3Admin {
             now.minute(),
             now.second()
         );
-        let datestamp = format!("{:04}{:02}{:02}", now.year(), u8::from(now.month()), now.day());
+        let datestamp = format!(
+            "{:04}{:02}{:02}",
+            now.year(),
+            u8::from(now.month()),
+            now.day()
+        );
 
         // path-style: canonical URI = /{bucket}{path}
         let canonical_uri = uri_encode(&format!("/{}{}", self.bucket, path), false);
@@ -210,9 +243,8 @@ impl S3Admin {
         let payload_hash = hex::encode(Sha256::digest(body));
 
         // canonical headers (host, x-amz-content-sha256, x-amz-date) — 정렬됨.
-        let canonical_headers = format!(
-            "host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amz_date}\n"
-        );
+        let canonical_headers =
+            format!("host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amz_date}\n");
         let signed_headers = "host;x-amz-content-sha256;x-amz-date";
 
         let canonical_request = format!(
@@ -254,7 +286,10 @@ impl S3Admin {
             .header("authorization", authorization)
             .body(body.to_vec());
 
-        let resp = req.send().await.map_err(|e| HttpErr::Transport(e.to_string()))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| HttpErr::Transport(e.to_string()))?;
         let status = resp.status().as_u16();
         let text = resp.text().await.unwrap_or_default();
         if (200..300).contains(&status) {
@@ -267,7 +302,10 @@ impl S3Admin {
     }
 
     fn signing_key(&self, datestamp: &str) -> Vec<u8> {
-        let k_date = hmac(format!("AWS4{}", self.secret_access_key).as_bytes(), datestamp.as_bytes());
+        let k_date = hmac(
+            format!("AWS4{}", self.secret_access_key).as_bytes(),
+            datestamp.as_bytes(),
+        );
         let k_region = hmac(&k_date, self.region.as_bytes());
         let k_service = hmac(&k_region, b"s3");
         hmac(&k_service, b"aws4_request")
@@ -352,7 +390,10 @@ mod tests {
 
     #[test]
     fn host_of_strips_scheme() {
-        assert_eq!(host_of("https://s3.us-east-1.amazonaws.com"), "s3.us-east-1.amazonaws.com");
+        assert_eq!(
+            host_of("https://s3.us-east-1.amazonaws.com"),
+            "s3.us-east-1.amazonaws.com"
+        );
         assert_eq!(host_of("http://127.0.0.1:9000/"), "127.0.0.1:9000");
     }
 

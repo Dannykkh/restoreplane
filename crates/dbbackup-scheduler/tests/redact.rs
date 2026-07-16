@@ -39,7 +39,13 @@ fn t12_redacting_writer_is_last_line_of_defense() {
         w.flush().unwrap();
     }
     let contents = std::fs::read_to_string(&path).unwrap();
-    assert!(!contents.contains("deadbeefsecret"), "writer가 토큰을 흘림: {contents}");
-    assert!(!contents.contains("://u:p@"), "writer가 DSN을 흘림: {contents}");
+    assert!(
+        !contents.contains("deadbeefsecret"),
+        "writer가 토큰을 흘림: {contents}"
+    );
+    assert!(
+        !contents.contains("://u:p@"),
+        "writer가 DSN을 흘림: {contents}"
+    );
     assert!(contents.contains("[REDACTED]"));
 }

@@ -47,7 +47,10 @@ fn default_sinks_always_present() {
 
 #[test]
 fn webhook_chosen_when_url_resolved() {
-    let c = CompositeSink::default_plus_config(Some(&webhook_cfg()), Some("https://hooks.example/x".to_string()));
+    let c = CompositeSink::default_plus_config(
+        Some(&webhook_cfg()),
+        Some("https://hooks.example/x".to_string()),
+    );
     assert!(c.sink_names().contains(&"webhook"));
     // 평문 URL이 없으면 webhook sink는 등록되지 않는다(조용한 오해석 방지).
     let c2 = CompositeSink::default_plus_config(Some(&webhook_cfg()), None);

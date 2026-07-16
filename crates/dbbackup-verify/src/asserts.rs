@@ -37,9 +37,17 @@ pub fn compare_row_counts(
         }
     }
     if mismatches.is_empty() {
-        (true, format!("row count 전부 일치({}테이블)", manifest_captured.len()), total_restored)
+        (
+            true,
+            format!("row count 전부 일치({}테이블)", manifest_captured.len()),
+            total_restored,
+        )
     } else {
-        (false, format!("row count 불일치: {}", mismatches.join(", ")), total_restored)
+        (
+            false,
+            format!("row count 불일치: {}", mismatches.join(", ")),
+            total_restored,
+        )
     }
 }
 

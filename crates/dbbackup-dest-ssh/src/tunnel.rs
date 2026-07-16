@@ -47,7 +47,12 @@ pub async fn open_tunnel(
             tokio::spawn(async move {
                 // 매 로컬 연결마다 새 direct-tcpip 채널. 인자: (target_host, target_port, orig_host, orig_port).
                 let channel = match h2
-                    .channel_open_direct_tcpip(dbh, dbp as u32, peer.ip().to_string(), peer.port() as u32)
+                    .channel_open_direct_tcpip(
+                        dbh,
+                        dbp as u32,
+                        peer.ip().to_string(),
+                        peer.port() as u32,
+                    )
                     .await
                 {
                     Ok(c) => c,
@@ -65,5 +70,9 @@ pub async fn open_tunnel(
     });
 
     tracing::info!(local = %local_addr, %target, "터널 개통");
-    Ok(TunnelHandle { local_addr, _accept_task: accept_task, _keepalive: handle })
+    Ok(TunnelHandle {
+        local_addr,
+        _accept_task: accept_task,
+        _keepalive: handle,
+    })
 }

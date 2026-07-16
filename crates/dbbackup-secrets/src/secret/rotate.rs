@@ -89,6 +89,10 @@ pub(crate) fn keys_status(mgr: &SecretManager, set: &WrapSet) -> String {
         mark(!dpapi_ids.is_empty()),
         set.dek_wrap_gen,
         dpapi_line,
-        if has_rec { "등록됨(검증자 존재)" } else { "미등록" },
+        if has_rec {
+            "등록됨(검증자 존재)"
+        } else {
+            "미등록"
+        },
     )
 }

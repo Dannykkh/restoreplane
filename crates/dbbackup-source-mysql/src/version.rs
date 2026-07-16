@@ -26,7 +26,13 @@ impl ServerVersionInfo {
         let kind = detect_server_kind(raw);
         let (major, minor, patch) = parse_semver_prefix(raw)
             .ok_or_else(|| MySqlSourceError::VersionParseFailed(raw.to_string()))?;
-        Ok(ServerVersionInfo { raw: raw.to_string(), kind, major, minor, patch })
+        Ok(ServerVersionInfo {
+            raw: raw.to_string(),
+            kind,
+            major,
+            minor,
+            patch,
+        })
     }
 }
 
@@ -54,7 +60,9 @@ pub fn parse_semver_prefix(raw: &str) -> Option<(u32, u32, u32)> {
 /// Oracle: "Distrib 8.0.37" / MariaDB: "Distrib 10.11.6-MariaDB". 'Distrib' 다음 토큰의 접두만 취함.
 pub fn parse_client_major_from_banner(raw: &str) -> Option<u32> {
     let after = raw.split("Distrib").nth(1)?;
-    let token = after.split(|c: char| c == ',' || c.is_whitespace()).find(|s| !s.is_empty())?;
+    let token = after
+        .split(|c: char| c == ',' || c.is_whitespace())
+        .find(|s| !s.is_empty())?;
     let (major, _, _) = parse_semver_prefix(token)?;
     Some(major)
 }
@@ -84,7 +92,10 @@ pub fn enforce_client_not_older(
     server_major: u32,
 ) -> Result<(), MySqlSourceError> {
     if client_major < server_major {
-        return Err(MySqlSourceError::ClientTooOld { client_major, server_major });
+        return Err(MySqlSourceError::ClientTooOld {
+            client_major,
+            server_major,
+        });
     }
     Ok(())
 }
@@ -123,7 +134,10 @@ mod tests {
 
     #[test]
     fn mariadb_detection_is_case_insensitive() {
-        assert_eq!(detect_server_kind("5.5.5-10.6.16-mariadb"), ServerKind::MariaDb);
+        assert_eq!(
+            detect_server_kind("5.5.5-10.6.16-mariadb"),
+            ServerKind::MariaDb
+        );
         assert_eq!(detect_server_kind("5.7.44-log"), ServerKind::OracleMySql);
     }
 

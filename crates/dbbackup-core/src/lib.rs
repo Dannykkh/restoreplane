@@ -21,7 +21,10 @@ impl EncField {
     pub const PREFIX: &'static str = "enc:";
 
     pub fn new(wrap_gen: u32, ciphertext: Vec<u8>) -> Self {
-        Self { wrap_gen, ciphertext }
+        Self {
+            wrap_gen,
+            ciphertext,
+        }
     }
 }
 
@@ -41,17 +44,30 @@ impl FromStr for EncField {
     type Err = EncFieldError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let rest = s.strip_prefix(Self::PREFIX).ok_or(EncFieldError::MissingPrefix)?;
+        let rest = s
+            .strip_prefix(Self::PREFIX)
+            .ok_or(EncFieldError::MissingPrefix)?;
         let (wrap_gen_str, b64) = rest.split_once(':').ok_or(EncFieldError::Malformed)?;
-        let wrap_gen: u32 = wrap_gen_str.parse().map_err(EncFieldError::InvalidWrapGen)?;
+        let wrap_gen: u32 = wrap_gen_str
+            .parse()
+            .map_err(EncFieldError::InvalidWrapGen)?;
         let ciphertext = STANDARD.decode(b64).map_err(EncFieldError::InvalidBase64)?;
-        Ok(EncField { wrap_gen, ciphertext })
+        Ok(EncField {
+            wrap_gen,
+            ciphertext,
+        })
     }
 }
 
 impl fmt::Display for EncField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}:{}", Self::PREFIX, self.wrap_gen, STANDARD.encode(&self.ciphertext))
+        write!(
+            f,
+            "{}{}:{}",
+            Self::PREFIX,
+            self.wrap_gen,
+            STANDARD.encode(&self.ciphertext)
+        )
     }
 }
 
@@ -163,7 +179,10 @@ mod tests {
 
     #[test]
     fn enc_field_rejects_missing_prefix() {
-        assert!(matches!("3:aGVsbG8=".parse::<EncField>(), Err(EncFieldError::MissingPrefix)));
+        assert!(matches!(
+            "3:aGVsbG8=".parse::<EncField>(),
+            Err(EncFieldError::MissingPrefix)
+        ));
     }
 
     #[test]

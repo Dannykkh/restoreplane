@@ -72,13 +72,7 @@ pub fn upsert_backup_from_manifest_conn(
              ON CONFLICT(backup_id, dest_name) DO UPDATE SET
                 object_checksum=excluded.object_checksum, status='committed'"
         ),
-        params![
-            id,
-            dest_name,
-            dest_kind,
-            m.spool_object,
-            m.plaintext_blake3,
-        ],
+        params![id, dest_name, dest_kind, m.spool_object, m.plaintext_blake3,],
     )?;
 
     tx.commit()?;

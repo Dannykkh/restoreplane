@@ -49,7 +49,12 @@ pub fn compute_rpo_notice(
             |row| row.get(0),
         )
         .ok();
-    Ok(build_notice(job, schedule, last.as_deref(), OffsetDateTime::now_utc()))
+    Ok(build_notice(
+        job,
+        schedule,
+        last.as_deref(),
+        OffsetDateTime::now_utc(),
+    ))
 }
 
 /// 순수 계산부(테스트 가능). now를 주입받아 시각 의존성을 제거한다.

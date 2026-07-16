@@ -44,10 +44,7 @@ pub enum WrapStanza {
     /// (d) 봉투 최상위 키(KEK)로 32B 키(per-backup DEK 또는 서명 seed)를 직접 wrap.
     /// 키스토어의 KEK를 unlock한 뒤에만 unwrap 가능 — 매니페스트 동봉 WrapSet과
     /// 키스토어의 서명키 보관에 쓴다(자격증명 파라미터가 없어 KEK 없이는 열 수 없다).
-    Kek {
-        nonce: [u8; 12],
-        ct: Vec<u8>,
-    },
+    Kek { nonce: [u8; 12], ct: Vec<u8> },
 }
 
 /// 한 백업의 DEK를 감싼 다경로 스탠자 묶음. 매니페스트에 동봉되어 서명된다.

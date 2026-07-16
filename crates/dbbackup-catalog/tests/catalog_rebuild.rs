@@ -40,7 +40,10 @@ fn signature_gate_accepts_valid_rejects_unsigned_and_tampered() {
     // 유효 서명 봉투 → 게이트 통과.
     let (_m, key) = write_manifest(&sk, tmp.path(), 1);
     let bytes = std::fs::read(tmp.path().join(&key)).unwrap();
-    assert!(verify_bytes(&bytes, &verifier).is_ok(), "유효 서명은 통과해야 함");
+    assert!(
+        verify_bytes(&bytes, &verifier).is_ok(),
+        "유효 서명은 통과해야 함"
+    );
 
     // 미서명(봉투 아닌 bare Manifest) → Unsigned 거부.
     let src = StubSource::ok("job-a", "stub-db", vec![]);
@@ -54,13 +57,19 @@ fn signature_gate_accepts_valid_rejects_unsigned_and_tampered() {
     };
     let bare = Manifest::from_commit(&part, Engine::Postgresql, &commit, 1);
     let bare_json = serde_json::to_vec(&bare).unwrap();
-    assert!(verify_bytes(&bare_json, &verifier).is_err(), "미서명은 거부해야 함");
+    assert!(
+        verify_bytes(&bare_json, &verifier).is_err(),
+        "미서명은 거부해야 함"
+    );
 
     // 변조: 서명 후 본체 필드를 바꾸면 서명 검증 실패.
     let mut signed: SignedManifest = serde_json::from_slice(&bytes).unwrap();
     signed.manifest.plaintext_bytes += 1;
     let tampered = serde_json::to_vec(&signed).unwrap();
-    assert!(verify_bytes(&tampered, &verifier).is_err(), "변조된 매니페스트는 거부해야 함");
+    assert!(
+        verify_bytes(&tampered, &verifier).is_err(),
+        "변조된 매니페스트는 거부해야 함"
+    );
 }
 
 #[test]
@@ -112,12 +121,20 @@ fn rebuild_reconstructs_rows_from_manifests_after_catalog_wipe() {
         &source,
         &verifier,
         &writer,
-        RebuildArgs { dest_name: "local".into(), dest_kind: "local".into(), ..Default::default() },
+        RebuildArgs {
+            dest_name: "local".into(),
+            dest_kind: "local".into(),
+            ..Default::default()
+        },
     )
     .unwrap();
 
     assert_eq!(report.accepted, N, "유효 서명 N건만 반영");
-    assert_eq!(report.rejected_unsigned_or_tampered.len(), 2, "변조 1 + 미서명 1 배제");
+    assert_eq!(
+        report.rejected_unsigned_or_tampered.len(),
+        2,
+        "변조 1 + 미서명 1 배제"
+    );
 
     // 재구성된 backups/artifacts row 검증.
     let conn = open_reader_conn(&db_path).unwrap();
@@ -126,7 +143,11 @@ fn rebuild_reconstructs_rows_from_manifests_after_catalog_wipe() {
         .unwrap();
     assert_eq!(backups as usize, N);
     let artifacts: i64 = conn
-        .query_row("SELECT count(*) FROM artifacts WHERE status='committed'", [], |r| r.get(0))
+        .query_row(
+            "SELECT count(*) FROM artifacts WHERE status='committed'",
+            [],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(artifacts as usize, N);
 

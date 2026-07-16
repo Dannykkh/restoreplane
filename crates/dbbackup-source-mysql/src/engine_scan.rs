@@ -22,8 +22,7 @@ impl NonTransactionalTable {
     }
 }
 
-pub const SYSTEM_SCHEMAS: &[&str] =
-    &["mysql", "information_schema", "performance_schema", "sys"];
+pub const SYSTEM_SCHEMAS: &[&str] = &["mysql", "information_schema", "performance_schema", "sys"];
 
 /// db_name이 시스템 스키마면 즉시 거부(R12, 방어적 설정 오류 차단).
 pub fn ensure_not_system_schema(db_name: &str) -> Result<(), MySqlSourceError> {
@@ -49,7 +48,11 @@ pub fn classify_non_transactional(
                 && !engine_norm.eq_ignore_ascii_case("InnoDB")
                 && !SYSTEM_SCHEMAS.contains(&schema.as_str())
         })
-        .map(|(schema, table, engine)| NonTransactionalTable { schema, table, engine })
+        .map(|(schema, table, engine)| NonTransactionalTable {
+            schema,
+            table,
+            engine,
+        })
         .collect()
 }
 

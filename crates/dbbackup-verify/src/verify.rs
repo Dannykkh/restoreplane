@@ -73,7 +73,10 @@ impl<'a> Verifier<'a> {
             Ok(plain) => {
                 let got = blake3::hash(&plain).to_hex().to_string();
                 if got == expected {
-                    (VerifyResult::Pass, "재복호+재압축해제 성공, 평문 blake3 일치".to_string())
+                    (
+                        VerifyResult::Pass,
+                        "재복호+재압축해제 성공, 평문 blake3 일치".to_string(),
+                    )
                 } else {
                     (
                         VerifyResult::Fail,
@@ -81,7 +84,10 @@ impl<'a> Verifier<'a> {
                     )
                 }
             }
-            Err(e) => (VerifyResult::Fail, format!("복호/압축해제 실패(변조/절단 의심): {e}")),
+            Err(e) => (
+                VerifyResult::Fail,
+                format!("복호/압축해제 실패(변조/절단 의심): {e}"),
+            ),
         };
 
         Ok(VerifyOutcome {
@@ -95,7 +101,10 @@ impl<'a> Verifier<'a> {
     }
 
     /// L2: PG custom은 pg_restore --list로 TOC 파싱(데이터 미전개, 실행 위험 없음). 그 외는 헤더 검사.
-    pub async fn l2_format_validity(&self, inputs: &RestoreInputs) -> anyhow::Result<VerifyOutcome> {
+    pub async fn l2_format_validity(
+        &self,
+        inputs: &RestoreInputs,
+    ) -> anyhow::Result<VerifyOutcome> {
         let m = &inputs.db_manifest;
         let cipher = self.restorer.read_cipher(m).await?;
         let plain = match decrypt_and_decompress_bytes(&cipher, &self.restorer.dek) {
@@ -121,12 +130,23 @@ impl<'a> Verifier<'a> {
             let ok = head.contains("-- MySQL dump")
                 || head.contains("-- MariaDB")
                 || head.contains("PostgreSQL database dump");
-            (ok, if ok { "덤프 헤더 확인(약한 L2)".to_string() } else { "예상 헤더 없음".to_string() })
+            (
+                ok,
+                if ok {
+                    "덤프 헤더 확인(약한 L2)".to_string()
+                } else {
+                    "예상 헤더 없음".to_string()
+                },
+            )
         };
 
         Ok(VerifyOutcome {
             level: VerifyLevel::L2,
-            result: if pass { VerifyResult::Pass } else { VerifyResult::Fail },
+            result: if pass {
+                VerifyResult::Pass
+            } else {
+                VerifyResult::Fail
+            },
             restore_target_version: None,
             restored_rows: None,
             schema_hash: None,
@@ -136,7 +156,10 @@ impl<'a> Verifier<'a> {
 
     /// L3: 샌드박스 실제 복원 → 스키마 해시/row count 대조(매니페스트 캡처값 기준). Docker 필요.
     pub async fn l3_full_restore(&self, inputs: &RestoreInputs) -> anyhow::Result<VerifyOutcome> {
-        let outcome = self.restorer.restore(inputs, RestoreTarget::Sandbox).await?;
+        let outcome = self
+            .restorer
+            .restore(inputs, RestoreTarget::Sandbox)
+            .await?;
         let sandbox = outcome
             .sandbox
             .ok_or_else(|| anyhow::anyhow!("L3는 샌드박스 필수"))?;
@@ -175,7 +198,11 @@ impl<'a> Verifier<'a> {
 
         Ok(VerifyOutcome {
             level: VerifyLevel::L3,
-            result: if pass { VerifyResult::Pass } else { VerifyResult::Fail },
+            result: if pass {
+                VerifyResult::Pass
+            } else {
+                VerifyResult::Fail
+            },
             restore_target_version: Some(target_version),
             restored_rows: Some(total_restored),
             schema_hash: Some(restored_schema_hash),
@@ -191,13 +218,23 @@ fn pg_restore_list_ok(custom_dump: &[u8]) -> (bool, String) {
     if std::fs::write(&tmp, custom_dump).is_err() {
         return (false, "임시 파일 쓰기 실패".to_string());
     }
-    let out = std::process::Command::new("pg_restore").arg("--list").arg(&tmp).output();
+    let out = std::process::Command::new("pg_restore")
+        .arg("--list")
+        .arg(&tmp)
+        .output();
     let _ = std::fs::remove_file(&tmp);
     match out {
-        Ok(o) if o.status.success() && !o.stdout.is_empty() => {
-            (true, format!("pg_restore --list OK, TOC {} bytes", o.stdout.len()))
-        }
-        Ok(o) => (false, format!("pg_restore --list 실패: {}", String::from_utf8_lossy(&o.stderr))),
+        Ok(o) if o.status.success() && !o.stdout.is_empty() => (
+            true,
+            format!("pg_restore --list OK, TOC {} bytes", o.stdout.len()),
+        ),
+        Ok(o) => (
+            false,
+            format!(
+                "pg_restore --list 실패: {}",
+                String::from_utf8_lossy(&o.stderr)
+            ),
+        ),
         Err(e) => (false, format!("pg_restore 실행 불가: {e}")),
     }
 }

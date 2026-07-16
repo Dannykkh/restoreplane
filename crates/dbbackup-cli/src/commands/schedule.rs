@@ -40,9 +40,7 @@ pub fn run(config_path: &Path, args: ScheduleArgs) -> anyhow::Result<()> {
     let schedule = parse_cron_subset(&job.schedule)
         .map_err(|e| anyhow::anyhow!("job '{}'의 schedule 파싱 실패: {e}", job.name))?;
 
-    let exe_path = std::env::current_exe()?
-        .to_string_lossy()
-        .into_owned();
+    let exe_path = std::env::current_exe()?.to_string_lossy().into_owned();
     let working_dir = std::env::current_dir()?.to_string_lossy().into_owned();
     let user = std::env::var("USERNAME").unwrap_or_else(|_| "SYSTEM".to_string());
     // "DOMAIN\\USER"(USERDOMAIN) 형식이 SID 매핑에 안전하다(로컬 ".\\user" 표기는 일부 환경에서 실패).

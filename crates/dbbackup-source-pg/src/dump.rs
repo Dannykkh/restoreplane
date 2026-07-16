@@ -53,7 +53,10 @@ fn spawn_stream(
         })
     });
 
-    Ok(DumpArtifact::Stream(DumpStream { reader: Box::new(stdout), wait }))
+    Ok(DumpArtifact::Stream(DumpStream {
+        reader: Box::new(stdout),
+        wait,
+    }))
 }
 
 async fn drain_stderr_tail(stderr: tokio::process::ChildStderr) -> String {

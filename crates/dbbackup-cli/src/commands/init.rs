@@ -28,10 +28,13 @@ pub fn run(config_path: &Path, args: InitArgs) -> anyhow::Result<()> {
     println!("키스토어를 생성했습니다: {}", ks_path.display());
     println!();
     println!("=== 복구코드(단 한 번만 표시됩니다 — 안전한 곳에 보관하세요) ===");
-    println!("    {}", &*recovery_code);
+    println!("    {}", *recovery_code);
     println!("===============================================================");
     println!();
-    println!("서명 공개키(fingerprint 대조용): {}", keystore.verifying_key_hex);
+    println!(
+        "서명 공개키(fingerprint 대조용): {}",
+        keystore.verifying_key_hex
+    );
     #[cfg(windows)]
     println!("DPAPI 무인 실행 경로가 등록되었습니다(실패 시 위 경고 참조).");
     #[cfg(not(windows))]

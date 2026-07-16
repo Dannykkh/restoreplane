@@ -49,7 +49,9 @@ impl StubSource {
             backup_id: Uuid::new_v4(),
             job: self.job.clone(),
             source_alias: self.alias.clone(),
-            kind: DumpPartKind::Database { name: self.alias.clone() },
+            kind: DumpPartKind::Database {
+                name: self.alias.clone(),
+            },
             pairs_with_globals_backup_id: None,
             dump_tool: "stub",
             dump_tool_path: std::path::PathBuf::from("stub"),
@@ -80,8 +82,15 @@ impl BackupSource for StubSource {
         let code = if success { Some(0) } else { Some(1) };
         let stderr_tail = self.stderr_tail.clone();
         let wait = Box::pin(async move {
-            Ok(DumpExit { code, success, stderr_tail })
+            Ok(DumpExit {
+                code,
+                success,
+                stderr_tail,
+            })
         });
-        Ok(DumpArtifact::Stream(DumpStream { reader: Box::new(reader), wait }))
+        Ok(DumpArtifact::Stream(DumpStream {
+            reader: Box::new(reader),
+            wait,
+        }))
     }
 }

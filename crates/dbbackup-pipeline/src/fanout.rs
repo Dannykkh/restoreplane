@@ -54,7 +54,11 @@ pub async fn fan_out(
                     }
                 }
             }
-            DestOutcome { dest_name: name, result: last, attempts }
+            DestOutcome {
+                dest_name: name,
+                result: last,
+                attempts,
+            }
         });
     }
 

@@ -4,7 +4,11 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Parser, Debug)]
-#[command(name = "dbbackup", version, about = "Ransomware-resilient DB backup orchestrator (Windows)")]
+#[command(
+    name = "dbbackup",
+    version,
+    about = "Ransomware-resilient DB backup orchestrator (Windows)"
+)]
 pub struct Cli {
     /// Config 파일 경로.
     #[arg(long, global = true, default_value = "dbbackup.toml")]

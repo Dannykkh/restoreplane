@@ -17,7 +17,10 @@ pub fn run(config_path: &Path, args: RestoreArgs) -> anyhow::Result<()> {
 
     let ks_path = keystore_util::keystore_path(config_path);
     if !Keystore::exists(&ks_path) {
-        anyhow::bail!("키스토어가 없습니다({}) — 먼저 `dbbackup init`.", ks_path.display());
+        anyhow::bail!(
+            "키스토어가 없습니다({}) — 먼저 `dbbackup init`.",
+            ks_path.display()
+        );
     }
     let keystore = Keystore::load(&ks_path)?;
     let vk = keystore.verifying_key()?;
@@ -35,7 +38,10 @@ pub fn run(config_path: &Path, args: RestoreArgs) -> anyhow::Result<()> {
     let verifier = PinnedKeyVerifier::new(vk);
 
     let key = find_manifest_key(&source, &args.backup)?.ok_or_else(|| {
-        anyhow::anyhow!("backup '{}'에 해당하는 서명 매니페스트를 목적지에서 찾을 수 없음", args.backup)
+        anyhow::anyhow!(
+            "backup '{}'에 해당하는 서명 매니페스트를 목적지에서 찾을 수 없음",
+            args.backup
+        )
     })?;
 
     // 출처 인증 게이트(C3): 미서명/위조는 DEK unwrap·복호 이전에 즉시 거부.
@@ -60,9 +66,10 @@ pub fn run(config_path: &Path, args: RestoreArgs) -> anyhow::Result<()> {
     let kek = keystore
         .unlock_kek(&cred)
         .map_err(|e| anyhow::anyhow!("KEK unlock 실패(자격증명 확인): {e}"))?;
-    let wrap_set = inputs.wrap_set.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("매니페스트에 WrapSet이 동봉되지 않음 — DEK 복구 불가")
-    })?;
+    let wrap_set = inputs
+        .wrap_set
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("매니페스트에 WrapSet이 동봉되지 않음 — DEK 복구 불가"))?;
     let dek = keystore
         .unwrap_dek(&kek, wrap_set)
         .map_err(|e| anyhow::anyhow!("DEK unwrap 실패: {e}"))?;

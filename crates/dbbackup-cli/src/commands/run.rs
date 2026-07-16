@@ -41,7 +41,7 @@ pub fn run(config_path: &Path, args: RunArgs) -> anyhow::Result<()> {
         .jobs
         .iter()
         .filter(|j| j.enabled)
-        .filter(|j| args.db.as_deref().map_or(true, |db| j.source == db))
+        .filter(|j| args.db.as_deref().is_none_or(|db| j.source == db))
         .cloned()
         .collect();
 
@@ -99,7 +99,9 @@ async fn execute_job(
         .databases
         .iter()
         .find(|d| d.alias == job.source)
-        .ok_or_else(|| anyhow::anyhow!("job '{}'의 소스 '{}'를 찾을 수 없음", job.name, job.source))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!("job '{}'의 소스 '{}'를 찾을 수 없음", job.name, job.source)
+        })?;
 
     // 2) 목적지 해석 — kind별로 Local/S3/SSH를 실제 배선(옵션 C 팬아웃).
     let mut dests: Vec<Arc<dyn Destination>> = Vec::new();
@@ -230,8 +232,12 @@ async fn execute_job(
         let commit = run_artifact(artifact, spool_path, dek, &cfg).await?;
 
         let manifest = Manifest::from_commit(part, db.engine, &commit, 1);
-        let (manifest_path, _signed) =
-            write_signed_manifest_with_wrapset(&commit.spool_path, manifest, wrap_set, signing_key)?;
+        let (manifest_path, _signed) = write_signed_manifest_with_wrapset(
+            &commit.spool_path,
+            manifest,
+            wrap_set,
+            signing_key,
+        )?;
 
         let outcomes = fan_out(&commit, dests.clone(), &cfg).await;
         let ok = outcomes.iter().filter(|o| o.result.is_ok()).count();
@@ -271,10 +277,13 @@ async fn build_s3_dest(
 ) -> anyhow::Result<Arc<dyn Destination>> {
     let name = dest.name.clone();
     let access_key_id = std::env::var("AWS_ACCESS_KEY_ID").map_err(|_| {
-        anyhow::anyhow!("s3 목적지 '{name}'는 AWS_ACCESS_KEY_ID 환경변수(append-only writer 신원)를 요구합니다")
+        anyhow::anyhow!(
+            "s3 목적지 '{name}'는 AWS_ACCESS_KEY_ID 환경변수(append-only writer 신원)를 요구합니다"
+        )
     })?;
-    let secret_access_key = std::env::var("AWS_SECRET_ACCESS_KEY")
-        .map_err(|_| anyhow::anyhow!("s3 목적지 '{name}'는 AWS_SECRET_ACCESS_KEY 환경변수를 요구합니다"))?;
+    let secret_access_key = std::env::var("AWS_SECRET_ACCESS_KEY").map_err(|_| {
+        anyhow::anyhow!("s3 목적지 '{name}'는 AWS_SECRET_ACCESS_KEY 환경변수를 요구합니다")
+    })?;
 
     let (object_lock_mode, retention_days) = match &dest.object_lock {
         Some(cfg) => (map_object_lock_mode(cfg.mode), cfg.retention_days),
@@ -287,7 +296,10 @@ async fn build_s3_dest(
 
     let s3cfg = S3Cfg {
         endpoint: dest.endpoint.clone().unwrap_or_default(),
-        region: dest.region.clone().unwrap_or_else(|| "us-east-1".to_string()),
+        region: dest
+            .region
+            .clone()
+            .unwrap_or_else(|| "us-east-1".to_string()),
         bucket: dest
             .bucket
             .clone()
@@ -339,10 +351,9 @@ fn build_ssh_dest(
         .user
         .clone()
         .ok_or_else(|| anyhow::anyhow!("ssh 목적지 '{name}'에 user가 없음"))?;
-    let fpr = dest
-        .host_key_fingerprint
-        .clone()
-        .ok_or_else(|| anyhow::anyhow!("ssh 목적지 '{name}'에 host_key_fingerprint가 없음(MITM 방어 필수)"))?;
+    let fpr = dest.host_key_fingerprint.clone().ok_or_else(|| {
+        anyhow::anyhow!("ssh 목적지 '{name}'에 host_key_fingerprint가 없음(MITM 방어 필수)")
+    })?;
     let remote_dir = dest
         .path
         .clone()
@@ -356,13 +367,20 @@ fn build_ssh_dest(
     let auth = if let Some(key_path) = &dest.private_key_path {
         let pem = std::fs::read_to_string(key_path)
             .map_err(|e| anyhow::anyhow!("ssh 개인키 읽기 실패({}): {e}", key_path.display()))?;
-        let passphrase = std::env::var("DBBACKUP_SSH_PASSPHRASE").ok().map(Zeroizing::new);
-        SshAuth::PublicKey { identity_pem: Zeroizing::new(pem), passphrase }
+        let passphrase = std::env::var("DBBACKUP_SSH_PASSPHRASE")
+            .ok()
+            .map(Zeroizing::new);
+        SshAuth::PublicKey {
+            identity_pem: Zeroizing::new(pem),
+            passphrase,
+        }
     } else {
         let password = std::env::var("DBBACKUP_SSH_PASSWORD").map_err(|_| {
             anyhow::anyhow!("ssh 목적지 '{name}'는 개인키(private_key_path) 또는 DBBACKUP_SSH_PASSWORD를 요구합니다")
         })?;
-        SshAuth::Password { password: Zeroizing::new(password) }
+        SshAuth::Password {
+            password: Zeroizing::new(password),
+        }
     };
 
     // append_only는 서버측 보장을 config로 표현할 수단이 아직 없어 false(None caps). 서버 append-only가

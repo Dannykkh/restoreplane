@@ -15,7 +15,7 @@ use dbbackup_pipeline::{
 };
 use dbbackup_secrets::{Credential, Dek, Keystore};
 use dbbackup_verify::{
-    load_trusted_inputs, ImagePolicy, RestoreTarget, Restorer, VerifyResult, Verifier,
+    load_trusted_inputs, ImagePolicy, RestoreTarget, Restorer, Verifier, VerifyResult,
 };
 use zeroize::Zeroizing;
 
@@ -76,10 +76,7 @@ async fn verify_l1(
     let source = LocalManifestSource::new(spool_dir);
     let verifier = PinnedKeyVerifier::new(keystore.verifying_key().unwrap());
     let inputs = load_trusted_inputs(&source, &verifier, key)?; // 서명 게이트
-    let wrap_set = inputs
-        .wrap_set
-        .as_ref()
-        .expect("매니페스트에 WrapSet 동봉");
+    let wrap_set = inputs.wrap_set.as_ref().expect("매니페스트에 WrapSet 동봉");
     let kek = keystore.unlock_kek(cred)?;
     let dek = keystore.unwrap_dek(&kek, wrap_set)?;
     let restorer = Restorer {
@@ -124,7 +121,10 @@ async fn wrong_password_fails_cleanly() {
 
     let bad = Credential::Password(Zeroizing::new("totally-wrong-password".to_string()));
     let res = verify_l1(&keystore, &spool_dir, &key, &bad).await;
-    assert!(res.is_err(), "잘못된 비밀번호는 DEK unwrap 실패로 Err(패닉 없음)");
+    assert!(
+        res.is_err(),
+        "잘못된 비밀번호는 DEK unwrap 실패로 Err(패닉 없음)"
+    );
 }
 
 // 3) 복구코드 경로가 동일 DEK를 복구해 L1을 통과시킨다.
@@ -142,7 +142,11 @@ async fn recovery_code_unwraps_same_dek() {
     let result = verify_l1(&keystore, &spool_dir, &key, &cred)
         .await
         .expect("복구코드 L1 검증 실행");
-    assert_eq!(result, VerifyResult::Pass, "복구코드 경로도 동일 DEK로 L1 통과");
+    assert_eq!(
+        result,
+        VerifyResult::Pass,
+        "복구코드 경로도 동일 DEK로 L1 통과"
+    );
 }
 
 // 4) 변조된 매니페스트 → 서명 게이트가 DEK unwrap·복호 이전에 거부.
@@ -166,7 +170,10 @@ async fn tampered_manifest_rejected_before_decrypt() {
     let source = LocalManifestSource::new(&spool_dir);
     let verifier = PinnedKeyVerifier::new(keystore.verifying_key().unwrap());
     let res = load_trusted_inputs(&source, &verifier, &key);
-    assert!(res.is_err(), "변조 매니페스트는 게이트에서 거부(복호 이전, C3)");
+    assert!(
+        res.is_err(),
+        "변조 매니페스트는 게이트에서 거부(복호 이전, C3)"
+    );
 }
 
 // 5) restore --decrypt-only가 원본 StubSource 바이트를 재현.

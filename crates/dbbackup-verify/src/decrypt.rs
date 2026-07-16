@@ -59,7 +59,9 @@ pub enum PlaintextDump {
 /// dump_format에 따라 평문 바이트를 적절한 PlaintextDump로 감싼다.
 pub fn materialize_dump(plaintext: Vec<u8>, dump_format: &str) -> anyhow::Result<PlaintextDump> {
     match dump_format {
-        "directory" => anyhow::bail!("directory 포맷 복원은 후속 슬라이스(컨테이너-내부 untar 경로)"),
+        "directory" => {
+            anyhow::bail!("directory 포맷 복원은 후속 슬라이스(컨테이너-내부 untar 경로)")
+        }
         _ => Ok(PlaintextDump::Bytes(plaintext)), // custom | plain
     }
 }

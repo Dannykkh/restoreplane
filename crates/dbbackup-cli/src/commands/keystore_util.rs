@@ -32,7 +32,10 @@ pub fn master_pw_from_env() -> Option<Zeroizing<String>> {
 }
 
 /// 마스터 비밀번호를 env → (대화형 프롬프트) 순으로 얻는다. prompt=false면 env만.
-pub fn resolve_master_pw(prompt_label: &str, allow_prompt: bool) -> anyhow::Result<Zeroizing<String>> {
+pub fn resolve_master_pw(
+    prompt_label: &str,
+    allow_prompt: bool,
+) -> anyhow::Result<Zeroizing<String>> {
     if let Some(pw) = master_pw_from_env() {
         return Ok(pw);
     }
@@ -56,7 +59,9 @@ pub fn resolve_unlock_credential(
             rpassword::prompt_password("복구코드: ")?
         } else {
             std::env::var("DBBACKUP_RECOVERY_CODE").map_err(|_| {
-                anyhow::anyhow!("복구코드가 필요합니다 — DBBACKUP_RECOVERY_CODE 환경변수로 제공하세요")
+                anyhow::anyhow!(
+                    "복구코드가 필요합니다 — DBBACKUP_RECOVERY_CODE 환경변수로 제공하세요"
+                )
             })?
         };
         return Ok(Credential::Recovery(Zeroizing::new(code)));

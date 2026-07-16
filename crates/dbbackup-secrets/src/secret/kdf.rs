@@ -36,7 +36,7 @@ pub(crate) fn derive_kek(
     Ok(kek)
 }
 
-/// >=128bit 엔트로피 복구코드. 20B(160bit) 랜덤 → Crockford 계열 base32 → 그룹 표시.
+/// 128bit 이상 엔트로피 복구코드. 20B(160bit) 랜덤 → Crockford 계열 base32 → 그룹 표시.
 /// init 시 1회만 표시하고 평문 저장하지 않는다(R4). 반환값은 Drop 시 소거된다.
 pub fn generate_recovery_code() -> Zeroizing<String> {
     let mut raw = [0u8; 20];

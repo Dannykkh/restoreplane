@@ -22,6 +22,8 @@ fn ddl_race_pattern_merged_into_cfg_flags_fail() {
 fn fatal_patterns_are_nonempty_and_cover_known_ddl_race_messages() {
     let p = MySqlSource::fatal_patterns();
     assert!(!p.is_empty());
-    assert!(p.iter().any(|s| s.contains("Lost connection to MySQL server during query")));
+    assert!(p
+        .iter()
+        .any(|s| s.contains("Lost connection to MySQL server during query")));
     assert!(p.iter().any(|s| s.contains("SHOW CREATE TABLE")));
 }

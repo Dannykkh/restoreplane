@@ -33,7 +33,12 @@ pub struct AnchorScanningReader<R> {
 
 impl<R> AnchorScanningReader<R> {
     pub fn new(inner: R, anchor: Arc<Mutex<BinlogAnchor>>) -> Self {
-        Self { inner, scan_buf: Vec::with_capacity(ANCHOR_SCAN_CAP), scan_done: false, anchor }
+        Self {
+            inner,
+            scan_buf: Vec::with_capacity(ANCHOR_SCAN_CAP),
+            scan_done: false,
+            anchor,
+        }
     }
 }
 
@@ -82,7 +87,10 @@ impl<R: AsyncRead + Unpin> AsyncRead for AnchorScanningReader<R> {
 /// None** — 스트림이 청크로 도착할 때 문장이 절단된 채(파일명/POS 누락) 조기 확정되는 것을 막는다.
 pub fn extract_stmt(text: &str, marker: &str) -> Option<String> {
     let start = text.find(marker)?;
-    let stmt_start = text[..start].rfind(['\n', '\r']).map(|p| p + 1).unwrap_or(0);
+    let stmt_start = text[..start]
+        .rfind(['\n', '\r'])
+        .map(|p| p + 1)
+        .unwrap_or(0);
     let end = start + text[start..].find(';')? + 1; // 종결자 필수(부분 문장 배제)
     Some(text[stmt_start..end].trim().to_string())
 }
@@ -93,7 +101,8 @@ mod tests {
 
     #[test]
     fn extract_stmt_grabs_full_statement() {
-        let text = "-- header\n-- CHANGE MASTER TO MASTER_LOG_FILE='bin.0001', MASTER_LOG_POS=154;\nrest";
+        let text =
+            "-- header\n-- CHANGE MASTER TO MASTER_LOG_FILE='bin.0001', MASTER_LOG_POS=154;\nrest";
         let s = extract_stmt(text, "CHANGE MASTER TO").unwrap();
         assert!(s.contains("MASTER_LOG_FILE='bin.0001'"));
         assert!(s.ends_with(';'));

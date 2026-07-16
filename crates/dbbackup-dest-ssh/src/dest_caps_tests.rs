@@ -17,7 +17,9 @@ mod tests {
             22,
             "backup",
             HostKeyPolicy::new("SHA256:pin", "bastion.example:22"),
-            SshAuth::Password { password: Zeroizing::new("pw".to_string()) },
+            SshAuth::Password {
+                password: Zeroizing::new("pw".to_string()),
+            },
             "/backups",
             append_only,
         )
@@ -44,9 +46,21 @@ mod tests {
         // R9/T12 핵심: Governance/Compliance 요구 Job은 SFTP만으로는 반드시 실패.
         let none = Arc::new(dest(false)) as Arc<dyn Destination>;
         let append = Arc::new(dest(true)) as Arc<dyn Destination>;
-        assert!(assert_job_immutability(RequiredImmutability::ObjectLock, &[none.clone()]).is_err());
-        assert!(assert_job_immutability(RequiredImmutability::ObjectLock, &[append.clone()]).is_err());
-        assert!(assert_job_immutability(RequiredImmutability::ComplianceOnly, &[append.clone()]).is_err());
+        assert!(assert_job_immutability(
+            RequiredImmutability::ObjectLock,
+            std::slice::from_ref(&none)
+        )
+        .is_err());
+        assert!(assert_job_immutability(
+            RequiredImmutability::ObjectLock,
+            std::slice::from_ref(&append)
+        )
+        .is_err());
+        assert!(assert_job_immutability(
+            RequiredImmutability::ComplianceOnly,
+            std::slice::from_ref(&append)
+        )
+        .is_err());
         // AppendOnlyOrLock은 append_only=true(ServerAppendOnly)일 때만 통과.
         assert!(assert_job_immutability(RequiredImmutability::AppendOnlyOrLock, &[none]).is_err());
         assert!(assert_job_immutability(RequiredImmutability::AppendOnlyOrLock, &[append]).is_ok());

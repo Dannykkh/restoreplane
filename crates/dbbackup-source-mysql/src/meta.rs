@@ -48,7 +48,9 @@ impl MysqlCliMetaConn {
             .stderr(Stdio::piped())
             .output()
             .await
-            .map_err(|e| anyhow::anyhow!("mysql 클라이언트 실행 실패({}): {e}", self.client.display()))?;
+            .map_err(|e| {
+                anyhow::anyhow!("mysql 클라이언트 실행 실패({}): {e}", self.client.display())
+            })?;
         if !out.status.success() {
             anyhow::bail!(
                 "mysql 메타 조회 실패(exit={:?}): {}",
@@ -79,7 +81,11 @@ impl MySqlMetaConn for MysqlCliMetaConn {
             .filter(|l| !l.trim().is_empty())
             .filter_map(|l| {
                 let mut it = l.split('\t');
-                Some((it.next()?.to_string(), it.next()?.to_string(), it.next()?.to_string()))
+                Some((
+                    it.next()?.to_string(),
+                    it.next()?.to_string(),
+                    it.next()?.to_string(),
+                ))
             })
             .collect())
     }

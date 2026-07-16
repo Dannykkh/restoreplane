@@ -7,7 +7,9 @@ use dbbackup_pipeline::{
     run_artifact, write_signed_manifest, BackupSource, Manifest, PipelineCfg, StubSource,
 };
 use dbbackup_secrets::{generate_signing_keypair, Dek};
-use dbbackup_verify::{load_trusted_inputs, ImagePolicy, RestoreInputs, Restorer, VerifyLevel, Verifier};
+use dbbackup_verify::{
+    load_trusted_inputs, ImagePolicy, RestoreInputs, Restorer, Verifier, VerifyLevel,
+};
 
 async fn make_backup(spool_dir: &std::path::Path) -> (RestoreInputs, Dek, LocalManifestSource) {
     let payload = (0..4096u32).map(|i| i as u8).collect::<Vec<u8>>();
@@ -59,8 +61,17 @@ async fn l3_sandbox_restore() {
     inputs.server_version = Some("PostgreSQL 16.3".to_string());
     let policy = ImagePolicy::default().with("postgresql", 16, "postgres:16");
     let verifier = Verifier {
-        restorer: Restorer { source: &source, dek, docker_bin: "docker".into(), image_policy: policy },
+        restorer: Restorer {
+            source: &source,
+            dek,
+            docker_bin: "docker".into(),
+            image_policy: policy,
+        },
     };
     let out = verifier.verify(&inputs, VerifyLevel::L3).await.unwrap();
-    println!("L3: {} target={:?}", out.label(), out.restore_target_version);
+    println!(
+        "L3: {} target={:?}",
+        out.label(),
+        out.restore_target_version
+    );
 }

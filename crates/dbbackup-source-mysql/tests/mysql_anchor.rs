@@ -24,9 +24,21 @@ async fn t12_captures_coordinates_and_passes_bytes_unchanged() {
     assert_eq!(out, input);
 
     let a = anchor.lock().unwrap();
-    assert!(a.binlog_coordinates.as_deref().unwrap().contains("mysql-bin.000042"));
-    assert!(a.binlog_coordinates.as_deref().unwrap().contains("MASTER_LOG_POS=1234"));
-    assert!(a.gtid_set.as_deref().unwrap().contains("3E11FA47-71CA-11E1-9E33-C80AA9429562"));
+    assert!(a
+        .binlog_coordinates
+        .as_deref()
+        .unwrap()
+        .contains("mysql-bin.000042"));
+    assert!(a
+        .binlog_coordinates
+        .as_deref()
+        .unwrap()
+        .contains("MASTER_LOG_POS=1234"));
+    assert!(a
+        .gtid_set
+        .as_deref()
+        .unwrap()
+        .contains("3E11FA47-71CA-11E1-9E33-C80AA9429562"));
 }
 
 #[tokio::test]
@@ -45,5 +57,8 @@ async fn t13_marker_beyond_scan_cap_is_not_captured() {
     // 바이트는 온전히 통과하되, 상한 밖 좌표는 잡히지 않는다(의도된 상한 동작).
     assert_eq!(out.len(), input.len());
     let a = anchor.lock().unwrap();
-    assert!(a.binlog_coordinates.is_none(), "상한 밖 좌표가 잡혔다 — 상한 로직 회귀");
+    assert!(
+        a.binlog_coordinates.is_none(),
+        "상한 밖 좌표가 잡혔다 — 상한 로직 회귀"
+    );
 }

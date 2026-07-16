@@ -22,7 +22,10 @@ use version::{probe_client_version, BundledToolMatrix, ToolVersion};
 #[derive(thiserror::Error, Debug)]
 pub enum PgSourceError {
     #[error("DB 접속 실패({database}): {source}")]
-    ConnectionFailed { database: String, source: tokio_postgres::Error },
+    ConnectionFailed {
+        database: String,
+        source: tokio_postgres::Error,
+    },
     #[error("버전 조회 쿼리 실패: {0}")]
     VersionQueryFailed(#[source] tokio_postgres::Error),
     #[error("버전 문자열 파싱 실패: {0:?}")]
@@ -31,10 +34,18 @@ pub enum PgSourceError {
     CatalogQueryFailed(#[source] tokio_postgres::Error),
     #[error("서버 메이저 버전 {server_major}을(를) 지원하는 번들 클라이언트가 없음(PG13~17 확인)")]
     NoBundledClientForServer { server_major: u32 },
-    #[error("클라이언트 메이저({client_major}) < 서버 메이저({server_major}) — 하드 실패(DT §1.6)")]
-    ClientTooOld { client_major: u32, server_major: u32 },
+    #[error(
+        "클라이언트 메이저({client_major}) < 서버 메이저({server_major}) — 하드 실패(DT §1.6)"
+    )]
+    ClientTooOld {
+        client_major: u32,
+        server_major: u32,
+    },
     #[error("덤프 도구 실행 실패({path}): {source}")]
-    DumpToolSpawnFailed { path: std::path::PathBuf, source: std::io::Error },
+    DumpToolSpawnFailed {
+        path: std::path::PathBuf,
+        source: std::io::Error,
+    },
 }
 
 pub struct PgConnCfg {
@@ -70,13 +81,12 @@ impl PostgresSource {
             .password(self.conn.password.as_str())
             .dbname(database)
             .application_name("dbbackup-probe");
-        let (client, connection) = cfg
-            .connect(tokio_postgres::NoTls)
-            .await
-            .map_err(|e| PgSourceError::ConnectionFailed {
+        let (client, connection) = cfg.connect(tokio_postgres::NoTls).await.map_err(|e| {
+            PgSourceError::ConnectionFailed {
                 database: database.to_string(),
                 source: e,
-            })?;
+            }
+        })?;
         tokio::spawn(async move {
             if let Err(e) = connection.await {
                 tracing::warn!(error = %e, "postgres probe connection terminated");
@@ -88,7 +98,10 @@ impl PostgresSource {
 
 async fn probe_server_version(client: &Client) -> Result<ToolVersion, PgSourceError> {
     let row = client
-        .query_one("SELECT version(), current_setting('server_version_num')", &[])
+        .query_one(
+            "SELECT version(), current_setting('server_version_num')",
+            &[],
+        )
         .await
         .map_err(PgSourceError::VersionQueryFailed)?;
     let raw: String = row.get(0);
@@ -96,7 +109,10 @@ async fn probe_server_version(client: &Client) -> Result<ToolVersion, PgSourceEr
     let num: u32 = num_str
         .parse()
         .map_err(|_| PgSourceError::VersionParseFailed(num_str.clone()))?;
-    Ok(ToolVersion { major: num / 10000, raw })
+    Ok(ToolVersion {
+        major: num / 10000,
+        raw,
+    })
 }
 
 async fn list_live_databases(client: &Client) -> Result<Vec<String>, PgSourceError> {
@@ -113,12 +129,18 @@ async fn list_live_databases(client: &Client) -> Result<Vec<String>, PgSourceErr
 /// 중요: pg_extension은 DB별 카탈로그 — 반드시 대상 DB 커넥션에서 조회한다(R6 gotcha).
 async fn capture_extensions(db_client: &Client) -> Result<Vec<ExtensionInfo>, PgSourceError> {
     let rows = db_client
-        .query("SELECT extname, extversion FROM pg_extension ORDER BY extname", &[])
+        .query(
+            "SELECT extname, extversion FROM pg_extension ORDER BY extname",
+            &[],
+        )
         .await
         .map_err(PgSourceError::CatalogQueryFailed)?;
     Ok(rows
         .into_iter()
-        .map(|r| ExtensionInfo { name: r.get(0), version: r.get(1) })
+        .map(|r| ExtensionInfo {
+            name: r.get(0),
+            version: r.get(1),
+        })
         .collect())
 }
 
@@ -151,7 +173,11 @@ impl BackupSource for PostgresSource {
             }
             .into());
         }
-        let probe = ClusterVersionProbe { server, client, detected_at: Utc::now() };
+        let probe = ClusterVersionProbe {
+            server,
+            client,
+            detected_at: Utc::now(),
+        };
         tracing::info!(server = %probe.server.raw, client = %probe.client.raw, "postgres version probe ok");
 
         // R7: 실제 DB 목록 vs 등록 목록 드리프트 감지.
@@ -219,7 +245,11 @@ impl BackupSource for PostgresSource {
             }
         }
 
-        Ok(DumpPlan { globals_part: Some(globals_part), db_parts, warnings })
+        Ok(DumpPlan {
+            globals_part: Some(globals_part),
+            db_parts,
+            warnings,
+        })
     }
 
     fn spawn(&self, part: &DumpPlanPart) -> anyhow::Result<DumpArtifact> {

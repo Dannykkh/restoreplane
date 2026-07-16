@@ -37,8 +37,20 @@ fn parses_test_connection() {
 #[test]
 fn parses_add_db() {
     let c = parse(&[
-        "dbbackup", "add-db", "--alias", "app", "--engine", "postgresql", "--host", "10.0.0.5",
-        "--port", "5432", "--dbname", "app", "--user", "backup_reader",
+        "dbbackup",
+        "add-db",
+        "--alias",
+        "app",
+        "--engine",
+        "postgresql",
+        "--host",
+        "10.0.0.5",
+        "--port",
+        "5432",
+        "--dbname",
+        "app",
+        "--user",
+        "backup_reader",
     ]);
     match c.command {
         Command::AddDb(a) => {
@@ -54,7 +66,14 @@ fn parses_add_db() {
 
 #[test]
 fn parses_add_dest() {
-    let c = parse(&["dbbackup", "add-dest", "--name", "s3-primary", "--kind", "s3"]);
+    let c = parse(&[
+        "dbbackup",
+        "add-dest",
+        "--name",
+        "s3-primary",
+        "--kind",
+        "s3",
+    ]);
     match c.command {
         Command::AddDest(a) => {
             assert_eq!(a.name, "s3-primary");
@@ -96,8 +115,14 @@ fn verify_level_out_of_range_is_rejected() {
 #[test]
 fn parses_restore() {
     let c = parse(&[
-        "dbbackup", "restore", "--backup", "b1", "--from-destination", "s3-primary",
-        "--decrypt-only", "--with-recovery-code",
+        "dbbackup",
+        "restore",
+        "--backup",
+        "b1",
+        "--from-destination",
+        "s3-primary",
+        "--decrypt-only",
+        "--with-recovery-code",
     ]);
     match c.command {
         Command::Restore(a) => {
@@ -163,7 +188,13 @@ fn parses_prune_with_defaults() {
 
 #[test]
 fn parses_schedule() {
-    let c = parse(&["dbbackup", "schedule", "--job", "prod-pg-nightly", "--remove"]);
+    let c = parse(&[
+        "dbbackup",
+        "schedule",
+        "--job",
+        "prod-pg-nightly",
+        "--remove",
+    ]);
     match c.command {
         Command::Schedule(a) => {
             assert_eq!(a.job, "prod-pg-nightly");
@@ -175,7 +206,12 @@ fn parses_schedule() {
 
 #[test]
 fn global_config_flag_accepts_windows_path_with_spaces() {
-    let c = parse(&["dbbackup", "--config", r"D:\My Backups\dbbackup.toml", "doctor"]);
+    let c = parse(&[
+        "dbbackup",
+        "--config",
+        r"D:\My Backups\dbbackup.toml",
+        "doctor",
+    ]);
     assert_eq!(c.config, PathBuf::from(r"D:\My Backups\dbbackup.toml"));
     assert_eq!(c.verbose, 0);
 }

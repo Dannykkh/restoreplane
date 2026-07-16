@@ -28,7 +28,11 @@ pub struct HashingWriter<W: Write> {
 
 impl<W: Write> HashingWriter<W> {
     pub fn new(inner: W) -> Self {
-        Self { inner, hasher: blake3::Hasher::new(), bytes: 0 }
+        Self {
+            inner,
+            hasher: blake3::Hasher::new(),
+            bytes: 0,
+        }
     }
     /// 해시/카운트를 뽑고 내부 라이터를 반환(finish 순서에서 zstd로 위임).
     pub fn finalize(self) -> ([u8; 32], u64, W) {
@@ -72,12 +76,13 @@ impl<W: Write> StreamEncryptWriter<W> {
     fn flush_full_chunks(&mut self) -> std::io::Result<()> {
         while self.buf.len() >= STREAM_CHUNK {
             let chunk: Vec<u8> = self.buf.drain(..STREAM_CHUNK).collect();
-            let enc = self.enc.as_mut().ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::Other, "STREAM encryptor already finished")
-            })?;
+            let enc = self
+                .enc
+                .as_mut()
+                .ok_or_else(|| std::io::Error::other("STREAM encryptor already finished"))?;
             let ct = enc
                 .encrypt_next(chunk.as_slice())
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("encrypt_next: {e}")))?;
+                .map_err(|e| std::io::Error::other(format!("encrypt_next: {e}")))?;
             self.inner.write_all(&ct)?;
         }
         Ok(())
@@ -87,13 +92,14 @@ impl<W: Write> StreamEncryptWriter<W> {
     /// drop만으로는 마지막 태그가 기록되지 않으므로 반드시 호출해야 한다(P0-2).
     pub fn finish(mut self) -> std::io::Result<W> {
         self.flush_full_chunks()?;
-        let enc = self.enc.take().ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::Other, "STREAM encryptor already finished")
-        })?;
+        let enc = self
+            .enc
+            .take()
+            .ok_or_else(|| std::io::Error::other("STREAM encryptor already finished"))?;
         let last = std::mem::take(&mut self.buf);
         let ct = enc
             .encrypt_last(last.as_slice())
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("encrypt_last: {e}")))?;
+            .map_err(|e| std::io::Error::other(format!("encrypt_last: {e}")))?;
         self.inner.write_all(&ct)?;
         self.inner.flush()?;
         Ok(self.inner)
@@ -133,7 +139,10 @@ impl Default for FinishGuard {
 }
 impl Drop for FinishGuard {
     fn drop(&mut self) {
-        debug_assert!(self.finished, "pipeline dropped without finish() — 절단 백업 위험(P0-2)");
+        debug_assert!(
+            self.finished,
+            "pipeline dropped without finish() — 절단 백업 위험(P0-2)"
+        );
     }
 }
 
@@ -158,7 +167,10 @@ impl EncryptChain {
         let spool: Spool = BufWriter::new(file);
         let enc_w: EncW = StreamEncryptWriter::new(spool, dek);
         let zstd_w: ZstdW = zstd::stream::write::Encoder::new(enc_w, zstd_level)?;
-        Ok(Self { tee: Some(HashingWriter::new(zstd_w)), guard: FinishGuard::new() })
+        Ok(Self {
+            tee: Some(HashingWriter::new(zstd_w)),
+            guard: FinishGuard::new(),
+        })
     }
 
     /// 복사(pull) / tar(push) 양쪽이 여기로 쓴다.
@@ -171,7 +183,7 @@ impl EncryptChain {
     pub fn commit(mut self) -> anyhow::Result<([u8; 32], u64, u64)> {
         let tee = self.tee.take().expect("chain committed twice");
         let (hash, plain_bytes, zstd_w) = tee.finalize(); // 평문 해시 확정
-        // ---- inner→outer, 명시적 finish (P0-2) ----
+                                                          // ---- inner→outer, 명시적 finish (P0-2) ----
         let enc_w = zstd_w.finish()?; // (1) zstd 프레임 마감
         let spool = enc_w.finish()?; // (2) STREAM 마지막 태그 기록
         let mut file = spool

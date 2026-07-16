@@ -4,7 +4,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use dbbackup_core::{ChecksumAlgo, DestKind, Engine, ImmutabilityCapability, NotifyChannel, ObjectLockMode};
+use dbbackup_core::{
+    ChecksumAlgo, DestKind, Engine, ImmutabilityCapability, NotifyChannel, ObjectLockMode,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::ConfigError;
@@ -37,7 +39,9 @@ impl Config {
     /// 새 config를 위한 최소 골격(`init`이 채워 나감).
     pub fn empty() -> Self {
         Config {
-            meta: Meta { schema_version: CURRENT_SCHEMA_VERSION },
+            meta: Meta {
+                schema_version: CURRENT_SCHEMA_VERSION,
+            },
             databases: Vec::new(),
             tunnels: Vec::new(),
             destinations: Vec::new(),
@@ -48,7 +52,8 @@ impl Config {
     }
 
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
-        let raw = std::fs::read_to_string(path).map_err(|e| ConfigError::Io(path.to_path_buf(), e))?;
+        let raw =
+            std::fs::read_to_string(path).map_err(|e| ConfigError::Io(path.to_path_buf(), e))?;
         // Windows 메모장 등이 붙이는 UTF-8 BOM은 toml 파서가 처리하지 못한다 — 방어적 스트립.
         let raw = raw.strip_prefix('\u{FEFF}').unwrap_or(&raw);
         crate::migrate::load_and_migrate(raw)
@@ -173,7 +178,10 @@ pub struct VerifyPolicy {
 
 impl Default for VerifyPolicy {
     fn default() -> Self {
-        VerifyPolicy { level: default_verify_level(), schedule: default_verify_schedule() }
+        VerifyPolicy {
+            level: default_verify_level(),
+            schedule: default_verify_schedule(),
+        }
     }
 }
 
@@ -213,7 +221,10 @@ pub struct RetryPolicy {
 
 impl Default for RetryPolicy {
     fn default() -> Self {
-        RetryPolicy { attempts: default_retry_attempts(), backoff_secs: default_backoff_secs() }
+        RetryPolicy {
+            attempts: default_retry_attempts(),
+            backoff_secs: default_backoff_secs(),
+        }
     }
 }
 
@@ -226,11 +237,27 @@ pub struct Notify {
     pub email_to: Option<String>,
 }
 
-fn default_true() -> bool { true }
-fn default_ssh_port() -> u16 { 22 }
-fn default_verify_level() -> u8 { 2 }
-fn default_verify_schedule() -> String { "every_run".to_string() }
-fn default_max_parallel_dumps() -> u32 { 1 }
-fn default_min_free_disk_mb() -> u64 { 2048 }
-fn default_retry_attempts() -> u32 { 3 }
-fn default_backoff_secs() -> u64 { 30 }
+fn default_true() -> bool {
+    true
+}
+fn default_ssh_port() -> u16 {
+    22
+}
+fn default_verify_level() -> u8 {
+    2
+}
+fn default_verify_schedule() -> String {
+    "every_run".to_string()
+}
+fn default_max_parallel_dumps() -> u32 {
+    1
+}
+fn default_min_free_disk_mb() -> u64 {
+    2048
+}
+fn default_retry_attempts() -> u32 {
+    3
+}
+fn default_backoff_secs() -> u64 {
+    30
+}

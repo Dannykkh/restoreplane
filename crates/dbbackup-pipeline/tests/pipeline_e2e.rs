@@ -53,13 +53,19 @@ async fn full_pipeline_stub_to_localdest_roundtrips_and_manifest_verifies() {
     let (sk, vk) = generate_signing_keypair();
     let manifest = Manifest::from_commit(&part, dbbackup_core::Engine::Postgresql, &commit, 1);
     let (manifest_path, signed) = write_signed_manifest(&commit.spool_path, manifest, &sk).unwrap();
-    assert!(manifest_path.exists(), "매니페스트 JSON이 스풀 옆에 있어야 함");
+    assert!(
+        manifest_path.exists(),
+        "매니페스트 JSON이 스풀 옆에 있어야 함"
+    );
     signed.verify(&vk).expect("서명 검증 통과");
 
     // 변조 감지: 매니페스트 필드를 바꾸면 검증 실패.
     let mut tampered = signed.clone();
     tampered.manifest.plaintext_bytes += 1;
-    assert!(tampered.verify(&vk).is_err(), "변조된 매니페스트는 검증 실패해야 함");
+    assert!(
+        tampered.verify(&vk).is_err(),
+        "변조된 매니페스트는 검증 실패해야 함"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -80,7 +86,10 @@ async fn commit_protocol_nonzero_exit_discards_spool() {
     let res = run_artifact(artifact, spool_path.clone(), dek, &cfg).await;
 
     assert!(res.is_err(), "실패 소스는 커밋되면 안 됨");
-    assert!(!spool_path.exists(), "실패 시 스풀 파일이 남으면 안 됨(커밋 미확정)");
+    assert!(
+        !spool_path.exists(),
+        "실패 시 스풀 파일이 남으면 안 됨(커밋 미확정)"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -97,7 +106,10 @@ async fn fanout_partial_success_one_unwritable_dest() {
 
     let dek = Dek::generate();
     let spool_path = spool_dir.join("fan.spool");
-    let cfg = PipelineCfg { upload_retries: 1, ..PipelineCfg::default() };
+    let cfg = PipelineCfg {
+        upload_retries: 1,
+        ..PipelineCfg::default()
+    };
     let commit = run_artifact(artifact, spool_path, dek, &cfg).await.unwrap();
 
     // 정상 목적지.
@@ -127,5 +139,8 @@ async fn fanout_partial_success_one_unwritable_dest() {
     let landed = ok_dir.join("fan.spool");
     assert!(landed.exists(), "성공 목적지에 최종 객체가 있어야 함");
     // 부분 파일(.part)은 남지 않아야 함.
-    assert!(!ok_dir.join("fan.part").exists(), "커밋 후 .part 임시파일이 남으면 안 됨");
+    assert!(
+        !ok_dir.join("fan.part").exists(),
+        "커밋 후 .part 임시파일이 남으면 안 됨"
+    );
 }

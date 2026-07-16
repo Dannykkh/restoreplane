@@ -27,9 +27,9 @@ pub fn parse_major(server_version: &str) -> anyhow::Result<u32> {
         .skip_while(|c| !c.is_ascii_digit())
         .take_while(|c| c.is_ascii_digit())
         .collect();
-    digits
-        .parse::<u32>()
-        .map_err(|_| anyhow::anyhow!("server_version에서 메이저 버전을 파싱할 수 없음: {server_version}"))
+    digits.parse::<u32>().map_err(|_| {
+        anyhow::anyhow!("server_version에서 메이저 버전을 파싱할 수 없음: {server_version}")
+    })
 }
 
 /// 엔진+메이저 → Docker 이미지 태그(config에서 매핑).
@@ -39,10 +39,13 @@ pub struct ImagePolicy {
 
 impl ImagePolicy {
     pub fn new() -> Self {
-        Self { map: std::collections::BTreeMap::new() }
+        Self {
+            map: std::collections::BTreeMap::new(),
+        }
     }
     pub fn with(mut self, engine: &str, major: u32, image: &str) -> Self {
-        self.map.insert((engine.to_string(), major), image.to_string());
+        self.map
+            .insert((engine.to_string(), major), image.to_string());
         self
     }
 }
@@ -75,12 +78,16 @@ impl SandboxSpec {
         })?;
         let major = parse_major(ver)?;
         let eng = engine_str(&engine).to_string();
-        let image = policy.map.get(&(eng.clone(), major)).cloned().ok_or_else(|| {
-            anyhow::anyhow!(
-                "server_version({ver} major={major})에 매칭되는 Docker 이미지가 없음 — \
+        let image = policy
+            .map
+            .get(&(eng.clone(), major))
+            .cloned()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "server_version({ver} major={major})에 매칭되는 Docker 이미지가 없음 — \
                  버전 갭은 restore_target_version에 기록됨"
-            )
-        })?;
+                )
+            })?;
         Ok(Self {
             image,
             engine: eng,
@@ -151,7 +158,11 @@ impl Sandbox {
         let status = cmd.status().await?;
         anyhow::ensure!(status.success(), "docker run 실패");
 
-        let sb = Self { docker: docker.to_path_buf(), spec, removed: false };
+        let sb = Self {
+            docker: docker.to_path_buf(),
+            spec,
+            removed: false,
+        };
         sb.wait_ready().await?;
         sb.prepare_restricted_role().await?;
         Ok(sb)
@@ -163,7 +174,11 @@ impl Sandbox {
             _ => ("mysqladmin", vec!["ping", "--silent"]),
         };
         for _ in 0..60 {
-            let ok = self.exec(bin, &args).await.map(|o| o.success).unwrap_or(false);
+            let ok = self
+                .exec(bin, &args)
+                .await
+                .map(|o| o.success)
+                .unwrap_or(false);
             if ok {
                 return Ok(());
             }
@@ -179,9 +194,12 @@ impl Sandbox {
                 "CREATE ROLE {r} LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB;",
                 r = self.spec.restricted_role
             );
-            self.exec("psql", &["-U", "postgres", "-d", &self.spec.db_name, "-c", &sql])
-                .await?
-                .ok_or_ctx("restricted role 생성 실패")?;
+            self.exec(
+                "psql",
+                &["-U", "postgres", "-d", &self.spec.db_name, "-c", &sql],
+            )
+            .await?
+            .ok_or_ctx("restricted role 생성 실패")?;
         }
         Ok(())
     }
@@ -192,7 +210,15 @@ impl Sandbox {
         scan_dangerous_sql(&buf)?;
         self.exec_with_stdin(
             "psql",
-            &["-v", "ON_ERROR_STOP=1", "--no-psqlrc", "-U", "postgres", "-d", &self.spec.db_name],
+            &[
+                "-v",
+                "ON_ERROR_STOP=1",
+                "--no-psqlrc",
+                "-U",
+                "postgres",
+                "-d",
+                &self.spec.db_name,
+            ],
             &buf,
         )
         .await?
@@ -200,7 +226,11 @@ impl Sandbox {
     }
 
     /// DB 덤프 복원. custom은 pg_restore(비대화, 백슬래시 메타 미해석) + --no-privileges + 비슈퍼유저.
-    pub async fn restore_db_dump(&self, plain: PlaintextDump, dump_format: &str) -> anyhow::Result<()> {
+    pub async fn restore_db_dump(
+        &self,
+        plain: PlaintextDump,
+        dump_format: &str,
+    ) -> anyhow::Result<()> {
         match self.spec.engine.as_str() {
             "postgresql" => match dump_format {
                 "custom" => {
@@ -240,8 +270,13 @@ impl Sandbox {
             "mysql" | "mariadb" => {
                 let bytes = read_stream(plain)?;
                 scan_dangerous_sql(&bytes)?;
-                let args =
-                    ["--local-infile=0", "-u", "root", "-pverify_only_ephemeral", &self.spec.db_name];
+                let args = [
+                    "--local-infile=0",
+                    "-u",
+                    "root",
+                    "-pverify_only_ephemeral",
+                    &self.spec.db_name,
+                ];
                 self.exec_with_stdin("mysql", &args, &bytes)
                     .await?
                     .ok_or_ctx("mysql 복원 실패")
@@ -262,11 +297,21 @@ impl Sandbox {
     /// 복원본 --schema-only 덤프(정규화 전 원본). asserts.rs가 정규화+해시한다.
     pub async fn dump_schema_only(&self) -> anyhow::Result<String> {
         let out = if self.spec.engine == "postgresql" {
-            self.exec("pg_dump", &["-s", "-U", "postgres", "-d", &self.spec.db_name]).await?
+            self.exec(
+                "pg_dump",
+                &["-s", "-U", "postgres", "-d", &self.spec.db_name],
+            )
+            .await?
         } else {
             self.exec(
                 "mysqldump",
-                &["--no-data", "-u", "root", "-pverify_only_ephemeral", &self.spec.db_name],
+                &[
+                    "--no-data",
+                    "-u",
+                    "root",
+                    "-pverify_only_ephemeral",
+                    &self.spec.db_name,
+                ],
             )
             .await?
         };
@@ -274,7 +319,9 @@ impl Sandbox {
     }
 
     /// 복원본 각 테이블의 실제 row count(정보 스키마 순회). 슬라이스 1은 PG만 간이 구현.
-    pub async fn count_rows_per_table(&self) -> anyhow::Result<std::collections::BTreeMap<String, u64>> {
+    pub async fn count_rows_per_table(
+        &self,
+    ) -> anyhow::Result<std::collections::BTreeMap<String, u64>> {
         let mut out = std::collections::BTreeMap::new();
         if self.spec.engine == "postgresql" {
             let tables = self
@@ -283,7 +330,9 @@ impl Sandbox {
                 )
                 .await?;
             for t in tables.trim().split(',').filter(|s| !s.is_empty()) {
-                let c = self.query_scalar(&format!("SELECT count(*) FROM \"{t}\"")).await?;
+                let c = self
+                    .query_scalar(&format!("SELECT count(*) FROM \"{t}\""))
+                    .await?;
                 out.insert(t.to_string(), c.trim().parse::<u64>().unwrap_or(0));
             }
         }
@@ -292,12 +341,24 @@ impl Sandbox {
 
     async fn exec(&self, bin: &str, args: &[&str]) -> anyhow::Result<ExecOut> {
         let mut c = Command::new(&self.docker);
-        c.arg("exec").arg(&self.spec.container_name).arg(bin).args(args);
+        c.arg("exec")
+            .arg(&self.spec.container_name)
+            .arg(bin)
+            .args(args);
         let out = c.output().await?;
-        Ok(ExecOut { success: out.status.success(), stdout: out.stdout, stderr: out.stderr })
+        Ok(ExecOut {
+            success: out.status.success(),
+            stdout: out.stdout,
+            stderr: out.stderr,
+        })
     }
 
-    async fn exec_with_stdin(&self, bin: &str, args: &[&str], stdin: &[u8]) -> anyhow::Result<ExecOut> {
+    async fn exec_with_stdin(
+        &self,
+        bin: &str,
+        args: &[&str],
+        stdin: &[u8],
+    ) -> anyhow::Result<ExecOut> {
         let mut c = Command::new(&self.docker);
         c.arg("exec")
             .arg("-i")
@@ -313,16 +374,41 @@ impl Sandbox {
             // stdin drop으로 EOF 전달.
         }
         let out = child.wait_with_output().await?;
-        Ok(ExecOut { success: out.status.success(), stdout: out.stdout, stderr: out.stderr })
+        Ok(ExecOut {
+            success: out.status.success(),
+            stdout: out.stdout,
+            stderr: out.stderr,
+        })
     }
 
     async fn query_scalar(&self, sql: &str) -> anyhow::Result<String> {
         let out = if self.spec.engine == "postgresql" {
-            self.exec("psql", &["-tAX", "-U", "postgres", "-d", &self.spec.db_name, "-c", sql]).await?
+            self.exec(
+                "psql",
+                &[
+                    "-tAX",
+                    "-U",
+                    "postgres",
+                    "-d",
+                    &self.spec.db_name,
+                    "-c",
+                    sql,
+                ],
+            )
+            .await?
         } else {
             self.exec(
                 "mysql",
-                &["-N", "-B", "-u", "root", "-pverify_only_ephemeral", "-e", sql, &self.spec.db_name],
+                &[
+                    "-N",
+                    "-B",
+                    "-u",
+                    "root",
+                    "-pverify_only_ephemeral",
+                    "-e",
+                    sql,
+                    &self.spec.db_name,
+                ],
             )
             .await?
         };

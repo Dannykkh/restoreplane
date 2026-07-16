@@ -45,7 +45,9 @@ pub struct SpoolCommit {
 /// 치명 stderr 패턴 검사(exit=0이어도 이 패턴이 보이면 FAIL, R2/T4).
 pub fn is_fatal_stderr(stderr_tail: &str, fatal_patterns: &[String]) -> bool {
     let hay = stderr_tail.to_ascii_lowercase();
-    fatal_patterns.iter().any(|p| hay.contains(&p.to_ascii_lowercase()))
+    fatal_patterns
+        .iter()
+        .any(|p| hay.contains(&p.to_ascii_lowercase()))
 }
 
 /// M2: 평문 TempDir 안전 삭제(tar가 체인에 다 들어간 뒤). v1은 표준 삭제.

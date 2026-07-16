@@ -28,7 +28,9 @@ async fn write_task_xml_file(path: &Path, xml_utf8: &str) -> Result<(), Schedule
     for unit in xml_utf8.encode_utf16() {
         bytes.extend_from_slice(&unit.to_le_bytes());
     }
-    tokio::fs::write(path, bytes).await.map_err(SchedulerError::Io)
+    tokio::fs::write(path, bytes)
+        .await
+        .map_err(SchedulerError::Io)
 }
 
 /// 태스크를 등록(또는 갱신)한다. FR2: LogonType=S4U 기본 경로는 /RP(비밀번호)를 절대 넘기지 않는다 —

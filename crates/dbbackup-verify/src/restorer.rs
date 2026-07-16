@@ -75,7 +75,10 @@ impl<'a> Restorer<'a> {
         sandbox.restore_db_dump(db_plain, &m.dump_format).await?;
 
         let target_version = sandbox.server_version().await?;
-        Ok(RestoreOutcome { restore_target_version: target_version, sandbox: Some(sandbox) })
+        Ok(RestoreOutcome {
+            restore_target_version: target_version,
+            sandbox: Some(sandbox),
+        })
     }
 
     async fn decrypt_only(

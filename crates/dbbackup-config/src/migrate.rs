@@ -1,5 +1,8 @@
 // crates/dbbackup-config/src/migrate.rs
-use crate::{schema::{Config, CURRENT_SCHEMA_VERSION}, ConfigError};
+use crate::{
+    schema::{Config, CURRENT_SCHEMA_VERSION},
+    ConfigError,
+};
 
 /// v_n -> v_(n+1) 변환. 항상 raw toml::Value 레벨에서 동작해 Config 구조체가
 /// 최신 스키마만 알면 되게 한다(deny_unknown_fields와 공존 가능).

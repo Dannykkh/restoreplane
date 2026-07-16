@@ -6,7 +6,7 @@ use std::path::Path;
 
 use dbbackup_catalog::{LocalManifestSource, ManifestSource, PinnedKeyVerifier};
 use dbbackup_secrets::Keystore;
-use dbbackup_verify::{load_trusted_inputs, ImagePolicy, Restorer, VerifyResult, Verifier};
+use dbbackup_verify::{load_trusted_inputs, ImagePolicy, Restorer, Verifier, VerifyResult};
 
 use crate::cli::VerifyArgs;
 use crate::commands::keystore_util;
@@ -18,7 +18,10 @@ pub fn run(config_path: &Path, args: VerifyArgs) -> anyhow::Result<()> {
     // 키스토어 로드: 핀된 서명 공개키 + KEK unlock 자격증명.
     let ks_path = keystore_util::keystore_path(config_path);
     if !Keystore::exists(&ks_path) {
-        anyhow::bail!("키스토어가 없습니다({}) — 먼저 `dbbackup init`.", ks_path.display());
+        anyhow::bail!(
+            "키스토어가 없습니다({}) — 먼저 `dbbackup init`.",
+            ks_path.display()
+        );
     }
     let keystore = Keystore::load(&ks_path)?;
     let vk = keystore.verifying_key()?;
@@ -30,7 +33,10 @@ pub fn run(config_path: &Path, args: VerifyArgs) -> anyhow::Result<()> {
 
     let keys = pick_keys(&source, args.backup.as_deref())?;
     if keys.is_empty() {
-        anyhow::bail!("검증할 매니페스트가 없습니다(spool_dir={})", spool_dir.display());
+        anyhow::bail!(
+            "검증할 매니페스트가 없습니다(spool_dir={})",
+            spool_dir.display()
+        );
     }
 
     // KEK unlock(비번 env/프롬프트, 또는 DPAPI). 실패는 DEK 복구 이전에 명확히 보고.

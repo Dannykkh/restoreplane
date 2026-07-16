@@ -14,7 +14,11 @@ pub fn record_verification(
 ) -> anyhow::Result<()> {
     let id = uuid::Uuid::new_v4().to_string();
     let level = o.level as i64;
-    let result = if o.result == VerifyResult::Pass { "pass" } else { "fail" };
+    let result = if o.result == VerifyResult::Pass {
+        "pass"
+    } else {
+        "fail"
+    };
     let rtv = o.restore_target_version.clone();
     let rows = o.restored_rows.map(|r| r as i64);
     let shash = o.schema_hash.clone();

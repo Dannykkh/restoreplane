@@ -60,7 +60,13 @@ mod tests {
     use super::*;
 
     fn server(kind: ServerKind, major: u32) -> ServerVersionInfo {
-        ServerVersionInfo { raw: format!("{major}.0.0"), kind, major, minor: 0, patch: 0 }
+        ServerVersionInfo {
+            raw: format!("{major}.0.0"),
+            kind,
+            major,
+            minor: 0,
+            patch: 0,
+        }
     }
 
     fn has(args: &[String], needle: &str) -> bool {
@@ -69,7 +75,11 @@ mod tests {
 
     #[test]
     fn always_present_flags_r2_r3() {
-        let a = build_flags(&server(ServerKind::OracleMySql, 8), ClientKind::OracleMySql, false);
+        let a = build_flags(
+            &server(ServerKind::OracleMySql, 8),
+            ClientKind::OracleMySql,
+            false,
+        );
         assert!(has(&a, "--single-transaction"));
         assert!(has(&a, "--routines"));
         assert!(has(&a, "--triggers"));
@@ -80,20 +90,32 @@ mod tests {
     #[test]
     fn t6_oracle_client_mariadb_server_adds_column_statistics() {
         // 방어 경로 강제 트리거: Oracle client + MariaDB 서버.
-        let a = build_flags(&server(ServerKind::MariaDb, 10), ClientKind::OracleMySql, false);
+        let a = build_flags(
+            &server(ServerKind::MariaDb, 10),
+            ClientKind::OracleMySql,
+            false,
+        );
         assert!(has(&a, "--column-statistics=0"));
     }
 
     #[test]
     fn t7_oracle_client_old_server_adds_column_statistics() {
-        let a = build_flags(&server(ServerKind::OracleMySql, 5), ClientKind::OracleMySql, false);
+        let a = build_flags(
+            &server(ServerKind::OracleMySql, 5),
+            ClientKind::OracleMySql,
+            false,
+        );
         assert!(has(&a, "--column-statistics=0"));
     }
 
     #[test]
     fn mysql8_oracle_client_omits_column_statistics() {
         // MySQL 8 서버는 컬럼통계 테이블이 있으므로 =0 불필요.
-        let a = build_flags(&server(ServerKind::OracleMySql, 8), ClientKind::OracleMySql, false);
+        let a = build_flags(
+            &server(ServerKind::OracleMySql, 8),
+            ClientKind::OracleMySql,
+            false,
+        );
         assert!(!has(&a, "--column-statistics=0"));
     }
 
@@ -101,7 +123,11 @@ mod tests {
     fn t8_mariadb_client_never_gets_column_statistics() {
         // 어떤 서버 조합이든 MariaDB 바이너리엔 이 플래그가 절대 실리지 않는다(unknown option 방지, R4).
         for major in [5, 8, 10, 11] {
-            let a = build_flags(&server(ServerKind::MariaDb, major), ClientKind::MariaDb, false);
+            let a = build_flags(
+                &server(ServerKind::MariaDb, major),
+                ClientKind::MariaDb,
+                false,
+            );
             assert!(
                 a.iter().all(|f| !f.starts_with("--column-statistics")),
                 "MariaDB client got column-statistics for major={major}"
@@ -112,13 +138,20 @@ mod tests {
     #[test]
     fn column_statistics_gated_by_client_kind_not_server_kind() {
         // 회귀 가드(R4): server.kind만 보면 MariaDB 서버라 =0을 넣고 싶겠지만, client가 MariaDB면 금지.
-        let maria_client = build_flags(&server(ServerKind::MariaDb, 10), ClientKind::MariaDb, false);
-        assert!(maria_client.iter().all(|f| !f.starts_with("--column-statistics")));
+        let maria_client =
+            build_flags(&server(ServerKind::MariaDb, 10), ClientKind::MariaDb, false);
+        assert!(maria_client
+            .iter()
+            .all(|f| !f.starts_with("--column-statistics")));
     }
 
     #[test]
     fn t10_oracle_client_binlog_uses_source_data() {
-        let a = build_flags(&server(ServerKind::OracleMySql, 8), ClientKind::OracleMySql, true);
+        let a = build_flags(
+            &server(ServerKind::OracleMySql, 8),
+            ClientKind::OracleMySql,
+            true,
+        );
         assert!(has(&a, "--source-data=2"));
         assert!(!has(&a, "--master-data=2"));
     }
@@ -132,7 +165,13 @@ mod tests {
 
     #[test]
     fn no_binlog_flag_when_capture_disabled() {
-        let a = build_flags(&server(ServerKind::OracleMySql, 8), ClientKind::OracleMySql, false);
-        assert!(a.iter().all(|f| f != "--source-data=2" && f != "--master-data=2"));
+        let a = build_flags(
+            &server(ServerKind::OracleMySql, 8),
+            ClientKind::OracleMySql,
+            false,
+        );
+        assert!(a
+            .iter()
+            .all(|f| f != "--source-data=2" && f != "--master-data=2"));
     }
 }

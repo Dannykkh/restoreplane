@@ -288,7 +288,11 @@ impl NotificationSink for WindowsEventLogSink {
             RunOutcome::SkippedOverlap => (eventlog::EventLevel::Warning, 1003),
         };
         // event.message는 이미 scrub()을 거친 문자열만 허용(FR8, 호출부 계약).
-        handle.report(level, event_id, &format!("[{}] {}", event.job, event.message))
+        handle.report(
+            level,
+            event_id,
+            &format!("[{}] {}", event.job, event.message),
+        )
     }
 
     #[cfg(not(windows))]

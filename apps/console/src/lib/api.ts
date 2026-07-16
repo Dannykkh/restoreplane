@@ -262,6 +262,102 @@ export async function runJob(
   return () => clearInterval(timer);
 }
 
+// --- 복원(사이드카 스트리밍, run:log/run:done 공용) ---
+export interface RestoreParams {
+  backup: string;
+  fromDestination: string;
+  to?: string;
+  decryptOnly: boolean;
+  withRecoveryCode: boolean;
+}
+
+export async function restoreBackup(
+  p: RestoreParams,
+  onLog: (l: RunLogLine) => void,
+  onDone: (d: RunDone) => void,
+): Promise<() => void> {
+  if (inTauri()) {
+    const { listen } = await import("@tauri-apps/api/event");
+    const un1 = await listen<RunLogLine>("run:log", (e) => onLog(e.payload));
+    const un2 = await listen<RunDone>("run:done", (e) => onDone(e.payload));
+    try {
+      await tauriInvoke<void>("restore_backup", {
+        backup: p.backup,
+        fromDestination: p.fromDestination,
+        to: p.to,
+        decryptOnly: p.decryptOnly,
+        withRecoveryCode: p.withRecoveryCode,
+      });
+    } catch (e) {
+      onLog({ line: String(e), stream: "stderr" });
+      onDone({ code: null, ok: false });
+    }
+    return () => {
+      un1();
+      un2();
+    };
+  }
+  // 브라우저 목: 서명 게이트 → 복호화 → (샌드박스) 복원 흐름을 흉내낸다.
+  const lines = [
+    `[restore] fetch manifest for ${p.backup} from ${p.fromDestination}`,
+    `[restore] verify ed25519 signature … OK (서명 게이트 통과)`,
+    `[restore] decrypt(chacha20 STREAM) + decompress(zstd)`,
+    p.decryptOnly
+      ? `[restore] decrypt-only: 평문 덤프 산출(임포트 없음)`
+      : `[restore] sandbox import into throwaway instance`,
+    `[restore] blake3 == manifest … OK`,
+  ];
+  let i = 0;
+  const timer = setInterval(() => {
+    if (i < lines.length) onLog({ line: lines[i++], stream: "stdout" });
+    else {
+      clearInterval(timer);
+      onDone({ code: 0, ok: true });
+    }
+  }, 320);
+  return () => clearInterval(timer);
+}
+
+// --- 스케줄 등록(schtasks, run:log/run:done 공용) ---
+export async function registerSchedule(
+  job: string,
+  remove: boolean,
+  onLog: (l: RunLogLine) => void,
+  onDone: (d: RunDone) => void,
+): Promise<() => void> {
+  if (inTauri()) {
+    const { listen } = await import("@tauri-apps/api/event");
+    const un1 = await listen<RunLogLine>("run:log", (e) => onLog(e.payload));
+    const un2 = await listen<RunDone>("run:done", (e) => onDone(e.payload));
+    try {
+      await tauriInvoke<void>("register_schedule", { job, remove });
+    } catch (e) {
+      onLog({ line: String(e), stream: "stderr" });
+      onDone({ code: null, ok: false });
+    }
+    return () => {
+      un1();
+      un2();
+    };
+  }
+  const lines = remove
+    ? [`[schedule] schtasks /Delete /TN dbbackup-${job}`, `[schedule] 제거됨`]
+    : [
+        `[schedule] render task XML (StartWhenAvailable, IgnoreNew, HighestAvailable)`,
+        `[schedule] schtasks /Create /TN dbbackup-${job} /XML …`,
+        `[schedule] 등록됨 — 무인 실행 예약 완료`,
+      ];
+  let i = 0;
+  const timer = setInterval(() => {
+    if (i < lines.length) onLog({ line: lines[i++], stream: "stdout" });
+    else {
+      clearInterval(timer);
+      onDone({ code: 0, ok: true });
+    }
+  }, 300);
+  return () => clearInterval(timer);
+}
+
 // --- 브라우저 디자인 검증용 목 데이터 (Tauri 밖에서만 사용) ---
 const MOCK_DASHBOARD: DashboardData = {
   configPresent: true,

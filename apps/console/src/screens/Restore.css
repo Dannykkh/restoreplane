@@ -1,0 +1,53 @@
+/* 복원 마법사 — 저밀도/넓은 여백 + 서명 게이트 강조. */
+
+.restore-wrap {
+  max-width: 720px;
+}
+
+.restore-gate {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: flex-start;
+  padding: var(--sp-5);
+  border-radius: var(--r-lg);
+  border: 1px solid color-mix(in oklch, var(--immutable) 40%, var(--border));
+  background: color-mix(in oklch, var(--immutable) 10%, var(--surface));
+  margin-bottom: var(--section);
+}
+.gate-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklch, var(--immutable) 18%, transparent);
+  color: var(--immutable);
+}
+.gate-title {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: var(--fs-h3);
+}
+.gate-sub {
+  color: var(--text-muted);
+  font-size: var(--fs-body-sm);
+  line-height: 1.6;
+  margin-top: 4px;
+}
+
+.restore-form .field {
+  margin-bottom: var(--sp-4);
+}
+
+.restore-danger {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: var(--sp-5);
+  padding: 10px var(--sp-4);
+  border-radius: var(--r-sm);
+  background: color-mix(in oklch, var(--danger) 12%, transparent);
+  color: var(--danger);
+  font-size: var(--fs-body-sm);
+}

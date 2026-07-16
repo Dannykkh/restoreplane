@@ -3,6 +3,8 @@ import "./App.css";
 import { Dashboard } from "./screens/Dashboard";
 import { Jobs } from "./screens/Jobs";
 import { Registrations } from "./screens/Registrations";
+import { Restore } from "./screens/Restore";
+import { Schedule } from "./screens/Schedule";
 import { Setup } from "./screens/Setup";
 import { keystoreStatus } from "./lib/api";
 import {
@@ -106,32 +108,10 @@ export function App() {
           {view === "dashboard" && <Dashboard />}
           {view === "databases" && <Registrations />}
           {view === "run" && <Jobs />}
-          {view !== "dashboard" && view !== "databases" && view !== "run" && (
-            <Placeholder view={view} />
-          )}
+          {view === "restore" && <Restore />}
+          {view === "schedule" && <Schedule />}
         </div>
       </main>
-    </div>
-  );
-}
-
-const TITLES: Record<Exclude<View, "dashboard">, string> = {
-  databases: "DB · 목적지 등록",
-  run: "백업 실행",
-  restore: "복원 마법사",
-  schedule: "스케줄 · 알림",
-};
-
-function Placeholder({ view }: { view: Exclude<View, "dashboard"> }) {
-  return (
-    <div className="placeholder">
-      <div className="p-mark">
-        <IconShield width={26} height={26} />
-      </div>
-      <div>
-        <h2 style={{ marginBottom: 6 }}>{TITLES[view]}</h2>
-        <div className="muted">다음 증분에서 연결됩니다.</div>
-      </div>
     </div>
   );
 }

@@ -1,0 +1,65 @@
+/* 스케줄 · 알림 화면 — 중간 밀도. */
+
+.sched-wrap {
+  max-width: 860px;
+}
+
+.rpo-banner {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: flex-start;
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-md);
+  border: 1px solid color-mix(in oklch, var(--warning) 35%, var(--border));
+  background: color-mix(in oklch, var(--warning) 9%, var(--surface));
+  color: var(--text-muted);
+  font-size: var(--fs-body-sm);
+  line-height: 1.6;
+  margin-bottom: var(--section);
+}
+.rpo-banner svg {
+  color: var(--warning);
+  flex: none;
+  margin-top: 1px;
+}
+
+.sched-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.sched-card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.sched-main {
+  flex: 1;
+  min-width: 0;
+}
+.sched-cron {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  margin-top: 4px;
+}
+.sched-human {
+  color: var(--primary);
+  font-size: var(--fs-body-sm);
+}
+.sched-actions {
+  display: flex;
+  gap: var(--sp-3);
+}
+
+.notify-note {
+  margin-top: var(--section);
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  font-size: var(--fs-body-sm);
+}

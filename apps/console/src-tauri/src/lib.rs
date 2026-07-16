@@ -19,6 +19,8 @@ pub fn run() {
             config_edit::add_job,
             config_edit::list_jobs,
             run::run_job,
+            run::restore_backup,
+            run::register_schedule,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri 애플리케이션 실행 실패");

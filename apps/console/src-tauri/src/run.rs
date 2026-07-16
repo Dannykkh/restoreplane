@@ -42,22 +42,15 @@ struct RunDone {
     ok: bool,
 }
 
-/// 백업 잡 실행. dry_run=true면 계획만(인프라 불필요). 진행 로그는 이벤트로 스트리밍하고
-/// 커맨드 자체는 즉시 반환한다(프론트는 run:log/run:done을 구독).
-#[tauri::command]
-pub fn run_job(app: AppHandle, source: String, dry_run: bool) -> Result<(), String> {
+/// dbbackup 서브커맨드를 자식 프로세스로 띄우고 stdout/stderr를 run:log 이벤트로 스트리밍한다.
+/// 커맨드는 즉시 반환하고(비블로킹), 종료 시 run:done을 방출한다. run/verify/restore 공용.
+fn spawn_stream(app: AppHandle, args: Vec<String>) -> Result<(), String> {
     let bin = dbbackup_bin();
     let cfg = config_path();
 
     let mut cmd = Command::new(&bin);
-    cmd.arg("--config")
-        .arg(&cfg)
-        .arg("run")
-        .arg("--db")
-        .arg(&source);
-    if dry_run {
-        cmd.arg("--dry-run");
-    }
+    cmd.arg("--config").arg(&cfg);
+    cmd.args(&args);
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     let mut child = cmd
@@ -67,7 +60,6 @@ pub fn run_job(app: AppHandle, source: String, dry_run: bool) -> Result<(), Stri
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
 
-    // stdout/stderr를 각각 스레드로 흘린다.
     let a1 = app.clone();
     let h_out = std::thread::spawn(move || {
         if let Some(out) = stdout {
@@ -97,12 +89,10 @@ pub fn run_job(app: AppHandle, source: String, dry_run: bool) -> Result<(), Stri
         }
     });
 
-    // 완료 대기 스레드 — 커맨드는 블로킹하지 않는다.
     std::thread::spawn(move || {
         let _ = h_out.join();
         let _ = h_err.join();
-        let status = child.wait();
-        let (code, ok) = match status {
+        let (code, ok) = match child.wait() {
             Ok(s) => (s.code(), s.success()),
             Err(_) => (None, false),
         };
@@ -110,4 +100,55 @@ pub fn run_job(app: AppHandle, source: String, dry_run: bool) -> Result<(), Stri
     });
 
     Ok(())
+}
+
+/// 백업 잡 실행. dry_run=true면 계획만(인프라 불필요). run:log/run:done 구독.
+#[tauri::command]
+pub fn run_job(app: AppHandle, source: String, dry_run: bool) -> Result<(), String> {
+    let mut args = vec!["run".into(), "--db".into(), source];
+    if dry_run {
+        args.push("--dry-run".into());
+    }
+    spawn_stream(app, args)
+}
+
+/// 백업 복원. 서명 게이트→(decrypt_only면 평문만, 아니면 샌드박스 임포트)는 CLI restore가 수행.
+/// with_recovery_code면 DBBACKUP_RECOVERY_CODE 무인 경로를 쓴다(복원 측 CLI 규약).
+#[tauri::command]
+pub fn restore_backup(
+    app: AppHandle,
+    backup: String,
+    from_destination: String,
+    to: Option<String>,
+    decrypt_only: bool,
+    with_recovery_code: bool,
+) -> Result<(), String> {
+    let mut args = vec![
+        "restore".into(),
+        "--backup".into(),
+        backup,
+        "--from-destination".into(),
+        from_destination,
+    ];
+    if let Some(t) = to.filter(|s| !s.trim().is_empty()) {
+        args.push("--to".into());
+        args.push(t);
+    }
+    if decrypt_only {
+        args.push("--decrypt-only".into());
+    }
+    if with_recovery_code {
+        args.push("--with-recovery-code".into());
+    }
+    spawn_stream(app, args)
+}
+
+/// Windows Task Scheduler 등록/해제(schtasks). 관리자 권한·유효 config가 필요할 수 있다.
+#[tauri::command]
+pub fn register_schedule(app: AppHandle, job: String, remove: bool) -> Result<(), String> {
+    let mut args = vec!["schedule".into(), "--job".into(), job];
+    if remove {
+        args.push("--remove".into());
+    }
+    spawn_stream(app, args)
 }

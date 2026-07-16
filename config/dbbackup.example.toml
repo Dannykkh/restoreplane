@@ -1,0 +1,105 @@
+[meta]
+schema_version = 1
+
+[[database]]
+alias = "app"
+engine = "postgresql"
+host = "10.0.0.5"
+port = 5432
+dbname = "app"
+user = "backup_reader"
+password = "enc:1:cGxhY2Vob2xkZXI="
+dump_globals = true
+
+[[database]]
+alias = "shop"
+engine = "mysql"
+host = "10.0.0.9"
+port = 3306
+dbname = "shop"
+user = "backup_reader"
+password = "enc:1:cGxhY2Vob2xkZXI="
+tunnel = "bastion1"
+single_transaction = true
+
+[[ssh]]
+name = "bastion1"
+host = "bastion.example.com"
+port = 22
+user = "tunnel"
+private_key_path = "C:/keys/bastion_id_ed25519"
+host_key_fingerprint = "SHA256:AbCdEfGhIjKlMnOpQrStUvWxYz0123456789ABCDEFG"
+
+[[destination]]
+name = "s3-primary"
+kind = "s3"
+endpoint = "https://s3.ap-northeast-2.amazonaws.com"
+region = "ap-northeast-2"
+bucket = "mycompany-backups"
+prefix = "prod/"
+access_key_id = "enc:1:cGxhY2Vob2xkZXI="
+secret_access_key = "enc:1:cGxhY2Vob2xkZXI="
+checksum_algo = "sha256"
+
+[destination.object_lock]
+mode = "governance"
+retention_days = 35
+
+[[destination]]
+name = "ssh-secondary"
+kind = "ssh"
+tunnel = "bastion1"
+path = "/mnt/backup-repo"
+user = "backupuser"
+private_key_path = "C:/keys/dest_id_ed25519"
+host_key_fingerprint = "SHA256:ZzYyXxWwVvUuTtSsRrQqPpOoNnMmLlKkJjIiHhGgFf"
+
+[[destination]]
+name = "local-spool"
+kind = "local"
+path = "D:/backup-spool"
+
+[[jobs]]
+name = "prod-pg-nightly"
+source = "app"
+destinations = ["s3-primary", "ssh-secondary", "local-spool"]
+required_immutability = "governance"
+schedule = "0 3 * * *"
+
+[jobs.retention]
+daily = 7
+weekly = 4
+monthly = 12
+
+[jobs.verify]
+level = 2
+schedule = "every_run"
+
+[[jobs]]
+name = "shop-mysql-nightly"
+source = "shop"
+destinations = ["s3-primary", "local-spool"]
+required_immutability = "governance"
+schedule = "30 3 * * *"
+
+[jobs.retention]
+daily = 7
+weekly = 4
+monthly = 12
+
+[policy]
+max_parallel_dumps = 2
+spool_dir = "D:/backup-spool/.staging"
+min_free_disk_mb = 5120
+
+[policy.retry]
+attempts = 3
+backoff_secs = 30
+
+[policy.dump_tool_version]
+app = "16.3"
+shop = "8.0.37"
+
+[notify]
+channel = "webhook"
+webhook_url = "enc:1:cGxhY2Vob2xkZXI="

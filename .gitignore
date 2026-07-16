@@ -1,0 +1,19 @@
+# .gitignore — 리포 정책: 도구 코드만 공개, config/wrap/복구코드/catalog/keyfile/스풀은 로컬
+/target
+dbbackup.toml
+prune.toml
+*.dek
+*.recovery-code
+*.keyfile
+catalog.sqlite*
+spool/
+.staging/
+# 예외: config/*.example.toml 은 secret 없는 예시라 커밋 대상
+
+# 세션/장기기억 아티팩트 — 로컬 전용 (공개 리포 정책)
+/.claude/
+/.termsnap/
+/memory/
+/conversations/
+/MEMORY.md
+/codemap/

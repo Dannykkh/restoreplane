@@ -1,0 +1,10 @@
+# config/prune.example.toml — run이 절대 로드하지 않는 격리 프로파일
+# 주의: 최상위 키는 첫 테이블 헤더보다 앞에 와야 한다(TOML 규칙).
+destination = "s3-primary"
+
+[meta]
+schema_version = 1
+
+[identity]
+access_key_id = "enc:1:cGxhY2Vob2xkZXI="
+secret_access_key = "enc:1:cGxhY2Vob2xkZXI="

@@ -1,0 +1,17 @@
+[package]
+name = "dbbackup-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "dbbackup"
+path = "src/main.rs"
+
+[dependencies]
+dbbackup-core = { path = "../dbbackup-core" }
+dbbackup-config = { path = "../dbbackup-config" }
+clap.workspace = true
+anyhow.workspace = true
+rpassword.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

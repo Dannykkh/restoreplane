@@ -208,6 +208,60 @@ export async function addJob(job: NewJob): Promise<void> {
   });
 }
 
+// --- 백업 실행(사이드카 스트리밍) ---
+export interface RunLogLine {
+  line: string;
+  stream: "stdout" | "stderr";
+}
+export interface RunDone {
+  code: number | null;
+  ok: boolean;
+}
+
+/** 잡 실행. 진행 로그를 onLog로, 종료를 onDone으로 콜백. 정리 함수를 반환한다. */
+export async function runJob(
+  source: string,
+  dryRun: boolean,
+  onLog: (l: RunLogLine) => void,
+  onDone: (d: RunDone) => void,
+): Promise<() => void> {
+  if (inTauri()) {
+    const { listen } = await import("@tauri-apps/api/event");
+    const un1 = await listen<RunLogLine>("run:log", (e) => onLog(e.payload));
+    const un2 = await listen<RunDone>("run:done", (e) => onDone(e.payload));
+    try {
+      await tauriInvoke<void>("run_job", { source, dryRun });
+    } catch (e) {
+      onLog({ line: String(e), stream: "stderr" });
+      onDone({ code: null, ok: false });
+    }
+    return () => {
+      un1();
+      un2();
+    };
+  }
+  // 브라우저 목: 사이드카 dry-run 출력을 흉내내 로그 패널을 검증.
+  const lines = dryRun
+    ? [
+        `[dry-run] would run job for source '${source}'`,
+        `[dry-run] plan: dump -> blake3 tee -> zstd -> chacha20 STREAM -> spool`,
+        `[dry-run] fan-out to registered destinations`,
+      ]
+    : [
+        `[run] source '${source}' 실행은 라이브 DB 연결이 필요합니다(브라우저 목).`,
+      ];
+  let i = 0;
+  const timer = setInterval(() => {
+    if (i < lines.length) {
+      onLog({ line: lines[i++], stream: "stdout" });
+    } else {
+      clearInterval(timer);
+      onDone({ code: 0, ok: dryRun });
+    }
+  }, 350);
+  return () => clearInterval(timer);
+}
+
 // --- 브라우저 디자인 검증용 목 데이터 (Tauri 밖에서만 사용) ---
 const MOCK_DASHBOARD: DashboardData = {
   configPresent: true,

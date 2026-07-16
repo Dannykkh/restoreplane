@@ -1,0 +1,113 @@
+//! 백업 실행/검증 사이드카 — 완성된 dbbackup.exe를 자식 프로세스로 띄우고 stdout/stderr를
+//! 줄 단위로 프론트에 이벤트("run:log"/"run:done")로 흘린다.
+//!
+//! 왜 사이드카인가: run/verify는 덤프 도구 호출·스트리밍 암호화·팬아웃 등 완성된 파이프라인을
+//! 그대로 재사용해야 한다(재구현 금지). config 편집처럼 순수 라이브러리 호출이 아니라 장시간
+//! 실행+진행 로그가 필요하므로 인프로세스가 아니라 사이드카 스트리밍이 맞다.
+//!
+//! 검증 한계: 실제 백업은 라이브 DB/keystore/목적지가 필요하다. --dry-run은 keystore 언락 이전에
+//! 계획만 출력하고 종료하므로 인프라 없이도 사이드카 배선을 검증할 수 있다(run.rs의 dry_run 분기).
+
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+
+use serde::Serialize;
+use tauri::{AppHandle, Emitter};
+
+use crate::paths::config_path;
+
+/// 동봉 배포에서 dbbackup.exe는 콘솔 실행파일과 같은 디렉토리에 있다(dev: target/<profile>).
+fn dbbackup_bin() -> PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let cand = dir.join("dbbackup.exe");
+            if cand.exists() {
+                return cand;
+            }
+        }
+    }
+    PathBuf::from("dbbackup.exe") // PATH 폴백
+}
+
+#[derive(Clone, Serialize)]
+struct LogLine {
+    line: String,
+    stream: &'static str, // "stdout" | "stderr"
+}
+
+#[derive(Clone, Serialize)]
+struct RunDone {
+    code: Option<i32>,
+    ok: bool,
+}
+
+/// 백업 잡 실행. dry_run=true면 계획만(인프라 불필요). 진행 로그는 이벤트로 스트리밍하고
+/// 커맨드 자체는 즉시 반환한다(프론트는 run:log/run:done을 구독).
+#[tauri::command]
+pub fn run_job(app: AppHandle, source: String, dry_run: bool) -> Result<(), String> {
+    let bin = dbbackup_bin();
+    let cfg = config_path();
+
+    let mut cmd = Command::new(&bin);
+    cmd.arg("--config")
+        .arg(&cfg)
+        .arg("run")
+        .arg("--db")
+        .arg(&source);
+    if dry_run {
+        cmd.arg("--dry-run");
+    }
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("dbbackup 실행 실패({}): {e}", bin.display()))?;
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    // stdout/stderr를 각각 스레드로 흘린다.
+    let a1 = app.clone();
+    let h_out = std::thread::spawn(move || {
+        if let Some(out) = stdout {
+            for line in BufReader::new(out).lines().map_while(Result::ok) {
+                let _ = a1.emit(
+                    "run:log",
+                    LogLine {
+                        line,
+                        stream: "stdout",
+                    },
+                );
+            }
+        }
+    });
+    let a2 = app.clone();
+    let h_err = std::thread::spawn(move || {
+        if let Some(err) = stderr {
+            for line in BufReader::new(err).lines().map_while(Result::ok) {
+                let _ = a2.emit(
+                    "run:log",
+                    LogLine {
+                        line,
+                        stream: "stderr",
+                    },
+                );
+            }
+        }
+    });
+
+    // 완료 대기 스레드 — 커맨드는 블로킹하지 않는다.
+    std::thread::spawn(move || {
+        let _ = h_out.join();
+        let _ = h_err.join();
+        let status = child.wait();
+        let (code, ok) = match status {
+            Ok(s) => (s.code(), s.success()),
+            Err(_) => (None, false),
+        };
+        let _ = app.emit("run:done", RunDone { code, ok });
+    });
+
+    Ok(())
+}

@@ -2,6 +2,7 @@
 mod commands;
 mod config_edit;
 mod paths;
+mod run;
 mod setup;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -17,6 +18,7 @@ pub fn run() {
             config_edit::list_destinations,
             config_edit::add_job,
             config_edit::list_jobs,
+            run::run_job,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri 애플리케이션 실행 실패");

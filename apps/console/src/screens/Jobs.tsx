@@ -6,10 +6,12 @@ import {
   listDatabases,
   listDestinations,
   listJobs,
+  runJob,
   type DbSummary,
   type DestSummary,
   type JobSummaryRow,
   type NewJob,
+  type RunLogLine,
 } from "../lib/api";
 import { cronPreview } from "../lib/cron";
 
@@ -39,6 +41,25 @@ export function Jobs() {
   const [form, setForm] = useState<NewJob>({ ...EMPTY });
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
+
+  // 실행 로그 패널 상태.
+  const [run, setRun] = useState<{
+    source: string;
+    lines: RunLogLine[];
+    done: null | boolean;
+  } | null>(null);
+  const cleanupRef = useState<{ fn: (() => void) | null }>({ fn: null })[0];
+
+  async function startDryRun(source: string) {
+    cleanupRef.fn?.();
+    setRun({ source, lines: [], done: null });
+    cleanupRef.fn = await runJob(
+      source,
+      true,
+      (l) => setRun((r) => (r ? { ...r, lines: [...r.lines, l] } : r)),
+      (d) => setRun((r) => (r ? { ...r, done: d.ok } : r)),
+    );
+  }
 
   function refresh() {
     listJobs().then(setJobs).catch((e) => setFlash({ kind: "err", msg: String(e) }));
@@ -86,6 +107,48 @@ export function Jobs() {
         <span className="label">잡 {jobs.length}개</span>
       </div>
 
+      {run && (
+        <div className="run-panel">
+          <div className="run-panel-head">
+            <div>
+              <span className="mono">{run.source}</span>{" "}
+              <span className="faint">· 계획 미리보기(dry-run)</span>
+            </div>
+            <div className="run-status">
+              {run.done === null ? (
+                <span className="badge badge-neutral">실행 중…</span>
+              ) : run.done ? (
+                <span className="badge badge-success">계획 확인 완료</span>
+              ) : (
+                <span className="badge badge-danger">중단됨</span>
+              )}
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  cleanupRef.fn?.();
+                  setRun(null);
+                }}
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+          <pre className="run-log">
+            {run.lines.length === 0
+              ? "시작하는 중…"
+              : run.lines.map((l, i) => (
+                  <div key={i} className={l.stream === "stderr" ? "log-err" : ""}>
+                    {l.line}
+                  </div>
+                ))}
+          </pre>
+          <div className="run-note faint">
+            실제 백업 실행은 라이브 DB·keystore 연결이 필요합니다. dry-run은 파이프라인 계획만
+            출력합니다.
+          </div>
+        </div>
+      )}
+
       <div className="db-layout">
         <div className="db-list">
           {jobs.length === 0 ? (
@@ -103,8 +166,12 @@ export function Jobs() {
                     <span className="mono faint">{cronPreview(j.schedule)}</span>
                   </div>
                 </div>
-                <button className="btn btn-ghost" disabled title="라이브 DB 연결 필요">
-                  실행
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => startDryRun(j.source)}
+                  title="계획 미리보기(dry-run) — 실제 백업은 라이브 DB 연결 필요"
+                >
+                  계획 실행
                 </button>
               </div>
             ))

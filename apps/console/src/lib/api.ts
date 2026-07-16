@@ -154,6 +154,60 @@ export async function addDestination(masterPassword: string, dest: NewDestinatio
   MOCK_DESTS.push({ name: dest.name, kind: dest.kind, immutability: immut, location });
 }
 
+// --- 백업 잡 등록 ---
+export interface JobSummaryRow {
+  name: string;
+  source: string;
+  destinations: string[];
+  requiredImmutability: string;
+  schedule: string;
+  verifyLevel: number;
+  enabled: boolean;
+}
+export interface NewJob {
+  name: string;
+  source: string;
+  destinations: string[];
+  requiredImmutability: string;
+  retentionDaily: number;
+  retentionWeekly: number;
+  retentionMonthly: number;
+  verifyLevel: number;
+  schedule: string;
+}
+
+const MOCK_JOBS: JobSummaryRow[] = [
+  {
+    name: "prod-nightly",
+    source: "prod-main",
+    destinations: ["s3-worm", "bastion-sftp"],
+    requiredImmutability: "governance",
+    schedule: "0 3 * * *",
+    verifyLevel: 3,
+    enabled: true,
+  },
+];
+
+export async function listJobs(): Promise<JobSummaryRow[]> {
+  if (inTauri()) return tauriInvoke<JobSummaryRow[]>("list_jobs");
+  return MOCK_JOBS;
+}
+
+export async function addJob(job: NewJob): Promise<void> {
+  if (inTauri()) return tauriInvoke<void>("add_job", { job });
+  if (!job.destinations.length) throw new Error("목적지를 1개 이상 선택하세요.");
+  if (MOCK_JOBS.some((j) => j.name === job.name)) throw new Error(`이미 존재하는 잡 이름입니다: ${job.name}`);
+  MOCK_JOBS.push({
+    name: job.name,
+    source: job.source,
+    destinations: job.destinations,
+    requiredImmutability: job.requiredImmutability,
+    schedule: job.schedule,
+    verifyLevel: job.verifyLevel,
+    enabled: true,
+  });
+}
+
 // --- 브라우저 디자인 검증용 목 데이터 (Tauri 밖에서만 사용) ---
 const MOCK_DASHBOARD: DashboardData = {
   configPresent: true,

@@ -8,8 +8,10 @@
 //! 즉 여기서 기록한 EncField를 백업 실행이 아직 복호화해 쓰지는 않는다(run 측 unwrap 배선은 별도
 //! 백엔드 작업). 이 커맨드는 "config를 올바르게(암호화된 시크릿 포함) 기록"하는 계층까지 책임진다.
 
-use dbbackup_config::schema::{Config, Database, Destination, ObjectLockConfig};
-use dbbackup_core::{DestKind, Engine, ObjectLockMode, SecretEncryptor};
+use dbbackup_config::schema::{
+    Config, Database, Destination, Job, ObjectLockConfig, Retention, VerifyPolicy,
+};
+use dbbackup_core::{DestKind, Engine, ImmutabilityCapability, ObjectLockMode, SecretEncryptor};
 use dbbackup_secrets::{Credential, DekEncryptor, Keystore};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
@@ -340,6 +342,126 @@ pub fn list_destinations() -> Result<Vec<DestSummary>, String> {
         .collect())
 }
 
+// ----------------------------------------------------------------------------
+// 백업 잡([[jobs]]) 등록 — source(DB) + destinations(1+) + 보존/검증/스케줄 정책
+// ----------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewJob {
+    pub name: String,
+    pub source: String,
+    pub destinations: Vec<String>,
+    pub required_immutability: String,
+    #[serde(default)]
+    pub retention_daily: u32,
+    #[serde(default)]
+    pub retention_weekly: u32,
+    #[serde(default)]
+    pub retention_monthly: u32,
+    #[serde(default = "default_level")]
+    pub verify_level: u8,
+    #[serde(default)]
+    pub schedule: String,
+}
+
+fn default_level() -> u8 {
+    1
+}
+
+fn parse_immutability(s: &str) -> Result<ImmutabilityCapability, String> {
+    match s {
+        "none" => Ok(ImmutabilityCapability::None),
+        "governance" => Ok(ImmutabilityCapability::Governance),
+        "compliance" => Ok(ImmutabilityCapability::Compliance),
+        "server_append_only" => Ok(ImmutabilityCapability::ServerAppendOnly),
+        other => Err(format!("알 수 없는 불변성 요구: {other}")),
+    }
+}
+
+/// [[jobs]] 추가. source/destinations는 이미 등록된 것이어야 한다(참조 무결성).
+#[tauri::command]
+pub fn add_job(job: NewJob) -> Result<(), String> {
+    if job.name.trim().is_empty() {
+        return Err("잡 이름은 비울 수 없습니다.".to_string());
+    }
+    if job.destinations.is_empty() {
+        return Err("목적지를 1개 이상 선택하세요(옵션 C 팬아웃).".to_string());
+    }
+    let required = parse_immutability(&job.required_immutability)?;
+    let cfg_path = config_path();
+    let mut config = load_or_empty(&cfg_path)?;
+
+    if config.jobs.iter().any(|j| j.name == job.name) {
+        return Err(format!("이미 존재하는 잡 이름입니다: {}", job.name));
+    }
+    if !config.databases.iter().any(|d| d.alias == job.source) {
+        return Err(format!("등록되지 않은 소스 DB: {}", job.source));
+    }
+    for dn in &job.destinations {
+        if !config.destinations.iter().any(|d| &d.name == dn) {
+            return Err(format!("등록되지 않은 목적지: {dn}"));
+        }
+    }
+
+    config.jobs.push(Job {
+        name: job.name,
+        source: job.source,
+        destinations: job.destinations,
+        required_immutability: required,
+        retention: Retention {
+            daily: job.retention_daily,
+            weekly: job.retention_weekly,
+            monthly: job.retention_monthly,
+        },
+        verify: VerifyPolicy {
+            level: job.verify_level.clamp(1, 3),
+            schedule: "every_run".to_string(),
+        },
+        schedule: job.schedule,
+        enabled: true,
+    });
+    config
+        .save(&cfg_path)
+        .map_err(|e| format!("config 저장 실패: {e}"))?;
+    Ok(())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobSummary {
+    name: String,
+    source: String,
+    destinations: Vec<String>,
+    required_immutability: String,
+    schedule: String,
+    verify_level: u8,
+    enabled: bool,
+}
+
+/// 등록된 [[jobs]] 목록.
+#[tauri::command]
+pub fn list_jobs() -> Result<Vec<JobSummary>, String> {
+    let cfg_path = config_path();
+    if !cfg_path.exists() {
+        return Ok(vec![]);
+    }
+    let config = Config::load(&cfg_path).map_err(|e| format!("config 로드 실패: {e}"))?;
+    Ok(config
+        .jobs
+        .iter()
+        .map(|j| JobSummary {
+            name: j.name.clone(),
+            source: j.source.clone(),
+            destinations: j.destinations.clone(),
+            required_immutability: format!("{:?}", j.required_immutability).to_lowercase(),
+            schedule: j.schedule.clone(),
+            verify_level: j.verify.level,
+            enabled: j.enabled,
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -537,5 +659,82 @@ mod tests {
 
         std::env::remove_var("DBBACKUP_CONFIG");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn add_job_enforces_referential_integrity() {
+        let _env = crate::paths::env_guard();
+        let dir = std::env::temp_dir().join(format!("dbconsole-addjob-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pw = init_ks(&dir);
+
+        add_database(
+            pw.clone(),
+            NewDatabase {
+                alias: "pg".into(),
+                engine: "postgresql".into(),
+                host: "h".into(),
+                port: 5432,
+                dbname: "app".into(),
+                user: "u".into(),
+                password: "p".into(),
+                dump_globals: true,
+            },
+        )
+        .unwrap();
+        add_destination(
+            "".into(),
+            NewDestination {
+                name: "nas".into(),
+                kind: "local".into(),
+                path: Some(r"D:\b".into()),
+                endpoint: None,
+                region: None,
+                bucket: None,
+                prefix: String::new(),
+                access_key_id: None,
+                secret_access_key: None,
+                object_lock_mode: None,
+                retention_days: None,
+                host: None,
+                port: None,
+                user: None,
+                private_key_path: None,
+                host_key_fingerprint: None,
+            },
+        )
+        .unwrap();
+
+        // 알 수 없는 소스 → 거부.
+        assert!(mk_job("j1", "nope", &["nas"]).is_err());
+        // 알 수 없는 목적지 → 거부.
+        assert!(mk_job("j1", "pg", &["ghost"]).is_err());
+        // 정상.
+        mk_job("nightly", "pg", &["nas"]).expect("잡 등록");
+        // 중복 이름 → 거부.
+        assert!(mk_job("nightly", "pg", &["nas"]).is_err());
+
+        let jobs = list_jobs().unwrap();
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].name, "nightly");
+        assert_eq!(jobs[0].destinations, vec!["nas".to_string()]);
+        assert!(jobs[0].enabled);
+
+        std::env::remove_var("DBBACKUP_CONFIG");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn mk_job(name: &str, source: &str, dests: &[&str]) -> Result<(), String> {
+        add_job(NewJob {
+            name: name.into(),
+            source: source.into(),
+            destinations: dests.iter().map(|s| s.to_string()).collect(),
+            required_immutability: "none".into(),
+            retention_daily: 7,
+            retention_weekly: 4,
+            retention_monthly: 6,
+            verify_level: 1,
+            schedule: "0 3 * * *".into(),
+        })
     }
 }

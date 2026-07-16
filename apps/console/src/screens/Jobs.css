@@ -1,0 +1,56 @@
+/* 백업 잡 화면 — 잡 행 + 목적지 멀티픽커. */
+
+.job-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border-left: 3px solid var(--primary);
+}
+.job-row-main {
+  flex: 1;
+  min-width: 0;
+}
+.job-row-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: 6px;
+}
+
+.dest-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dest-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--fs-body-sm);
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--dur-fast) var(--ease);
+}
+.dest-chip input {
+  display: none;
+}
+.dest-chip.on {
+  border-color: var(--primary);
+  background: color-mix(in oklch, var(--primary) 16%, transparent);
+  color: var(--primary);
+}
+.dest-chip .chip-kind {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  opacity: 0.7;
+}

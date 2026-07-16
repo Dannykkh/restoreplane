@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 import { Dashboard } from "./screens/Dashboard";
+import { Jobs } from "./screens/Jobs";
 import { Registrations } from "./screens/Registrations";
 import { Setup } from "./screens/Setup";
 import { keystoreStatus } from "./lib/api";
@@ -104,7 +105,10 @@ export function App() {
         <div className="main-inner">
           {view === "dashboard" && <Dashboard />}
           {view === "databases" && <Registrations />}
-          {view !== "dashboard" && view !== "databases" && <Placeholder view={view} />}
+          {view === "run" && <Jobs />}
+          {view !== "dashboard" && view !== "databases" && view !== "run" && (
+            <Placeholder view={view} />
+          )}
         </div>
       </main>
     </div>

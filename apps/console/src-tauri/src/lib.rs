@@ -15,6 +15,8 @@ pub fn run() {
             config_edit::list_databases,
             config_edit::add_destination,
             config_edit::list_destinations,
+            config_edit::add_job,
+            config_edit::list_jobs,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri 애플리케이션 실행 실패");

@@ -1,0 +1,16 @@
+# cargo-audit 설정. 실행: cargo audit
+# 아래 ignore는 "억제"가 아니라 "수정본 없음 + 우리 사용 경로에 비해당"을 문서화한 판정이다.
+# 새 수정본이 나오면 제거하고 업그레이드한다.
+
+[advisories]
+ignore = [
+    # rsa (russh 전이) — Marvin 타이밍 사이드채널(RSA 개인키 복호화).
+    # 우리는 host-key를 ed25519 지문으로 핀하고, 공격자가 타이밍 관측 가능한
+    # RSA 개인키 복호화를 수행하지 않는다. 수정본 없음(rsa 0.9 라인). russh가
+    # 패치된 rsa로 올라오면 재검토.
+    "RUSTSEC-2023-0071",
+    # rand 0.8.5 — 'rand::rng()' + 커스텀 로거 조합에서만 unsound.
+    # 우리는 OsRng를 직접 쓰며 해당 조합을 쓰지 않는다. ed25519-dalek 2.x가
+    # rand_core 0.6(=rand 0.8)을 요구해 0.9 상향 불가. 경고 등급.
+    "RUSTSEC-2026-0097",
+]

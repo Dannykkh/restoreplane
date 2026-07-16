@@ -5,7 +5,11 @@
 version = 2
 # RustSec 권고: 취약점/미유지보수는 CI에서 실패시킨다.
 yanked = "deny"
-ignore = []
+# 근거는 audit.toml 참조(수정본 없음 + 우리 경로 비해당).
+ignore = [
+    "RUSTSEC-2023-0071", # rsa Marvin — russh 전이, RSA 개인키 복호화 미수행
+    "RUSTSEC-2026-0097", # rand 0.8 unsound — OsRng 직접 사용, 해당 조합 아님
+]
 
 [licenses]
 version = 2

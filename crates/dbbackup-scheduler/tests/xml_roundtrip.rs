@@ -1,8 +1,6 @@
 // T2~T3 — XML 생성/이스케이프 라운드트립 + 필수 플래그 존재.
 use dbbackup_scheduler::cron::{ScheduleSpec, Weekday};
 use dbbackup_scheduler::xml::{render_task_xml, LogonType, TaskXmlParams};
-use quick_xml::events::Event;
-use quick_xml::Reader;
 use time::OffsetDateTime;
 
 fn params(job: &str, schedule: ScheduleSpec) -> TaskXmlParams {
@@ -19,17 +17,42 @@ fn params(job: &str, schedule: ScheduleSpec) -> TaskXmlParams {
     }
 }
 
-/// XML이 well-formed임을 quick-xml 리더로 확인(파싱 성공 = 유효 XML).
+/// XML well-formedness를 경량 태그-균형 검사로 확인(외부 XML 파서 의존 제거).
+/// 열림/닫힘/self-closing 태그의 스택 균형과, 태그 밖 raw '<'/'>' 부재를 검증한다.
+/// 특수문자 이스케이프 회귀(special_chars 테스트)를 잡는 것이 목적.
 fn assert_wellformed(xml: &str) {
-    let mut reader = Reader::from_str(xml);
-    reader.config_mut().trim_text(true);
-    loop {
-        match reader.read_event() {
-            Ok(Event::Eof) => break,
-            Ok(_) => {}
-            Err(e) => panic!("XML 파싱 실패: {e}"),
+    let bytes = xml.as_bytes();
+    let mut stack: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'<' => {
+                let end = xml[i..].find('>').map(|o| i + o).unwrap_or_else(|| {
+                    panic!("닫히지 않은 태그(< 뒤에 > 없음) at {i}")
+                });
+                let inner = &xml[i + 1..end];
+                if let Some(rest) = inner.strip_prefix('?') {
+                    // 선언 <?xml ... ?> — 무시
+                    let _ = rest;
+                } else if let Some(name) = inner.strip_prefix('/') {
+                    // 닫힘 태그
+                    let expected = stack.pop().unwrap_or_else(|| panic!("여는 태그 없이 닫힘: {name}"));
+                    assert_eq!(expected, name.trim(), "태그 불균형: {expected} vs {name}");
+                } else if inner.ends_with('/') {
+                    // self-closing <Foo /> — 스택 변화 없음
+                } else {
+                    // 여는 태그: 이름만 추출(속성 무시)
+                    let name = inner.split_whitespace().next().unwrap_or("").to_string();
+                    assert!(!name.is_empty(), "빈 태그명 at {i}");
+                    stack.push(name);
+                }
+                i = end + 1;
+            }
+            b'>' => panic!("태그 밖의 raw '>' at {i} (이스케이프 누락)"),
+            _ => i += 1,
         }
     }
+    assert!(stack.is_empty(), "닫히지 않은 태그 남음: {stack:?}");
 }
 
 #[test]

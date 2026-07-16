@@ -25,7 +25,7 @@ tokio = { version = "=1.52.3", features = ["rt-multi-thread", "process", "io-uti
 tokio-util = { version = "=0.7.18", features = ["io", "io-util"] }
 futures = "=0.3.31"
 tempfile = "=3.14.0"
-tar = "=0.4.43"
+tar = "=0.4.45"
 fs2 = "=0.4.3"
 
 # --- 매니페스트 서명/직렬화 ---

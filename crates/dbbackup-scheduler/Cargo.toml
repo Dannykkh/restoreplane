@@ -25,5 +25,4 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 windows = { version = "0.58", features = ["Win32_System_EventLog", "Win32_Foundation", "Win32_Security"] }
 
 [dev-dependencies]
-quick-xml = "0.36"
 tempfile = "3"

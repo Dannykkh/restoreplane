@@ -1,0 +1,104 @@
+/* DB 등록 화면 — 중간 밀도. 좌: 등록 목록 / 우: 추가 폼(넓은 화면), 좁으면 세로. */
+
+.db-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--gutter);
+}
+@media (min-width: 900px) {
+  .db-layout {
+    grid-template-columns: 1.15fr 1fr;
+    align-items: start;
+  }
+}
+
+.db-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.db-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.db-row .db-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--primary);
+}
+.db-row .db-main {
+  flex: 1;
+  min-width: 0;
+}
+.db-alias {
+  font-weight: 600;
+  font-size: var(--fs-body);
+}
+.db-sub {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-sm);
+  color: var(--text-muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.empty-note {
+  padding: var(--sp-6);
+  text-align: center;
+  color: var(--text-faint);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+}
+.form-grid .col-span {
+  grid-column: 1 / -1;
+}
+.form-flash {
+  padding: 10px var(--sp-4);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-body-sm);
+  margin-bottom: var(--sp-4);
+}
+.form-flash.ok {
+  background: color-mix(in oklch, var(--success) 15%, transparent);
+  color: var(--success);
+}
+.form-flash.err {
+  background: color-mix(in oklch, var(--danger) 15%, transparent);
+  color: var(--danger);
+}
+.form-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: var(--sp-4) 0;
+}
+.check-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: var(--fs-body-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.check-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}

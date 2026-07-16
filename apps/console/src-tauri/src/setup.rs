@@ -73,6 +73,7 @@ mod tests {
 
     #[test]
     fn init_creates_keystore_then_refuses_overwrite() {
+        let _env = crate::paths::env_guard();
         let dir = std::env::temp_dir().join(format!("dbconsole-init-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let cfg = dir.join("dbbackup.toml");

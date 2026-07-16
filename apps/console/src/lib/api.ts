@@ -51,6 +51,52 @@ export async function initKeystore(masterPassword: string): Promise<InitResult> 
   };
 }
 
+// --- DB 등록 ---
+export interface DbSummary {
+  alias: string;
+  engine: string;
+  host: string;
+  port: number;
+  dbname: string;
+  user: string;
+  hasTunnel: boolean;
+}
+export interface NewDatabase {
+  alias: string;
+  engine: string;
+  host: string;
+  port: number;
+  dbname: string;
+  user: string;
+  password: string;
+  dumpGlobals: boolean;
+}
+
+const MOCK_DBS: DbSummary[] = [
+  { alias: "prod-main", engine: "postgresql", host: "10.0.0.5", port: 5432, dbname: "app", user: "backup", hasTunnel: true },
+  { alias: "billing-mysql", engine: "mysql", host: "10.0.0.9", port: 3306, dbname: "billing", user: "svc_backup", hasTunnel: false },
+];
+
+export async function listDatabases(): Promise<DbSummary[]> {
+  if (inTauri()) return tauriInvoke<DbSummary[]>("list_databases");
+  return MOCK_DBS;
+}
+
+export async function addDatabase(masterPassword: string, db: NewDatabase): Promise<void> {
+  if (inTauri()) return tauriInvoke<void>("add_database", { masterPassword, db });
+  if (masterPassword.trim().length < 8) throw new Error("마스터 비밀번호가 올바르지 않습니다.");
+  if (MOCK_DBS.some((d) => d.alias === db.alias)) throw new Error(`이미 존재하는 alias입니다: ${db.alias}`);
+  MOCK_DBS.push({
+    alias: db.alias,
+    engine: db.engine,
+    host: db.host,
+    port: db.port,
+    dbname: db.dbname,
+    user: db.user,
+    hasTunnel: false,
+  });
+}
+
 // --- 브라우저 디자인 검증용 목 데이터 (Tauri 밖에서만 사용) ---
 const MOCK_DASHBOARD: DashboardData = {
   configPresent: true,

@@ -7,7 +7,10 @@
 
 use std::path::{Path, PathBuf};
 
-use dbbackup_catalog::{LocalManifestSource, PinnedKeyVerifier};
+use dbbackup_catalog::{
+    latest_backup_per_job, open_reader_conn, upsert_backup_from_manifest, CatalogWriterHandle,
+    LocalManifestSource, PinnedKeyVerifier,
+};
 use dbbackup_core::Engine;
 use dbbackup_pipeline::{
     run_artifact, write_signed_manifest_with_wrapset, BackupSource, Manifest, PipelineCfg,
@@ -39,6 +42,17 @@ fn init_keystore(dir: &Path) -> (Keystore, Zeroizing<String>) {
 
 /// run: StubSource 백업 1건을 봉투 경로로 산출한다. 매니페스트 키를 반환.
 async fn take_backup(keystore: &Keystore, spool_dir: &Path, payload: &[u8]) -> String {
+    take_backup_with_manifest(keystore, spool_dir, payload)
+        .await
+        .0
+}
+
+/// take_backup과 같은 경로지만 카탈로그 반영 검증을 위해 Manifest도 함께 돌려준다.
+async fn take_backup_with_manifest(
+    keystore: &Keystore,
+    spool_dir: &Path,
+    payload: &[u8],
+) -> (String, Manifest) {
     // KEK unlock(비번) → 지속 서명키 복구.
     let kek = keystore
         .unlock_kek(&Credential::Password(Zeroizing::new(TEST_PW.to_string())))
@@ -60,10 +74,14 @@ async fn take_backup(keystore: &Keystore, spool_dir: &Path, payload: &[u8]) -> S
         .expect("파이프라인 성공");
 
     let manifest = Manifest::from_commit(&part, Engine::Postgresql, &commit, 1);
+    let returned = manifest.clone();
     let (mpath, _signed) =
         write_signed_manifest_with_wrapset(&commit.spool_path, manifest, wrap_set, &signing_key)
             .expect("서명 매니페스트");
-    mpath.file_name().unwrap().to_string_lossy().into_owned()
+    (
+        mpath.file_name().unwrap().to_string_lossy().into_owned(),
+        returned,
+    )
 }
 
 /// verify 경로: 게이트 통과 → 자격증명으로 DEK 복구 → Verifier L1.
@@ -212,4 +230,40 @@ async fn restore_decrypt_only_reproduces_bytes() {
 
     let restored = std::fs::read(&out_path).unwrap();
     assert_eq!(restored, payload, "복호 산출물이 원본 평문을 재현해야 함");
+}
+
+/// 폐곡선: run이 산출한 매니페스트가 카탈로그 캐시에 반영되고, GUI 대시보드가 읽는
+/// 바로 그 질의(latest_backup_per_job)로 조회된다. run.rs의 팬아웃 후 upsert 배선과 같은 경로.
+#[tokio::test]
+async fn run_upserts_catalog_for_dashboard() {
+    let dir = tempfile::tempdir().unwrap();
+    let spool_dir = dir.path().join("spool");
+    std::fs::create_dir_all(&spool_dir).unwrap();
+    let (keystore, _recovery) = init_keystore(dir.path());
+
+    let (_key, manifest) =
+        take_backup_with_manifest(&keystore, &spool_dir, &deterministic_payload(4096)).await;
+
+    // run.rs가 커밋된 목적지마다 수행하는 것과 동일한 반영.
+    let db_path = spool_dir.join("catalog.db");
+    let writer = CatalogWriterHandle::spawn(db_path.clone()).expect("catalog writer");
+    upsert_backup_from_manifest(
+        &writer,
+        manifest,
+        "local-a".to_string(),
+        "local".to_string(),
+    )
+    .expect("카탈로그 upsert");
+
+    // 대시보드가 읽는 그 질의.
+    let conn = open_reader_conn(&db_path).expect("reader conn");
+    let rows = latest_backup_per_job(&conn).expect("대시보드 질의");
+    assert_eq!(rows.len(), 1, "잡 1건이 조회돼야 함");
+    assert_eq!(rows[0].job, "job-a");
+    assert_eq!(rows[0].status, "success");
+    assert!(
+        rows[0].manifest_signed,
+        "서명 매니페스트에서 온 행이어야 함"
+    );
+    assert!(rows[0].plaintext_bytes.unwrap_or(0) > 0);
 }

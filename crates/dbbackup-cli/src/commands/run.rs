@@ -17,6 +17,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use dbbackup_catalog::{upsert_backup_from_manifest, CatalogWriterHandle};
 use dbbackup_config::Config;
 use dbbackup_core::{ChecksumAlgo, DestKind, Engine, ImmutabilityCapability, ObjectLockMode};
 use dbbackup_dest_s3::{S3Cfg, S3Dest, S3Provider};
@@ -87,15 +88,38 @@ pub fn run(config_path: &Path, args: RunArgs) -> anyhow::Result<()> {
     // config 필드 복호 어댑터 — KEK로 직접 파생한다(GUI가 등록 시 쓴 것과 동일한 세대).
     let field_enc = DekEncryptor::new(kek.clone(), FIELD_WRAP_GEN);
 
+    // 카탈로그 싱글 라이터 — GUI 대시보드가 읽는 것과 같은 경로(spool_dir/catalog.db).
+    std::fs::create_dir_all(&config.policy.spool_dir)?;
+    let catalog = CatalogWriterHandle::spawn(config.policy.spool_dir.join("catalog.db"))?;
+
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
     rt.block_on(async move {
         for job in &jobs {
-            execute_job(&config, job, &keystore, &kek, &signing_key, &field_enc).await?;
+            execute_job(
+                &config,
+                job,
+                &keystore,
+                &kek,
+                &signing_key,
+                &field_enc,
+                &catalog,
+            )
+            .await?;
         }
         Ok::<_, anyhow::Error>(())
     })
+}
+
+/// 카탈로그 artifacts.dest_kind 문자열(스키마 어휘와 동일해야 rebuild 결과와 겹쳐 쓸 수 있다).
+fn dest_kind_str(map: &std::collections::HashMap<String, DestKind>, name: &str) -> &'static str {
+    match map.get(name) {
+        Some(DestKind::Local) => "local",
+        Some(DestKind::S3) => "s3",
+        Some(DestKind::Ssh) => "ssh",
+        None => "unknown",
+    }
 }
 
 /// config의 EncField를 복호해 평문 시크릿을 얻는다. env가 설정돼 있으면 그것을 우선한다(운영 우회).
@@ -126,6 +150,7 @@ async fn execute_job(
     kek: &Dek,
     signing_key: &SigningKey,
     field_enc: &DekEncryptor,
+    catalog: &CatalogWriterHandle,
 ) -> anyhow::Result<()> {
     // 1) 소스 DB 해석.
     let db = config
@@ -163,6 +188,13 @@ async fn execute_job(
     if dests.is_empty() {
         anyhow::bail!("job '{}'에 배선 가능한 목적지가 없음", job.name);
     }
+
+    // 2a) 카탈로그 artifacts.dest_kind 기록용 이름→종류 맵(config 정의가 정본).
+    let kind_by_name: std::collections::HashMap<String, DestKind> = config
+        .destinations
+        .iter()
+        .map(|d| (d.name.clone(), d.kind))
+        .collect();
 
     // 2b) Job 불변성 assert(P1-2/R12): required_immutability를 목적지 능력에 대해 검증. 미충족이면
     // 팬아웃 전에 **요란히 실패**한다(Local/SSH만으로 ObjectLock을 요구하는 오인 구성을 배선 시점에 차단).
@@ -272,6 +304,7 @@ async fn execute_job(
         let commit = run_artifact(artifact, spool_path, dek, &cfg).await?;
 
         let manifest = Manifest::from_commit(part, db.engine, &commit, 1);
+        let manifest_for_catalog = manifest.clone();
         let (manifest_path, _signed) = write_signed_manifest_with_wrapset(
             &commit.spool_path,
             manifest,
@@ -281,6 +314,24 @@ async fn execute_job(
 
         let outcomes = fan_out(&commit, dests.clone(), &cfg).await;
         let ok = outcomes.iter().filter(|o| o.result.is_ok()).count();
+
+        // 커밋된 목적지만 카탈로그 캐시에 반영한다(대시보드/조회용). 카탈로그는 **캐시일 뿐**이라
+        // 여기서 실패해도 백업 자체는 성공으로 둔다 — 매니페스트가 정본이고 rebuild로 복구된다.
+        for outcome in outcomes.iter().filter(|o| o.result.is_ok()) {
+            let kind = dest_kind_str(&kind_by_name, &outcome.dest_name);
+            if let Err(e) = upsert_backup_from_manifest(
+                catalog,
+                manifest_for_catalog.clone(),
+                outcome.dest_name.clone(),
+                kind.to_string(),
+            ) {
+                tracing::warn!(
+                    dest = %outcome.dest_name,
+                    error = %e,
+                    "카탈로그 캐시 반영 실패(백업은 성공 — `dbbackup catalog rebuild`로 복구 가능)"
+                );
+            }
+        }
         println!(
             "job '{}' part {}: 스풀={} 매니페스트={} 목적지 {}/{} 성공",
             job.name,

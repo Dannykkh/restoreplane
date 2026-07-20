@@ -7,8 +7,12 @@
 //! - 백업마다 per-backup DEK를 발급 → KEK로 감싼 WrapSet을 매니페스트에 동봉 → 지속 서명키로 서명.
 //! - payload 암호화는 그 per-backup DEK로 수행(파이프라인 인코딩 체인).
 //!
-//! 편차/한계(슬라이스 1):
-//! - DB 접속 비밀번호는 PGPASSWORD 환경변수로 받는다(EncField 시크릿 unwrap 전체 플로우는 후속 슬라이스).
+//! config 시크릿(EncField) 복호:
+//! - KEK unlock 직후 `DekEncryptor(KEK, FIELD_WRAP_GEN)`를 만들어 config의 `enc:<gen>:<b64>` 필드
+//!   (DB 비밀번호 / S3 access key)를 메모리에서만 복호한다. 평문은 Zeroizing으로 들고 다닌다.
+//! - 환경변수(PGPASSWORD/MYSQL_PWD/AWS_*)가 **설정돼 있으면 그쪽이 우선**한다 — 운영 임시 우회 및
+//!   기존 배선 하위호환. 설정되지 않았으면 config EncField를 복호하고, 복호 실패는 **요란히 실패**한다
+//!   (잘못된 키스토어/세대를 조용히 env로 폴백해 감추지 않는다).
 
 use std::path::Path;
 use std::sync::Arc;
@@ -22,7 +26,7 @@ use dbbackup_pipeline::{
     BackupSource, Destination, DumpPlanPart, ImmutabilityKind, LocalDest, Manifest, PipelineCfg,
     RequiredImmutability,
 };
-use dbbackup_secrets::{Dek, Keystore};
+use dbbackup_secrets::{Dek, DekEncryptor, Keystore};
 use dbbackup_source_mysql::{
     binary::MysqldumpBinaryMatrix, dump::MySqlConnCfg, meta::MysqlCliMetaConn, MySqlSource,
 };
@@ -32,6 +36,10 @@ use zeroize::Zeroizing;
 
 use crate::cli::RunArgs;
 use crate::commands::keystore_util;
+
+/// config 필드 암호화 세대. GUI(apps/console config_edit)가 쓰는 값과 같아야 한다 —
+/// 달라지면 rotate-key 대상 식별이 어긋난다(core::EncField P2-1).
+pub const FIELD_WRAP_GEN: u32 = 1;
 
 pub fn run(config_path: &Path, args: RunArgs) -> anyhow::Result<()> {
     let config = Config::load(config_path)?;
@@ -76,14 +84,38 @@ pub fn run(config_path: &Path, args: RunArgs) -> anyhow::Result<()> {
         .signing_key(&kek)
         .map_err(|e| anyhow::anyhow!("서명키 복구 실패: {e}"))?;
 
+    // config 필드 복호 어댑터 — KEK로 직접 파생한다(GUI가 등록 시 쓴 것과 동일한 세대).
+    let field_enc = DekEncryptor::new(kek.clone(), FIELD_WRAP_GEN);
+
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
     rt.block_on(async move {
         for job in &jobs {
-            execute_job(&config, job, &keystore, &kek, &signing_key).await?;
+            execute_job(&config, job, &keystore, &kek, &signing_key, &field_enc).await?;
         }
         Ok::<_, anyhow::Error>(())
+    })
+}
+
+/// config의 EncField를 복호해 평문 시크릿을 얻는다. env가 설정돼 있으면 그것을 우선한다(운영 우회).
+/// 둘 다 없거나 복호가 실패하면 요란히 실패한다 — 조용한 폴백은 잘못된 키를 감춘다.
+fn resolve_secret(
+    field_enc: &DekEncryptor,
+    field: Option<&dbbackup_core::EncField>,
+    env_key: &str,
+    what: &str,
+) -> anyhow::Result<Zeroizing<String>> {
+    if let Ok(v) = std::env::var(env_key) {
+        return Ok(Zeroizing::new(v));
+    }
+    let field = field.ok_or_else(|| {
+        anyhow::anyhow!(
+            "{what}: config에 암호화된 값이 없고 {env_key} 환경변수도 설정되지 않았습니다"
+        )
+    })?;
+    field_enc.unwrap_field(field).map_err(|e| {
+        anyhow::anyhow!("{what}: config 시크릿 복호 실패(키스토어/wrap 세대 불일치 가능): {e}")
     })
 }
 
@@ -93,6 +125,7 @@ async fn execute_job(
     keystore: &Keystore,
     kek: &Dek,
     signing_key: &SigningKey,
+    field_enc: &DekEncryptor,
 ) -> anyhow::Result<()> {
     // 1) 소스 DB 해석.
     let db = config
@@ -120,7 +153,7 @@ async fn execute_job(
                 dests.push(Arc::new(LocalDest::new(dest.name.clone(), path)));
             }
             DestKind::S3 => {
-                dests.push(build_s3_dest(dest).await?);
+                dests.push(build_s3_dest(dest, field_enc).await?);
             }
             DestKind::Ssh => {
                 dests.push(build_ssh_dest(dest)?);
@@ -158,17 +191,21 @@ async fn execute_job(
         cfg.fatal_patterns.extend(MySqlSource::fatal_patterns());
     }
 
-    // 4) 엔진별 BackupSource 구성. 비밀번호는 엔진 관례 env로 받는다(슬라이스 한계 — 위 주석 참조).
+    // 4) 엔진별 BackupSource 구성. 비밀번호는 config EncField를 복호해 쓰고, 엔진 관례 env가
+    //    설정돼 있으면 그쪽이 우선한다(resolve_secret 주석 참조).
     let source: Box<dyn BackupSource> = match db.engine {
         Engine::Postgresql => {
-            let password = std::env::var("PGPASSWORD").map_err(|_| {
-                anyhow::anyhow!("postgresql run은 DB 비밀번호를 PGPASSWORD 환경변수로 요구합니다")
-            })?;
+            let password = resolve_secret(
+                field_enc,
+                Some(&db.password),
+                "PGPASSWORD",
+                &format!("database '{}' 비밀번호", db.alias),
+            )?;
             let conn = PgConnCfg {
                 host: db.host.clone(),
                 port: db.port,
                 user: db.user.clone(),
-                password: Zeroizing::new(password),
+                password,
                 admin_database: "postgres".to_string(),
             };
             let matrix = BundledToolMatrix::from_base_dir(Path::new("tools/pg"));
@@ -182,15 +219,18 @@ async fn execute_job(
             })
         }
         Engine::Mysql | Engine::Mariadb => {
-            // 비밀번호는 MYSQL_PWD env로만 흐른다(R10 — argv 평문 노출 금지).
-            let password = std::env::var("MYSQL_PWD").map_err(|_| {
-                anyhow::anyhow!("mysql/mariadb run은 DB 비밀번호를 MYSQL_PWD 환경변수로 요구합니다")
-            })?;
+            // 자식 프로세스로는 MYSQL_PWD env로만 흐른다(R10 — argv 평문 노출 금지).
+            let password = resolve_secret(
+                field_enc,
+                Some(&db.password),
+                "MYSQL_PWD",
+                &format!("database '{}' 비밀번호", db.alias),
+            )?;
             let conn = MySqlConnCfg {
                 host: db.host.clone(),
                 port: db.port,
                 user: db.user.clone(),
-                password: Zeroizing::new(password.clone()),
+                password: password.clone(),
                 database: db.dbname.clone(),
             };
             // 메타 조회 seam: `mysql` CLI(PATH). sqlx 미도입 편차 — meta.rs 주석 참조.
@@ -199,7 +239,7 @@ async fn execute_job(
                 host: db.host.clone(),
                 port: db.port,
                 user: db.user.clone(),
-                password: Zeroizing::new(password),
+                password,
             };
             let matrix = MysqldumpBinaryMatrix::from_base_dir(Path::new("tools/mysql"));
             Box::new(MySqlSource::new(
@@ -268,22 +308,27 @@ fn map_required_immutability(cap: ImmutabilityCapability) -> RequiredImmutabilit
     }
 }
 
-/// S3 목적지 배선. 자격증명은 (기존 DB 비번 편차와 동일하게) 환경변수로 받는다 —
-/// AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY. config EncField unwrap 전체 플로우는 후속 슬라이스.
+/// S3 목적지 배선. append-only writer 자격증명은 config EncField를 복호해 쓰고,
+/// AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY env가 설정돼 있으면 그쪽이 우선한다.
 /// 배선 직후 **매 run 자가테스트**(deny-check + 락 상태 단언)를 수행하고, 실패(과권한/미잠금/전송오류)면
 /// 백업을 시작하지 않는다(S06 불변식 (a) — 자가테스트 Ok일 때만 run 진행).
 async fn build_s3_dest(
     dest: &dbbackup_config::schema::Destination,
+    field_enc: &DekEncryptor,
 ) -> anyhow::Result<Arc<dyn Destination>> {
     let name = dest.name.clone();
-    let access_key_id = std::env::var("AWS_ACCESS_KEY_ID").map_err(|_| {
-        anyhow::anyhow!(
-            "s3 목적지 '{name}'는 AWS_ACCESS_KEY_ID 환경변수(append-only writer 신원)를 요구합니다"
-        )
-    })?;
-    let secret_access_key = std::env::var("AWS_SECRET_ACCESS_KEY").map_err(|_| {
-        anyhow::anyhow!("s3 목적지 '{name}'는 AWS_SECRET_ACCESS_KEY 환경변수를 요구합니다")
-    })?;
+    let access_key_id = resolve_secret(
+        field_enc,
+        dest.access_key_id.as_ref(),
+        "AWS_ACCESS_KEY_ID",
+        &format!("s3 목적지 '{name}' access key id(append-only writer 신원)"),
+    )?;
+    let secret_access_key = resolve_secret(
+        field_enc,
+        dest.secret_access_key.as_ref(),
+        "AWS_SECRET_ACCESS_KEY",
+        &format!("s3 목적지 '{name}' secret access key"),
+    )?;
 
     let (object_lock_mode, retention_days) = match &dest.object_lock {
         Some(cfg) => (map_object_lock_mode(cfg.mode), cfg.retention_days),
@@ -305,8 +350,8 @@ async fn build_s3_dest(
             .clone()
             .ok_or_else(|| anyhow::anyhow!("s3 목적지 '{name}'에 bucket이 없음"))?,
         prefix: dest.prefix.clone(),
-        access_key_id,
-        secret_access_key,
+        access_key_id: access_key_id.to_string(),
+        secret_access_key: secret_access_key.to_string(),
         object_lock_mode,
         retention_days,
         // config에 per-dest dwell이 없어 0으로 둔다(가드 통과). dwell 검증은 자가테스트 경고로도 노출.
@@ -387,4 +432,68 @@ fn build_ssh_dest(
     // 외부 보장될 때만 true로 올려야 하며, 그 전까지 ObjectLock 요구 Job은 이 목적지에서 실패한다(R9).
     let ssh = SshDest::new(name, host, port, user, policy, auth, remote_dir, false);
     Ok(Arc::new(ssh))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dbbackup_core::SecretEncryptor;
+    use dbbackup_secrets::Credential;
+
+    /// 폐곡선: GUI/add-db가 KEK로 봉투암호화해 config에 쓴 EncField를,
+    /// run이 키스토어에서 다시 unlock한 KEK로 그대로 복호한다.
+    #[test]
+    fn enc_field_roundtrip_through_keystore() {
+        let dir = tempfile::tempdir().unwrap();
+        let ks_path = dir.path().join("keystore.json");
+        let pw = Zeroizing::new("correct-horse-staple".to_string());
+        let (ks, _recovery) = Keystore::init(&pw, dir.path().join("dpapi.keyfile")).unwrap();
+        ks.save(&ks_path).unwrap();
+
+        // 등록 측(GUI/add-db): KEK unlock → wrap.
+        let write_kek = Keystore::load(&ks_path)
+            .unwrap()
+            .unlock_kek(&Credential::Password(pw.clone()))
+            .unwrap();
+        let field = DekEncryptor::new(write_kek, FIELD_WRAP_GEN)
+            .wrap("s3cr3t-db-pw")
+            .unwrap();
+        assert_eq!(field.wrap_gen, FIELD_WRAP_GEN);
+
+        // 실행 측(run): 별도 로드 → 같은 평문.
+        let run_kek = Keystore::load(&ks_path)
+            .unwrap()
+            .unlock_kek(&Credential::Password(pw))
+            .unwrap();
+        let field_enc = DekEncryptor::new(run_kek, FIELD_WRAP_GEN);
+        let got =
+            resolve_secret(&field_enc, Some(&field), "DBBACKUP_TEST_UNSET_PW", "test").unwrap();
+        assert_eq!(&*got, "s3cr3t-db-pw");
+    }
+
+    /// 잘못된 KEK로는 조용히 통과하지 않는다(폴백 없이 실패해야 함).
+    #[test]
+    fn wrong_kek_fails_loudly() {
+        let field = DekEncryptor::new(Dek::generate(), FIELD_WRAP_GEN)
+            .wrap("pw")
+            .unwrap();
+        let other = DekEncryptor::new(Dek::generate(), FIELD_WRAP_GEN);
+        let err =
+            resolve_secret(&other, Some(&field), "DBBACKUP_TEST_UNSET_PW2", "test").unwrap_err();
+        assert!(err.to_string().contains("복호 실패"), "{err}");
+    }
+
+    /// env가 설정돼 있으면 운영 우회로 그쪽이 우선한다.
+    #[test]
+    fn env_overrides_config_field() {
+        let key = "DBBACKUP_TEST_OVERRIDE_PW";
+        std::env::set_var(key, "from-env");
+        let field = DekEncryptor::new(Dek::generate(), FIELD_WRAP_GEN)
+            .wrap("from-config")
+            .unwrap();
+        let other = DekEncryptor::new(Dek::generate(), FIELD_WRAP_GEN);
+        let got = resolve_secret(&other, Some(&field), key, "test").unwrap();
+        assert_eq!(&*got, "from-env");
+        std::env::remove_var(key);
+    }
 }

@@ -16,11 +16,11 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 Import-Module (
-    Join-Path (Split-Path -Parent $PSScriptRoot) "installer\DbBackup.Install.Common.psm1"
+    Join-Path (Split-Path -Parent $PSScriptRoot) "installer\RestorePlane.Install.Common.psm1"
 ) -Force
 
-$root = Resolve-DbBackupAbsolutePath -Path $PackageRoot
-$output = Assert-DbBackupChildPath -Root $root -Candidate (
+$root = Resolve-RestorePlaneAbsolutePath -Path $PackageRoot
+$output = Assert-RestorePlaneChildPath -Root $root -Candidate (
     [IO.Path]::GetFullPath($OutputPath)
 )
 $versionValue = $null
@@ -62,15 +62,15 @@ $discovered = @(
         Sort-Object
 )
 if ($Channel -eq "production") {
-    foreach ($requiredBinary in @("dbbackup-service.exe", "dbbackup.exe")) {
+    foreach ($requiredBinary in @("restoreplane-service.exe", "restoreplane.exe")) {
         if ($requiredBinary -notin $discovered) {
             throw "PACKAGE_MANIFEST_FILE_MISSING"
         }
     }
     if (@($discovered | Where-Object {
                 $_ -notin @(
-                    "dbbackup-service.exe",
-                    "dbbackup.exe",
+                    "restoreplane-service.exe",
+                    "restoreplane.exe",
                     "provider-certifications.json"
                 ) -and
                 -not $_.StartsWith("tools/", [StringComparison]::Ordinal)
@@ -145,7 +145,7 @@ $entries = foreach ($relative in $discovered) {
         -not $seen.Add($relative.Replace("\", "/"))) {
         throw "PACKAGE_MANIFEST_FILE_INVALID"
     }
-    $path = Assert-DbBackupChildPath -Root $root -Candidate (
+    $path = Assert-RestorePlaneChildPath -Root $root -Candidate (
         Join-Path $root $relative
     )
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
@@ -208,5 +208,5 @@ $manifest = [ordered] @{
 if ($null -ne $nativeTools) {
     $manifest.nativeTools = $nativeTools
 }
-Write-DbBackupJsonAtomic -Path $output -Value $manifest
+Write-RestorePlaneJsonAtomic -Path $output -Value $manifest
 $manifest | ConvertTo-Json -Depth 16

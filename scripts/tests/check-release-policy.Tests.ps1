@@ -62,7 +62,7 @@ foreach ($requiredFailClosedCheck in @(
         'Prepare protected release staging',
         'Seal downloaded release staging',
         'SetAccessRuleProtection($true, $false)',
-        'Assert-DbBackupProtectedAcl',
+        'Assert-RestorePlaneProtectedAcl',
         '-ExecutionPolicy AllSigned',
         'Set-AuthenticodeSignature',
         '$deploymentFiles',
@@ -80,14 +80,14 @@ foreach ($requiredFailClosedCheck in @(
         '$metadata.serviceBinarySha256',
         '$metadata.cliBinarySha256',
         '$metadata.artifactId',
-        'dbbackup-exact-artifact-v1',
+        'restoreplane-exact-artifact-v1',
         'artifact-functional-qualification:',
-        'dbbackup-managed-artifact',
+        'restoreplane-managed-artifact',
         '.\scripts\test-signed-artifact-functional.ps1',
         'artifact-functional-${{ github.run_id }}',
         '-ArtifactFunctionalEvidencePath',
         'promotion-reevaluation-${{ github.run_id }}',
-        'dbbackup-signed-candidate-${{ github.run_id }}',
+        'restoreplane-signed-candidate-${{ github.run_id }}',
         'publish-signed-package:',
         'needs: [signed-package, final-release-reevaluation]'
     )) {
@@ -108,15 +108,15 @@ if ("sourceTreeDigest" -notin @($packageSchema.required) -or
 foreach ($schemaContract in @(
         @(
             "release\signing-metadata.schema.json",
-            "DbBackup production signing metadata"
+            "RestorePlane production signing metadata"
         ),
         @(
             "release\release-fixture-evidence.schema.json",
-            "DbBackup pristine signed lifecycle fixture evidence"
+            "RestorePlane pristine signed lifecycle fixture evidence"
         ),
         @(
             "release\artifact-functional-evidence.schema.json",
-            "DbBackup exact signed artifact functional qualification evidence"
+            "RestorePlane exact signed artifact functional qualification evidence"
         )
     )) {
     $schemaPath = Join-Path $root $schemaContract[0]
@@ -166,7 +166,7 @@ foreach ($requiredNativeToolGate in @(
 }
 
 $temporary = Join-Path ([IO.Path]::GetTempPath()) (
-    "dbbackup-release-policy-" + [Guid]::NewGuid().ToString("N")
+    "restoreplane-release-policy-" + [Guid]::NewGuid().ToString("N")
 )
 New-Item -ItemType Directory -Path $temporary -Force | Out-Null
 try {
@@ -212,8 +212,8 @@ try {
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination $destination
     }
     Copy-Item `
-        -LiteralPath (Join-Path $root "installer\DbBackup.Install.Common.psm1") `
-        -Destination (Join-Path $temporary "installer\DbBackup.Install.Common.psm1")
+        -LiteralPath (Join-Path $root "installer\RestorePlane.Install.Common.psm1") `
+        -Destination (Join-Path $temporary "installer\RestorePlane.Install.Common.psm1")
     $fixtureWorkflow = @"
 name: fixture
 on: workflow_dispatch
@@ -227,7 +227,7 @@ jobs:
           # Prepare protected release staging
           # Seal downloaded release staging
           `$acl.SetAccessRuleProtection(`$true, `$false)
-          Assert-DbBackupProtectedAcl
+          Assert-RestorePlaneProtectedAcl
           '-ExecutionPolicy AllSigned' | Out-Null
           `$deploymentFiles = @('fixture.ps1')
           Set-AuthenticodeSignature -LiteralPath `$deploymentFiles[0]
@@ -252,18 +252,18 @@ jobs:
           `$metadata.serviceBinarySha256 | Out-Null
           `$metadata.cliBinarySha256 | Out-Null
           `$metadata.artifactId | Out-Null
-          'dbbackup-exact-artifact-v1' | Out-Null
+          'restoreplane-exact-artifact-v1' | Out-Null
           '.\scripts\new-provider-certifications.ps1' | Out-Null
           'provider-certifications.json' | Out-Null
           'promotion-reevaluation-`${{ github.run_id }}' | Out-Null
-          'dbbackup-signed-candidate-`${{ github.run_id }}' | Out-Null
+          'restoreplane-signed-candidate-`${{ github.run_id }}' | Out-Null
   artifact-functional-qualification:
     needs: signed-package
-    runs-on: [self-hosted, windows, x64, dbbackup-managed-artifact, ephemeral]
+    runs-on: [self-hosted, windows, x64, restoreplane-managed-artifact, ephemeral]
     steps:
       - shell: powershell
         run: |
-          `$env:DBBACKUP_ARTIFACT_RUNNER_EPHEMERAL | Out-Null
+          `$env:RESTOREPLANE_ARTIFACT_RUNNER_EPHEMERAL | Out-Null
           .\scripts\test-signed-artifact-functional.ps1
       - shell: powershell
         run: 'artifact-functional-`${{ github.run_id }}' | Out-Null
@@ -282,7 +282,7 @@ jobs:
     & git -C $temporary config core.autocrlf false
     & git -C $temporary add .
     & git -C $temporary `
-        -c user.name=DbBackupFixture `
+        -c user.name=RestorePlaneFixture `
         -c user.email=fixture@invalid.example `
         commit --quiet -m fixture
     if ($LASTEXITCODE -ne 0) {

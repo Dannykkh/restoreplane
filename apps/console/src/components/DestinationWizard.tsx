@@ -242,7 +242,7 @@ export function DestinationWizard({
                 name="localPath"
                 value={form.localPath}
                 onChange={(event) => update("localPath", event.target.value)}
-                placeholder="D:\DbBackup\vault"
+                placeholder="D:\RestorePlane\vault"
                 autoComplete="off"
                 aria-describedby="destination-local-path-help"
               />
@@ -431,7 +431,7 @@ export function DestinationWizard({
                     name="sshPath"
                     value={form.sshPath}
                     onChange={(event) => update("sshPath", event.target.value)}
-                    placeholder="/srv/dbbackup"
+                    placeholder="/srv/restoreplane"
                     autoComplete="off"
                   />
                 </label>

@@ -1100,414 +1100,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8566979429cf69b49a5c740c60791108e86440e8be149bbea4fe54d2c32d6e2"
 
 [[package]]
-name = "dbbackup-application"
-version = "0.1.0-rc.1"
-dependencies = [
- "blake3",
- "chrono",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "dbbackup-catalog"
-version = "0.1.0-rc.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "blake3",
- "chrono",
- "chrono-tz",
- "crossbeam-channel",
- "dbbackup-config",
- "dbbackup-core",
- "dbbackup-domain",
- "dbbackup-pipeline",
- "dbbackup-secrets",
- "ed25519-dalek 2.2.0",
- "named-lock",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "dbbackup-cli"
-version = "0.1.0-rc.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "clap",
- "dbbackup-application",
- "dbbackup-catalog",
- "dbbackup-config",
- "dbbackup-core",
- "dbbackup-dest-s3",
- "dbbackup-dest-ssh",
- "dbbackup-domain",
- "dbbackup-ipc-client",
- "dbbackup-pipeline",
- "dbbackup-scheduler",
- "dbbackup-secrets",
- "dbbackup-service",
- "dbbackup-source-mysql",
- "dbbackup-source-pg",
- "dbbackup-verify",
- "ed25519-dalek 2.2.0",
- "rpassword",
- "serde_json",
- "tempfile",
- "time",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "windows-service",
- "zeroize",
-]
-
-[[package]]
-name = "dbbackup-config"
-version = "0.1.0-rc.1"
-dependencies = [
- "blake3",
- "dbbackup-core",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "toml 0.9.12+spec-1.1.0",
-]
-
-[[package]]
-name = "dbbackup-console"
-version = "0.1.0-rc.1"
-dependencies = [
- "dbbackup-application",
- "dbbackup-ipc-client",
- "serde_json",
- "tauri",
- "tauri-build",
-]
-
-[[package]]
-name = "dbbackup-core"
-version = "0.1.0-rc.1"
-dependencies = [
- "base64 0.22.1",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "uuid",
-]
-
-[[package]]
-name = "dbbackup-dest-s3"
-version = "0.1.0-rc.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "blake3",
- "bytes",
- "dbbackup-catalog",
- "dbbackup-core",
- "dbbackup-pipeline",
- "hex",
- "hmac 0.12.1",
- "opendal",
- "reqwest 0.12.28",
- "serde_json",
- "sha2 0.10.8",
- "tempfile",
- "thiserror 1.0.69",
- "time",
- "tokio",
- "tracing",
- "uuid",
- "zeroize",
-]
-
-[[package]]
-name = "dbbackup-dest-ssh"
-version = "0.1.0-rc.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "blake3",
- "bytes",
- "dbbackup-catalog",
- "dbbackup-pipeline",
- "russh",
- "russh-sftp",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
- "uuid",
- "zeroize",
-]
-
-[[package]]
-name = "dbbackup-domain"
-version = "0.1.0-rc.1"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "uuid",
-]
-
-[[package]]
-name = "dbbackup-ipc-client"
-version = "0.1.0-rc.1"
-dependencies = [
- "dbbackup-application",
- "dbbackup-catalog",
- "dbbackup-domain",
- "dbbackup-service",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "dbbackup-pipeline"
-version = "0.1.0-rc.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "blake3",
- "chacha20poly1305",
- "data-encoding",
- "dbbackup-core",
- "dbbackup-secrets",
- "ed25519-dalek 2.2.0",
- "fs2",
- "futures",
- "serde",
- "serde_json",
- "tar",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
- "windows 0.58.0",
- "zstd",
-]
-
-[[package]]
-name = "dbbackup-runtime"
-version = "0.1.0-rc.1"
-dependencies = [
- "async-trait",
- "blake3",
- "dbbackup-catalog",
- "dbbackup-core",
- "dbbackup-domain",
- "dbbackup-pipeline",
- "ed25519-dalek 2.2.0",
- "reqwest 0.12.28",
- "serde_json",
- "sha2 0.10.8",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "uuid",
- "windows 0.58.0",
- "zeroize",
-]
-
-[[package]]
-name = "dbbackup-scheduler"
-version = "0.1.0-rc.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "chrono-tz",
- "dbbackup-catalog",
- "dbbackup-config",
- "dbbackup-core",
- "dbbackup-domain",
- "regex",
- "reqwest 0.12.28",
- "serde_json",
- "tempfile",
- "thiserror 1.0.69",
- "time",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "windows 0.58.0",
- "zeroize",
-]
-
-[[package]]
-name = "dbbackup-secrets"
-version = "0.1.0-rc.1"
-dependencies = [
- "argon2 0.5.3",
- "chacha20poly1305",
- "data-encoding",
- "dbbackup-core",
- "ed25519-dalek 2.2.0",
- "hkdf 0.12.4",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "sha2 0.10.8",
- "thiserror 1.0.69",
- "windows-dpapi",
- "zeroize",
-]
-
-[[package]]
-name = "dbbackup-service"
-version = "0.1.0-rc.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.22.1",
- "blake3",
- "dbbackup-application",
- "dbbackup-catalog",
- "dbbackup-config",
- "dbbackup-core",
- "dbbackup-dest-s3",
- "dbbackup-dest-ssh",
- "dbbackup-domain",
- "dbbackup-pipeline",
- "dbbackup-runtime",
- "dbbackup-scheduler",
- "dbbackup-secrets",
- "dbbackup-source-mysql",
- "dbbackup-source-pg",
- "dbbackup-source-sqlite",
- "ed25519-dalek 2.2.0",
- "fs2",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "sha2 0.10.8",
- "subtle",
- "tar",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
- "uuid",
- "windows 0.58.0",
- "windows-service",
- "zeroize",
- "zstd",
-]
-
-[[package]]
-name = "dbbackup-source-mysql"
-version = "0.1.0-rc.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "dbbackup-core",
- "dbbackup-pipeline",
- "dbbackup-runtime",
- "futures",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
- "uuid",
- "zeroize",
-]
-
-[[package]]
-name = "dbbackup-source-pg"
-version = "0.1.0-rc.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "dbbackup-core",
- "dbbackup-pipeline",
- "dbbackup-runtime",
- "futures",
- "native-tls",
- "postgres-native-tls",
- "thiserror 1.0.69",
- "tokio",
- "tokio-postgres",
- "tracing",
- "uuid",
- "zeroize",
-]
-
-[[package]]
-name = "dbbackup-source-sqlite"
-version = "0.1.0-rc.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "blake3",
- "dbbackup-core",
- "dbbackup-pipeline",
- "fs2",
- "futures",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "uuid",
- "windows 0.58.0",
-]
-
-[[package]]
-name = "dbbackup-source-sqlserver"
-version = "0.1.0-rc.1"
-dependencies = [
- "dbbackup-core",
- "serde",
- "tempfile",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "dbbackup-verify"
-version = "0.1.0-rc.1"
-dependencies = [
- "anyhow",
- "blake3",
- "dbbackup-catalog",
- "dbbackup-core",
- "dbbackup-pipeline",
- "dbbackup-secrets",
- "ed25519-dalek 2.2.0",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
- "uuid",
- "zeroize",
- "zstd",
-]
-
-[[package]]
 name = "dbus"
 version = "0.9.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4800,6 +4392,416 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
+]
+
+[[package]]
+name = "restoreplane-application"
+version = "0.1.0-rc.1"
+dependencies = [
+ "blake3",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "restoreplane-catalog"
+version = "0.1.0-rc.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "blake3",
+ "chrono",
+ "chrono-tz",
+ "crossbeam-channel",
+ "ed25519-dalek 2.2.0",
+ "named-lock",
+ "restoreplane-config",
+ "restoreplane-core",
+ "restoreplane-domain",
+ "restoreplane-pipeline",
+ "restoreplane-secrets",
+ "rusqlite",
+ "semver",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "restoreplane-cli"
+version = "0.1.0-rc.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "clap",
+ "ed25519-dalek 2.2.0",
+ "restoreplane-application",
+ "restoreplane-catalog",
+ "restoreplane-config",
+ "restoreplane-core",
+ "restoreplane-dest-s3",
+ "restoreplane-dest-ssh",
+ "restoreplane-domain",
+ "restoreplane-ipc-client",
+ "restoreplane-pipeline",
+ "restoreplane-scheduler",
+ "restoreplane-secrets",
+ "restoreplane-service",
+ "restoreplane-source-mysql",
+ "restoreplane-source-pg",
+ "restoreplane-verify",
+ "rpassword",
+ "serde_json",
+ "tempfile",
+ "time",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "windows-service",
+ "zeroize",
+]
+
+[[package]]
+name = "restoreplane-config"
+version = "0.1.0-rc.1"
+dependencies = [
+ "blake3",
+ "restoreplane-core",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
+name = "restoreplane-console"
+version = "0.1.0-rc.1"
+dependencies = [
+ "restoreplane-application",
+ "restoreplane-ipc-client",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+]
+
+[[package]]
+name = "restoreplane-core"
+version = "0.1.0-rc.1"
+dependencies = [
+ "base64 0.22.1",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
+name = "restoreplane-dest-s3"
+version = "0.1.0-rc.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "blake3",
+ "bytes",
+ "hex",
+ "hmac 0.12.1",
+ "opendal",
+ "reqwest 0.12.28",
+ "restoreplane-catalog",
+ "restoreplane-core",
+ "restoreplane-pipeline",
+ "serde_json",
+ "sha2 0.10.8",
+ "tempfile",
+ "thiserror 1.0.69",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
+name = "restoreplane-dest-ssh"
+version = "0.1.0-rc.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "blake3",
+ "bytes",
+ "restoreplane-catalog",
+ "restoreplane-pipeline",
+ "russh",
+ "russh-sftp",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
+name = "restoreplane-domain"
+version = "0.1.0-rc.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
+name = "restoreplane-ipc-client"
+version = "0.1.0-rc.1"
+dependencies = [
+ "restoreplane-application",
+ "restoreplane-catalog",
+ "restoreplane-domain",
+ "restoreplane-service",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "restoreplane-pipeline"
+version = "0.1.0-rc.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "blake3",
+ "chacha20poly1305",
+ "data-encoding",
+ "ed25519-dalek 2.2.0",
+ "fs2",
+ "futures",
+ "restoreplane-core",
+ "restoreplane-secrets",
+ "serde",
+ "serde_json",
+ "tar",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+ "windows 0.58.0",
+ "zstd",
+]
+
+[[package]]
+name = "restoreplane-runtime"
+version = "0.1.0-rc.1"
+dependencies = [
+ "async-trait",
+ "blake3",
+ "ed25519-dalek 2.2.0",
+ "reqwest 0.12.28",
+ "restoreplane-catalog",
+ "restoreplane-core",
+ "restoreplane-domain",
+ "restoreplane-pipeline",
+ "serde_json",
+ "sha2 0.10.8",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "uuid",
+ "windows 0.58.0",
+ "zeroize",
+]
+
+[[package]]
+name = "restoreplane-scheduler"
+version = "0.1.0-rc.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "chrono-tz",
+ "regex",
+ "reqwest 0.12.28",
+ "restoreplane-catalog",
+ "restoreplane-config",
+ "restoreplane-core",
+ "restoreplane-domain",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "time",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "windows 0.58.0",
+ "zeroize",
+]
+
+[[package]]
+name = "restoreplane-secrets"
+version = "0.1.0-rc.1"
+dependencies = [
+ "argon2 0.5.3",
+ "chacha20poly1305",
+ "data-encoding",
+ "ed25519-dalek 2.2.0",
+ "hkdf 0.12.4",
+ "rand 0.8.5",
+ "restoreplane-core",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "thiserror 1.0.69",
+ "windows-dpapi",
+ "zeroize",
+]
+
+[[package]]
+name = "restoreplane-service"
+version = "0.1.0-rc.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "blake3",
+ "ed25519-dalek 2.2.0",
+ "fs2",
+ "rand 0.8.5",
+ "restoreplane-application",
+ "restoreplane-catalog",
+ "restoreplane-config",
+ "restoreplane-core",
+ "restoreplane-dest-s3",
+ "restoreplane-dest-ssh",
+ "restoreplane-domain",
+ "restoreplane-pipeline",
+ "restoreplane-runtime",
+ "restoreplane-scheduler",
+ "restoreplane-secrets",
+ "restoreplane-source-mysql",
+ "restoreplane-source-pg",
+ "restoreplane-source-sqlite",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "subtle",
+ "tar",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "uuid",
+ "windows 0.58.0",
+ "windows-service",
+ "zeroize",
+ "zstd",
+]
+
+[[package]]
+name = "restoreplane-source-mysql"
+version = "0.1.0-rc.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "futures",
+ "restoreplane-core",
+ "restoreplane-pipeline",
+ "restoreplane-runtime",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
+name = "restoreplane-source-pg"
+version = "0.1.0-rc.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "futures",
+ "native-tls",
+ "postgres-native-tls",
+ "restoreplane-core",
+ "restoreplane-pipeline",
+ "restoreplane-runtime",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-postgres",
+ "tracing",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
+name = "restoreplane-source-sqlite"
+version = "0.1.0-rc.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "blake3",
+ "fs2",
+ "futures",
+ "restoreplane-core",
+ "restoreplane-pipeline",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "uuid",
+ "windows 0.58.0",
+]
+
+[[package]]
+name = "restoreplane-source-sqlserver"
+version = "0.1.0-rc.1"
+dependencies = [
+ "restoreplane-core",
+ "serde",
+ "tempfile",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "restoreplane-verify"
+version = "0.1.0-rc.1"
+dependencies = [
+ "anyhow",
+ "blake3",
+ "ed25519-dalek 2.2.0",
+ "restoreplane-catalog",
+ "restoreplane-core",
+ "restoreplane-pipeline",
+ "restoreplane-secrets",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "uuid",
+ "zeroize",
+ "zstd",
 ]
 
 [[package]]

@@ -33,7 +33,7 @@ destination object key, queue 상태 전이에 동시에 반영되어야 한다.
 
 ### C-01. 단일 실행권자가 아직 아키텍처 결정이 아니다
 
-현재 Tauri는 `apps/console/src-tauri/src/run.rs`에서 `dbbackup.exe`를 직접 `std::process::Command`
+현재 Tauri는 `apps/console/src-tauri/src/run.rs`에서 `restoreplane.exe`를 직접 `std::process::Command`
 로 기동한다. 기존 Scheduler도 job별 CLI 프로세스를 기동한다. v2 명세는 dispatcher만 예약 작업의
 시작 권한을 가진다고 하지만, 데스크톱 종료 후에도 동작하는 Windows service인지, 짧게 기동되는
 singleton daemon인지 확정하지 않았다.
@@ -113,7 +113,7 @@ worker는 계속 원격 목적지에 commit할 수 있다. lease 만료 후 새 
 
 ### C-05. TOML→SQLite 전환의 migration과 rollback이 설계되지 않았다
 
-현재 config migration은 `crates/dbbackup-config/src/migrate.rs`의 scaffold이며 실제 migration은
+현재 config migration은 `crates/restoreplane-config/src/migrate.rs`의 scaffold이며 실제 migration은
 없다. catalog DDL도 `CREATE ... IF NOT EXISTS` 중심이고 operational queue 스키마 버전과 downgrade
 차단 계약은 아직 없다. SQLite 정본 전환은 단순 serialization 변경이 아니다. secret reference,
 연결 ID, scheduler task, 계획 occurrence, destination identity를 동시에 바꾼다.

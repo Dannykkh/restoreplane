@@ -70,7 +70,7 @@ permit이 다시 프로세스별로 갈라진다.
 
 필수 결정:
 
-- v2의 권장 정본은 별도 `dbbackup-service` 프로세스다.
+- v2의 권장 정본은 별도 `restoreplane-service` 프로세스다.
 - Tauri와 CLI는 application command를 operational DB 또는 IPC를 통해 service에 전달한다.
 - service는 OS 단일 인스턴스 lock과 DB owner identity를 모두 확보한 뒤에만 claim한다.
 - Task Scheduler는 service 자동 시작·복구의 보조 수단으로만 사용한다. Windows Service
@@ -436,7 +436,7 @@ Activity 보존과 rebuild가 writer latency를 방해하는 데이터가 확인
 
 ### 1. 실행 소유권과 데이터 소유권 고정
 
-- ADR: `dbbackup-service` 수명주기와 singleton
+- ADR: `restoreplane-service` 수명주기와 singleton
 - ADR: Operational SQLite, Manifest, secret store 진실 범위
 - ADR: at-least-once queue, fencing, commit protocol
 - v2 schema와 migration runner 작성

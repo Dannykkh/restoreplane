@@ -327,7 +327,7 @@ function New-ManagedCommandPlan {
         executable = "cargo"
         arguments = @(
             "test",
-            "-p", "dbbackup-runtime",
+            "-p", "restoreplane-runtime",
             "--test", "restore_worker",
             "live_postgresql_create_new_restore_runs_through_durable_restore_work_and_oracle",
             "--",
@@ -867,7 +867,7 @@ function Get-ExternalRequirements {
                 }
                 if ($null -eq $packageReason) {
                     foreach ($requiredBinary in @(
-                            "dbbackup-service.exe", "dbbackup.exe",
+                            "restoreplane-service.exe", "restoreplane.exe",
                             "provider-certifications.json",
                             "tools/native-tools-audit.json"
                         )) {
@@ -878,8 +878,8 @@ function Get-ExternalRequirements {
                     }
                 }
                 if ($null -eq $packageReason) {
-                    $serviceEntry = $entryByPath["dbbackup-service.exe"]
-                    $cliEntry = $entryByPath["dbbackup.exe"]
+                    $serviceEntry = $entryByPath["restoreplane-service.exe"]
+                    $cliEntry = $entryByPath["restoreplane.exe"]
                     $providerEntry = $entryByPath["provider-certifications.json"]
                     $auditEntry = $entryByPath["tools/native-tools-audit.json"]
                     if ($serviceEntry.authenticodeRequired -ne $true -or
@@ -904,11 +904,11 @@ function Get-ExternalRequirements {
                 if ($null -eq $packageReason) {
                     $manifestSha256 = Get-FileSha256 -Path $manifestFile
                     $serviceBinarySha256 = $actualHashByPath[
-                        "dbbackup-service.exe"
+                        "restoreplane-service.exe"
                     ]
-                    $cliBinarySha256 = $actualHashByPath["dbbackup.exe"]
+                    $cliBinarySha256 = $actualHashByPath["restoreplane.exe"]
                     $artifactId = Get-Sha256Text -Value (
-                        "dbbackup-exact-artifact-v1`n" +
+                        "restoreplane-exact-artifact-v1`n" +
                         "$manifestSha256`n" +
                         "$serviceBinarySha256`n" +
                         "$cliBinarySha256`n"

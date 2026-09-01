@@ -1,8 +1,8 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [string] $InstallRoot = "$env:ProgramFiles\DbBackup",
-    [string] $DataRoot = "$env:ProgramData\DbBackup",
-    [string] $ServiceName = "DbBackupService",
+    [string] $InstallRoot = "$env:ProgramFiles\RestorePlane",
+    [string] $DataRoot = "$env:ProgramData\RestorePlane",
+    [string] $ServiceName = "RestorePlaneService",
     [string] $ExpectedSignerThumbprint,
     [switch] $ValidateOnly
 )
@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-function Assert-DbBackupDeploymentAuthenticode {
+function Assert-RestorePlaneDeploymentAuthenticode {
     param(
         [Parameter(Mandatory = $true)] [string[]] $Paths,
         [Parameter(Mandatory = $true)] [string] $SignerThumbprint
@@ -39,17 +39,17 @@ function Assert-DbBackupDeploymentAuthenticode {
 }
 
 $installerModulePath = Join-Path (Split-Path -Parent $PSScriptRoot) `
-    "installer\DbBackup.Install.Common.psm1"
+    "installer\RestorePlane.Install.Common.psm1"
 if (-not $ValidateOnly) {
-    Assert-DbBackupDeploymentAuthenticode `
+    Assert-RestorePlaneDeploymentAuthenticode `
         -Paths @($PSCommandPath, $installerModulePath) `
         -SignerThumbprint $ExpectedSignerThumbprint
 }
 Import-Module $installerModulePath -Force
 
-$install = Resolve-DbBackupAbsolutePath -Path $InstallRoot -AllowMissing
-$data = Resolve-DbBackupAbsolutePath -Path $DataRoot -AllowMissing
-Assert-DbBackupSeparatedRoots -InstallRoot $install -DataRoot $data
+$install = Resolve-RestorePlaneAbsolutePath -Path $InstallRoot -AllowMissing
+$data = Resolve-RestorePlaneAbsolutePath -Path $DataRoot -AllowMissing
+Assert-RestorePlaneSeparatedRoots -InstallRoot $install -DataRoot $data
 $preserved = @(
     (Join-Path $data "operational-v2.db"),
     (Join-Path $data "control-backups"),
@@ -82,8 +82,8 @@ if ($ValidateOnly) {
     return
 }
 
-Assert-DbBackupAdministrator
-if (-not $PSCmdlet.ShouldProcess($ServiceName, "Stop and unregister DbBackup service")) {
+Assert-RestorePlaneAdministrator
+if (-not $PSCmdlet.ShouldProcess($ServiceName, "Stop and unregister RestorePlane service")) {
     return
 }
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -92,7 +92,7 @@ if ($null -ne $service) {
         Stop-Service -Name $ServiceName -NoWait
         $service.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(180))
     }
-    Invoke-DbBackupNative -FilePath "sc.exe" -Arguments @(
+    Invoke-RestorePlaneNative -FilePath "sc.exe" -Arguments @(
         "delete",
         $ServiceName
     ) | Out-Null

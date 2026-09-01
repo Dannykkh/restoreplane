@@ -7,7 +7,7 @@
 다음은 로컬 + 오프라인에만 존재해야 하며 리포에 절대 올리지 않는다. `.gitignore`가 1차 차단하고,
 CI의 시크릿 스캐너(gitleaks)가 2차 차단한다.
 
-- `dbbackup.toml`, `prune.toml` — 실제 설정(호스트/유저/버킷/스케줄 = 정찰 지도, H3)
+- `restoreplane.toml`, `prune.toml` — 실제 설정(호스트/유저/버킷/스케줄 = 정찰 지도, H3)
 - `keystore.json`, `*.keystore.json` — KEK wrap + 서명 개인키(KEK 래핑됨이라도 미커밋, H4)
 - `dpapi.keyfile`, `*.keyfile`, `*.dek` — DPAPI entropy/키 재료(C1)
 - `*.recovery-code` — 복구 코드(C4: 오프라인 브루트포스 표적)
@@ -29,7 +29,7 @@ CI의 시크릿 스캐너(gitleaks)가 2차 차단한다.
 ## 랜섬웨어 방어 (강제)
 
 - 백업 목적지 자격증명은 **append-only**(PutObject만, Delete*/lifecycle/retention/bypass 명시 Deny).
-  `dbbackup-dest-s3`의 `APPEND_ONLY_IAM_POLICY` 참조.
+  `restoreplane-dest-s3`의 `APPEND_ONLY_IAM_POLICY` 참조.
 - **prune는 백업 호스트에서 실행 금지** — 별도 격리 신원(`prune.toml` 프로파일). 무인 `run`은 이 프로파일을 로드하지 않는다(H1).
 - 매 `run` 시 목적지 자가테스트: Delete/PutLifecycle/PutObjectRetention이 실제로 거부되는지,
   versioning ON + 기본 보존이 걸려있는지 확인. 과권한/미잠금이면 거부/경고(H2).
@@ -55,7 +55,7 @@ CI의 시크릿 스캐너(gitleaks)가 2차 차단한다.
 ### Windows 설치 ACL과 위협 경계
 
 `InstallRoot`의 정본 ACL은 상속을 끊은 allowlist DACL이다. 서로 구분되는 SYSTEM과 설치 시
-확정된 owner SID만 FullControl을 가지며, `NT SERVICE\DbBackupService` SID는 ReadAndExecute만
+확정된 owner SID만 FullControl을 가지며, `NT SERVICE\RestorePlaneService` SID는 ReadAndExecute만
 가진다. install/repair/update는 package copy 전에 root를 먼저 보호하고, 전체 manifest tree와
 `package-manifest.json`을 복사한 뒤 모든 자식의 DACL을 이 값으로 교체한다. service 시작
 직전에는 package hash/file set과 root부터 자식까지의 owner, ACE SID, 권한, 상속 여부를 다시

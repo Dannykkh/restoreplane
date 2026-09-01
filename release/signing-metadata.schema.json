@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dbbackupsystem.local/schemas/signing-metadata-v1.json",
-  "title": "DbBackup production signing metadata",
+  "$id": "https://restoreplane.local/schemas/signing-metadata-v1.json",
+  "title": "RestorePlane production signing metadata",
   "type": "object",
   "additionalProperties": false,
   "required": [

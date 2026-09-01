@@ -415,7 +415,7 @@ const previewDestinations: Destination[] = [
     id: "destination-dr-sftp",
     displayName: "DR SFTP Vault",
     kind: "ssh_sftp",
-    endpoint: "dr-vault.internal:/srv/dbbackup",
+    endpoint: "dr-vault.internal:/srv/restoreplane",
     state: "attention",
     immutabilityCapability: "server_append_only",
     lastProbeStatus: "failed",
@@ -431,7 +431,7 @@ const previewDestinations: Destination[] = [
     id: "destination-local-spool",
     displayName: "Local Recovery Cache",
     kind: "local",
-    endpoint: "E:\\DbBackup\\cache",
+    endpoint: "E:\\RestorePlane\\cache",
     state: "ready",
     immutabilityCapability: "none",
     lastProbeStatus: "passed",
@@ -1188,7 +1188,7 @@ export function previewSettings(): SettingsData {
     spoolVolumes: [
       {
         id: "spool-e",
-        rootPath: "E:\\DbBackup\\spool",
+        rootPath: "E:\\RestorePlane\\spool",
         state: "ready",
         hardLimitBytes: 500 * 1024 ** 3,
         softLimitBytes: 425 * 1024 ** 3,

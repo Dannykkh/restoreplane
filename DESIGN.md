@@ -1,4 +1,4 @@
-# DESIGN.md — dbbackupsystem 관리 GUI (정본)
+# DESIGN.md — RestorePlane 관리 GUI (정본)
 
 > 이 파일은 디자인 정본이다. UI 작업 전 반드시 먼저 읽고 이 토큰(색·타이포·간격·라운드)을 따른다.
 > 대상: Tauri 데스크톱 앱(웹 프론트). 방향: **보안 콘솔(다크) + 침착한 틸/블루 트러스트**.
@@ -19,7 +19,7 @@
 
 ```yaml
 meta:
-  name: dbbackupsystem-console
+  name: restoreplane-console
   preset: { variance: 2, motion: 2, density: 3 }   # 절제된 변주 / 은은한 모션 / 대시보드 밀도
   theme: dark-primary                               # 다크가 기본, light는 override 제공
 

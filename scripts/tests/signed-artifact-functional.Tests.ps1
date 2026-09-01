@@ -71,7 +71,7 @@ else {
             "verification.enqueue",
             "contentOracle",
             "finally",
-            "Remove-DbBackupFixture"
+            "Remove-RestorePlaneFixture"
         )) {
         if ($text.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
             $failures.Add("harness is missing exact-artifact behavior: $required")

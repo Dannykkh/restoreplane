@@ -1,0 +1,29 @@
+[package]
+name = "restoreplane-source-pg"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# S03 — BackupSource + PostgresSource. pg_dump -Fc -f - / pg_dumpall --globals-only를
+# tokio::process로 구동한다. 런타임에는 실제 PG가 필요하지만, 버전/매트릭스/flags 로직은
+# 순수 함수라 DB 없이 유닛 테스트한다.
+
+[dependencies]
+restoreplane-pipeline = { path = "../restoreplane-pipeline" }
+restoreplane-core = { path = "../restoreplane-core" }
+restoreplane-runtime = { path = "../restoreplane-runtime" }
+
+tokio = { version = "=1.52.3", features = ["process", "io-util", "fs", "rt-multi-thread", "macros"] }
+tokio-postgres = "0.7"
+native-tls = "=0.2.14"
+postgres-native-tls = "=0.5.1"
+async-trait = "0.1"
+uuid = { version = "=1.11.0", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+zeroize = { version = "=1.9.0", features = ["derive"] }
+futures = "=0.3.31"
+thiserror = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }

@@ -33,7 +33,7 @@ describe("workspace request scope", () => {
       workspaceId: selected,
       databaseTargetId: "target-a",
     });
-    expect(window.localStorage.getItem("dbbackup.workspaceId")).toBe(selected);
+    expect(window.localStorage.getItem("restoreplane.workspaceId")).toBe(selected);
   });
 
   it("keeps service-wide commands outside workspace scope", () => {

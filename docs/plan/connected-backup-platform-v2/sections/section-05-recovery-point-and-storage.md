@@ -101,8 +101,8 @@ reject와 Reconciliation이다.
 
 ### 1. Provider-neutral artifact contract
 
-`dbbackup-core`에 `ArtifactSpec`, `PartSpec`, `ConsistencyGrade`를 두고
-`dbbackup-pipeline`에 staged/encoded/committed state를 둔다. engine provider는 필요한 Part와
+`restoreplane-core`에 `ArtifactSpec`, `PartSpec`, `ConsistencyGrade`를 두고
+`restoreplane-pipeline`에 staged/encoded/committed state를 둔다. engine provider는 필요한 Part와
 restore pairing을 선언하고 storage adapter는 engine을 알지 않는다.
 
 ### 2. Manifest v2
@@ -220,10 +220,10 @@ engine/storage 책임, signer/serializer, projection calculator, retention evalu
 ## Files to Create/Modify
 
 ```text
-crates/dbbackup-core/src/{artifact,capability}.rs
-crates/dbbackup-pipeline/src/{manifest,encode,fanout,commit,repair,retention}.rs
-crates/dbbackup-pipeline/tests/{manifest_v2,commit_faults,replica_truth,retention}.rs
-crates/dbbackup-catalog/src/repositories/catalog.rs
-crates/dbbackup-dest-*/src/{writer,reader,delete}.rs
-crates/dbbackup-application/src/use_cases/{snapshot,repair,retention}.rs
+crates/restoreplane-core/src/{artifact,capability}.rs
+crates/restoreplane-pipeline/src/{manifest,encode,fanout,commit,repair,retention}.rs
+crates/restoreplane-pipeline/tests/{manifest_v2,commit_faults,replica_truth,retention}.rs
+crates/restoreplane-catalog/src/repositories/catalog.rs
+crates/restoreplane-dest-*/src/{writer,reader,delete}.rs
+crates/restoreplane-application/src/use_cases/{snapshot,repair,retention}.rs
 ```

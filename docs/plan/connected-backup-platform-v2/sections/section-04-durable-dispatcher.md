@@ -115,7 +115,7 @@ failure다.
 
 ### 1. Runtime crate
 
-`dbbackup-runtime`을 queue, dispatcher, lease, permits, supervisor, reconcile, spool 모듈로
+`restoreplane-runtime`을 queue, dispatcher, lease, permits, supervisor, reconcile, spool 모듈로
 분리한다. adapter 실행은 trait로 주입하고 domain/application type만 소비한다.
 
 ### 2. Scheduler and queue
@@ -243,12 +243,12 @@ fault injection seam을 정리한다. unbounded channel/task spawn을 제거한�
 ## Files to Create/Modify
 
 ```text
-crates/dbbackup-runtime/src/{lib,queue,dispatcher,lease,permits,supervisor,reconcile,spool}.rs
-crates/dbbackup-runtime/tests/{occurrence,admission,fencing,supervisor,reconciliation}.rs
-crates/dbbackup-catalog/src/repositories/runtime.rs
-crates/dbbackup-scheduler/src/{occurrence,service_wake}.rs
-crates/dbbackup-service/src/{host,executor}.rs
-crates/dbbackup-cli/src/commands/run.rs
+crates/restoreplane-runtime/src/{lib,queue,dispatcher,lease,permits,supervisor,reconcile,spool}.rs
+crates/restoreplane-runtime/tests/{occurrence,admission,fencing,supervisor,reconciliation}.rs
+crates/restoreplane-catalog/src/repositories/runtime.rs
+crates/restoreplane-scheduler/src/{occurrence,service_wake}.rs
+crates/restoreplane-service/src/{host,executor}.rs
+crates/restoreplane-cli/src/commands/run.rs
 apps/console/src-tauri/src/run.rs
 release/gates/g1-evidence-requirements.json
 scripts/test-g1-fault-matrix.ps1

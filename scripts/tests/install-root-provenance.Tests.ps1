@@ -5,9 +5,9 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$modulePath = Join-Path $repoRoot "installer\DbBackup.Install.Common.psm1"
+$modulePath = Join-Path $repoRoot "installer\RestorePlane.Install.Common.psm1"
 $fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) (
-    "dbbackup-root-provenance-" + [Guid]::NewGuid().ToString("N")
+    "restoreplane-root-provenance-" + [Guid]::NewGuid().ToString("N")
 )
 $ownerSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $serviceSid = "S-1-5-80-1-2-3-4-5"
@@ -33,22 +33,22 @@ function Assert-FailsWith {
 
 try {
     Import-Module $modulePath -Force
-    $commonModule = Get-Module "DbBackup.Install.Common"
+    $commonModule = Get-Module "RestorePlane.Install.Common"
     New-Item -ItemType Directory -Path $fixtureRoot -Force | Out-Null
-    Set-DbBackupProtectedAcl -Path $fixtureRoot -OwnerSid $ownerSid
+    Set-RestorePlaneProtectedAcl -Path $fixtureRoot -OwnerSid $ownerSid
     $installParent = Join-Path $fixtureRoot "install-parent"
     $dataParent = Join-Path $fixtureRoot "data-parent"
     New-Item -ItemType Directory -Path $installParent -Force | Out-Null
     New-Item -ItemType Directory -Path $dataParent -Force | Out-Null
-    Set-DbBackupProtectedAcl -Path $installParent -OwnerSid $ownerSid
-    Set-DbBackupProtectedAcl -Path $dataParent -OwnerSid $ownerSid
+    Set-RestorePlaneProtectedAcl -Path $installParent -OwnerSid $ownerSid
+    Set-RestorePlaneProtectedAcl -Path $dataParent -OwnerSid $ownerSid
 
     $directVolumeCandidate = Join-Path (
         [IO.Path]::GetPathRoot($fixtureRoot)
-    ) ("dbbackup-direct-root-" + [Guid]::NewGuid().ToString("N"))
+    ) ("restoreplane-direct-root-" + [Guid]::NewGuid().ToString("N"))
     & $commonModule {
         param($candidate)
-        Assert-DbBackupSupportedRootParent `
+        Assert-RestorePlaneSupportedRootParent `
             -Path $candidate `
             -DefaultParent ([Environment]::GetFolderPath(
                 [Environment+SpecialFolder]::ProgramFiles
@@ -56,7 +56,7 @@ try {
     } $directVolumeCandidate
 
     $dataRoot = Join-Path $dataParent "data"
-    $dataTransition = Initialize-DbBackupDataRoot `
+    $dataTransition = Initialize-RestorePlaneDataRoot `
         -DataRoot $dataRoot `
         -OwnerSid $ownerSid `
         -ServiceSid $serviceSid `
@@ -66,13 +66,13 @@ try {
     }
 
     $installRoot = Join-Path $installParent "install"
-    $null = Initialize-DbBackupInstallRoot `
+    $null = Initialize-RestorePlaneInstallRoot `
         -InstallRoot $installRoot `
         -DataRoot $dataRoot `
         -OwnerSid $ownerSid `
         -ServiceSid $serviceSid `
         -TrustedAncestorRoot $fixtureRoot
-    Set-DbBackupProtectedAcl `
+    Set-RestorePlaneProtectedAcl `
         -Path $installRoot `
         -OwnerSid $ownerSid `
         -ServiceSid $serviceSid `
@@ -81,7 +81,7 @@ try {
 
     Assert-FailsWith `
         -Action {
-            Assert-DbBackupInstallRootProvenance `
+            Assert-RestorePlaneInstallRootProvenance `
                 -DataRoot $dataRoot `
                 -InstallRoot $installRoot `
                 -OwnerSid $ownerSid `
@@ -90,13 +90,13 @@ try {
         -Pattern "INSTALL_ROOT_PROVENANCE_INVALID" `
         -Message "missing install-root provenance was accepted"
 
-    Write-DbBackupInstallRootProvenance `
+    Write-RestorePlaneInstallRootProvenance `
         -DataRoot $dataRoot `
         -InstallRoot $installRoot `
         -OwnerSid $ownerSid `
         -ServiceSid $serviceSid `
         -AllowInitialMint
-    Assert-DbBackupInstallRootProvenance `
+    Assert-RestorePlaneInstallRootProvenance `
         -DataRoot $dataRoot `
         -InstallRoot $installRoot `
         -OwnerSid $ownerSid `
@@ -115,7 +115,7 @@ try {
     Set-Acl -LiteralPath $secretsRoot -AclObject $secretAcl
     Assert-FailsWith `
         -Action {
-            Assert-DbBackupInstallRootProvenance `
+            Assert-RestorePlaneInstallRootProvenance `
                 -DataRoot $dataRoot `
                 -InstallRoot $installRoot `
                 -OwnerSid $ownerSid `
@@ -123,26 +123,26 @@ try {
         } `
         -Pattern "INSTALL_ROOT_PROVENANCE_INVALID" `
         -Message "an unknown read ACE on the secrets root was accepted"
-    Set-DbBackupProtectedAcl `
+    Set-RestorePlaneProtectedAcl `
         -Path $secretsRoot `
         -OwnerSid $ownerSid `
         -ServiceSid $serviceSid `
         -Recurse
-    Assert-DbBackupInstallRootProvenance `
+    Assert-RestorePlaneInstallRootProvenance `
         -DataRoot $dataRoot `
         -InstallRoot $installRoot `
         -OwnerSid $ownerSid `
         -ServiceSid $serviceSid
 
     $oldInstall = Join-Path $installParent "old-install"
-    Move-DbBackupDirectoryByHandleAtomically `
+    Move-RestorePlaneDirectoryByHandleAtomically `
         -SourcePath $installRoot `
         -DestinationPath $oldInstall
     New-Item -ItemType Directory -Path $installRoot -Force | Out-Null
-    Set-DbBackupProtectedAcl -Path $installRoot -OwnerSid $ownerSid
+    Set-RestorePlaneProtectedAcl -Path $installRoot -OwnerSid $ownerSid
     Assert-FailsWith `
         -Action {
-            Assert-DbBackupInstallRootProvenance `
+            Assert-RestorePlaneInstallRootProvenance `
                 -DataRoot $dataRoot `
                 -InstallRoot $installRoot `
                 -OwnerSid $ownerSid `
@@ -150,7 +150,7 @@ try {
         } `
         -Pattern "INSTALL_ROOT_PROVENANCE_INVALID" `
         -Message "a replacement InstallRoot object reused old provenance"
-    Assert-DbBackupInstallRootProvenance `
+    Assert-RestorePlaneInstallRootProvenance `
         -DataRoot $dataRoot `
         -InstallRoot $installRoot `
         -OwnerSid $ownerSid `
@@ -158,10 +158,10 @@ try {
         -AllowInstallRootReplacement
 
     Remove-Item -LiteralPath $installRoot -Force
-    Move-DbBackupDirectoryByHandleAtomically `
+    Move-RestorePlaneDirectoryByHandleAtomically `
         -SourcePath $oldInstall `
         -DestinationPath $installRoot
-    Assert-DbBackupInstallRootProvenance `
+    Assert-RestorePlaneInstallRootProvenance `
         -DataRoot $dataRoot `
         -InstallRoot $installRoot `
         -OwnerSid $ownerSid `
@@ -169,17 +169,17 @@ try {
 
     $spool = Join-Path $dataRoot "spool"
     $oldSpool = Join-Path $dataRoot "old-spool"
-    Move-DbBackupDirectoryByHandleAtomically `
+    Move-RestorePlaneDirectoryByHandleAtomically `
         -SourcePath $spool `
         -DestinationPath $oldSpool
     New-Item -ItemType Directory -Path $spool -Force | Out-Null
-    Set-DbBackupProtectedAcl `
+    Set-RestorePlaneProtectedAcl `
         -Path $spool `
         -OwnerSid $ownerSid `
         -ServiceSid $serviceSid
     Assert-FailsWith `
         -Action {
-            Assert-DbBackupInstallRootProvenance `
+            Assert-RestorePlaneInstallRootProvenance `
                 -DataRoot $dataRoot `
                 -InstallRoot $installRoot `
                 -OwnerSid $ownerSid `
@@ -191,7 +191,7 @@ try {
     $broadAncestor = Join-Path $fixtureRoot "broad-ancestor"
     $protectedParent = Join-Path $broadAncestor "protected-parent"
     New-Item -ItemType Directory -Path $protectedParent -Force | Out-Null
-    Set-DbBackupProtectedAcl -Path $protectedParent -OwnerSid $ownerSid
+    Set-RestorePlaneProtectedAcl -Path $protectedParent -OwnerSid $ownerSid
     $ancestorAcl = Get-Acl -LiteralPath $broadAncestor
     $ancestorAcl.AddAccessRule(
         [Security.AccessControl.FileSystemAccessRule]::new(
@@ -203,7 +203,7 @@ try {
     Set-Acl -LiteralPath $broadAncestor -AclObject $ancestorAcl
     Assert-FailsWith `
         -Action {
-            $null = Initialize-DbBackupInstallRoot `
+            $null = Initialize-RestorePlaneInstallRoot `
                 -InstallRoot (Join-Path $protectedParent "install") `
                 -DataRoot $dataRoot `
                 -OwnerSid $ownerSid `
@@ -216,13 +216,13 @@ try {
     $unsupportedNestedParent = Join-Path $fixtureRoot "unsupported\nested"
     New-Item -ItemType Directory -Path $unsupportedNestedParent -Force |
         Out-Null
-    Set-DbBackupProtectedAcl `
+    Set-RestorePlaneProtectedAcl `
         -Path (Join-Path $fixtureRoot "unsupported") `
         -OwnerSid $ownerSid `
         -Recurse
     Assert-FailsWith `
         -Action {
-            $null = Initialize-DbBackupInstallRoot `
+            $null = Initialize-RestorePlaneInstallRoot `
                 -InstallRoot (Join-Path $unsupportedNestedParent "install") `
                 -DataRoot $dataRoot `
                 -OwnerSid $ownerSid `

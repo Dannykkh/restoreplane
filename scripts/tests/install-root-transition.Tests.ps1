@@ -5,9 +5,9 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$modulePath = Join-Path $repoRoot "installer\DbBackup.Install.Common.psm1"
+$modulePath = Join-Path $repoRoot "installer\RestorePlane.Install.Common.psm1"
 $fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) (
-    "dbbackup-root-transition-" + [Guid]::NewGuid().ToString("N")
+    "restoreplane-root-transition-" + [Guid]::NewGuid().ToString("N")
 )
 $ownerSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $serviceSid = "S-1-5-80-1-2-3-4-5"
@@ -15,13 +15,13 @@ $serviceSid = "S-1-5-80-1-2-3-4-5"
 try {
     Import-Module $modulePath -Force
     New-Item -ItemType Directory -Path $fixtureRoot -Force | Out-Null
-    Set-DbBackupProtectedAcl -Path $fixtureRoot -OwnerSid $ownerSid
+    Set-RestorePlaneProtectedAcl -Path $fixtureRoot -OwnerSid $ownerSid
     $installParent = Join-Path $fixtureRoot "install-parent"
     $dataParent = Join-Path $fixtureRoot "data-parent"
     New-Item -ItemType Directory -Path $installParent -Force | Out-Null
     New-Item -ItemType Directory -Path $dataParent -Force | Out-Null
-    Set-DbBackupProtectedAcl -Path $installParent -OwnerSid $ownerSid
-    Set-DbBackupProtectedAcl -Path $dataParent -OwnerSid $ownerSid
+    Set-RestorePlaneProtectedAcl -Path $installParent -OwnerSid $ownerSid
+    Set-RestorePlaneProtectedAcl -Path $dataParent -OwnerSid $ownerSid
 
     $moveSource = Join-Path $installParent "move-source"
     $moveDestination = Join-Path $installParent "move-destination"
@@ -33,18 +33,18 @@ try {
         "whole root fixture",
         [Text.UTF8Encoding]::new($false)
     )
-    $moveIdentityBefore = Get-DbBackupPathIdentity -Path $moveSource
+    $moveIdentityBefore = Get-RestorePlanePathIdentity -Path $moveSource
     if ($moveIdentityBefore -notmatch (
             '^v1:[0-9a-f]{16}:[0-9a-f]{32}$'
         )) {
         throw "path identity is not in the canonical v1 format"
     }
     if ($moveIdentityBefore -eq (
-            Get-DbBackupPathIdentity -Path $installParent
+            Get-RestorePlanePathIdentity -Path $installParent
         )) {
         throw "distinct directories returned the same path identity"
     }
-    Move-DbBackupDirectoryByHandleAtomically `
+    Move-RestorePlaneDirectoryByHandleAtomically `
         -SourcePath $moveSource `
         -DestinationPath $moveDestination
     if ((Test-Path -LiteralPath $moveSource) -or
@@ -54,7 +54,7 @@ try {
         throw "handle-based whole-directory rename did not preserve the source object"
     }
     if ($moveIdentityBefore -ne (
-            Get-DbBackupPathIdentity -Path $moveDestination
+            Get-RestorePlanePathIdentity -Path $moveDestination
         )) {
         throw "handle-based rename changed the directory object identity"
     }
@@ -68,11 +68,11 @@ try {
         -ItemType Directory `
         -Path $existingMoveDestination `
         -Force | Out-Null
-    $existingDestinationIdentity = Get-DbBackupPathIdentity `
+    $existingDestinationIdentity = Get-RestorePlanePathIdentity `
         -Path $existingMoveDestination
     $existingDestinationBlocked = $false
     try {
-        Move-DbBackupDirectoryByHandleAtomically `
+        Move-RestorePlaneDirectoryByHandleAtomically `
             -SourcePath $existingMoveSource `
             -DestinationPath $existingMoveDestination
     }
@@ -84,7 +84,7 @@ try {
     if (-not $existingDestinationBlocked -or
         -not (Test-Path -LiteralPath $existingMoveSource -PathType Container) -or
         $existingDestinationIdentity -ne (
-            Get-DbBackupPathIdentity -Path $existingMoveDestination
+            Get-RestorePlanePathIdentity -Path $existingMoveDestination
         )) {
         throw "handle-based rename replaced an existing destination"
     }
@@ -92,11 +92,11 @@ try {
     $blockedMoveSource = Join-Path $installParent "blocked-move-source"
     $blockedMoveDestination = Join-Path $installParent "blocked-move-destination"
     New-Item -ItemType Directory -Path $blockedMoveSource -Force | Out-Null
-    $sourceDeleteBlocker = Enter-DbBackupPathMutationLock -Path $blockedMoveSource
+    $sourceDeleteBlocker = Enter-RestorePlanePathMutationLock -Path $blockedMoveSource
     try {
         $nonDeleteShareBlocked = $false
         try {
-            Move-DbBackupDirectoryByHandleAtomically `
+            Move-RestorePlaneDirectoryByHandleAtomically `
                 -SourcePath $blockedMoveSource `
                 -DestinationPath $blockedMoveDestination
         }
@@ -125,7 +125,7 @@ try {
         -Target $renameReparseTarget | Out-Null
     $renameLeafReparseBlocked = $false
     try {
-        Move-DbBackupDirectoryByHandleAtomically `
+        Move-RestorePlaneDirectoryByHandleAtomically `
             -SourcePath $renameReparseSource `
             -DestinationPath (Join-Path $installParent "rename-reparse-destination")
     }
@@ -139,7 +139,7 @@ try {
     }
     $identityLeafReparseBlocked = $false
     try {
-        Get-DbBackupPathIdentity -Path $renameReparseSource | Out-Null
+        Get-RestorePlanePathIdentity -Path $renameReparseSource | Out-Null
     }
     catch {
         $identityLeafReparseBlocked = $_.Exception.Message -match (
@@ -160,7 +160,7 @@ try {
         -Target $renameRealAncestor | Out-Null
     $renameAncestorReparseBlocked = $false
     try {
-        Move-DbBackupDirectoryByHandleAtomically `
+        Move-RestorePlaneDirectoryByHandleAtomically `
             -SourcePath (Join-Path $renameAncestorJunction "source") `
             -DestinationPath (Join-Path $installParent "ancestor-destination")
     }
@@ -174,7 +174,7 @@ try {
     }
     $identityAncestorReparseBlocked = $false
     try {
-        Get-DbBackupPathIdentity `
+        Get-RestorePlanePathIdentity `
             -Path (Join-Path $renameAncestorJunction "source") | Out-Null
     }
     catch {
@@ -204,7 +204,7 @@ try {
         -Target $renameDestinationTarget | Out-Null
     $renameDestinationReparseBlocked = $false
     try {
-        Move-DbBackupDirectoryByHandleAtomically `
+        Move-RestorePlaneDirectoryByHandleAtomically `
             -SourcePath $renameDestinationSource `
             -DestinationPath (
                 Join-Path $renameDestinationJunction "destination"
@@ -223,12 +223,12 @@ try {
     }
 
     $dataRoot = Join-Path $dataParent "data"
-    $null = Initialize-DbBackupDataRoot `
+    $null = Initialize-RestorePlaneDataRoot `
         -DataRoot $dataRoot `
         -OwnerSid $ownerSid `
         -ServiceSid $serviceSid `
         -TrustedAncestorRoot $fixtureRoot
-    Assert-DbBackupProtectedAcl `
+    Assert-RestorePlaneProtectedAcl `
         -Path $dataRoot `
         -OwnerSid $ownerSid `
         -ServiceSid $serviceSid
@@ -240,7 +240,7 @@ try {
             "telemetry-archives",
             "updates"
         )) {
-        Assert-DbBackupProtectedAcl `
+        Assert-RestorePlaneProtectedAcl `
             -Path (Join-Path $dataRoot $name) `
             -OwnerSid $ownerSid `
             -ServiceSid $serviceSid `
@@ -266,13 +266,13 @@ try {
         ))
     Set-Acl -LiteralPath $installRoot -AclObject $broadAcl
 
-    $transition = Initialize-DbBackupInstallRoot `
+    $transition = Initialize-RestorePlaneInstallRoot `
         -InstallRoot $installRoot `
         -DataRoot $dataRoot `
         -OwnerSid $ownerSid `
         -ServiceSid $serviceSid `
         -TrustedAncestorRoot $fixtureRoot
-    Assert-DbBackupProtectedAcl -Path $installRoot -OwnerSid $ownerSid -Recurse
+    Assert-RestorePlaneProtectedAcl -Path $installRoot -OwnerSid $ownerSid -Recurse
     if ([string]::IsNullOrWhiteSpace([string] $transition.quarantinePath) -or
         -not (Test-Path -LiteralPath (
                 Join-Path $transition.quarantinePath "attacker.dll"
@@ -287,11 +287,11 @@ try {
         "previous exact tree",
         [Text.UTF8Encoding]::new($false)
     )
-    Set-DbBackupProtectedAcl `
+    Set-RestorePlaneProtectedAcl `
         -Path $installRoot `
         -OwnerSid $ownerSid `
         -Recurse
-    $exactTransition = Initialize-DbBackupInstallRoot `
+    $exactTransition = Initialize-RestorePlaneInstallRoot `
         -InstallRoot $installRoot `
         -DataRoot $dataRoot `
         -OwnerSid $ownerSid `
@@ -317,7 +317,7 @@ try {
     Set-Acl -LiteralPath $unsafeControlDirectory -AclObject $unsafeAcl
     $unsafeDataBlocked = $false
     try {
-        Initialize-DbBackupDataRoot `
+        Initialize-RestorePlaneDataRoot `
             -DataRoot $dataRoot `
             -OwnerSid $ownerSid `
             -ServiceSid $serviceSid `

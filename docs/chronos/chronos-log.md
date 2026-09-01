@@ -5,7 +5,7 @@
 ### Run Metadata
 
 - Started: 2026-08-24T00:04:25+09:00
-- Project: `D:\git\dbbackupsystem`
+- Project: `D:\git\restoreplane`
 - Engine: native goal + Chronos FIND/FIX/VERIFY loop
 - Scope: program-owned scheduler, durable Backup Scope, bounded native execution, automatic retention, Workspace status UI
 - Constraints: preserve the existing dirty worktree, no automatic commit, no per-Plan Windows Task Scheduler or SCM registration, no false whole-database recovery claims for partial backups
@@ -112,7 +112,7 @@
 
 - Started: 2026-08-13T14:32:00+09:00
 - Completed: 2026-08-13T16:32:00+09:00
-- Project: `D:\git\dbbackupsystem`
+- Project: `D:\git\restoreplane`
 - Engine: native goal + direct Chronos loop
 - Scope: Backup Plans 운영 UX, `backup.enqueue` IPC/service dispatch, durable work status/cancel, 기존 backup runtime 연결
 - Constraints: 기존 dirty worktree 보존, 자동 commit 금지, 브라우저 fixture를 실백업 증거로 사용 금지, 한 사이클 한 이슈
@@ -235,7 +235,7 @@
 ### Run Metadata
 
 - Started: 2026-07-29T18:23:01.2655766+09:00
-- Project: `D:\git\dbbackupsystem`
+- Project: `D:\git\restoreplane`
 - Branch/HEAD: `main` / `bd6a971`
 - Engine: native goal + direct Chronos loop
 - Scope: `docs/plan/connected-backup-platform-v2/sections/section-01`부터 `section-10`까지의 실행 가능한 구현과 검증
@@ -272,7 +272,7 @@
 - ISSUE: `verify --level 2/3`이 실제로 L1을 실행한 뒤 성공할 수 있어 요청한 검증 수준을 거짓으로 충족했다.
 - RED: `l2_and_l3_are_rejected_instead_of_falling_back_to_l1`이 guard와 stable error code 부재로 컴파일 실패했다.
 - FIX: command 진입 직후 `validate_requested_level`을 실행하고 L2/L3를 `VERIFY_LEVEL_NOT_EXECUTED`로 거부했다. config, keystore, manifest, artifact와 Tokio runtime보다 먼저 실행된다.
-- VERIFY: focused test 1 passed, 실제 missing-config CLI probe가 exit 1과 stable code를 반환하고 config 오류를 내지 않음, `cargo test -p dbbackup-cli` 42 passed/0 failed/2 ignored, package clippy `-D warnings` 통과.
+- VERIFY: focused test 1 passed, 실제 missing-config CLI probe가 exit 1과 stable code를 반환하고 config 오류를 내지 않음, `cargo test -p restoreplane-cli` 42 passed/0 failed/2 ignored, package clippy `-D warnings` 통과.
 - NEXT: 과거 성공 backup과 별도로 최신 failed/running/partial Attempt를 반환하는 catalog query를 TDD로 추가한다.
 
 #### Cycle 2 — 최신 Attempt truth projection
@@ -280,7 +280,7 @@
 - ISSUE: catalog read API가 backup 성공 이력만 제공해 더 최근의 failed/running Attempt를 UI가 별도로 읽을 수 없었다.
 - RED: `truth_projection` 통합 테스트가 `latest_run_per_job` 공개 API 부재로 컴파일 실패했다.
 - FIX: `LatestRunRecord`와 job별 최신 `runs` 조회를 추가하고 crate root에서 export했다. backup row와 결합하거나 성공 상태를 합성하지 않는다.
-- VERIFY: focused integration test 1 passed, `cargo test -p dbbackup-catalog` 7 passed/0 failed, package clippy `-D warnings` 통과.
+- VERIFY: focused integration test 1 passed, `cargo test -p restoreplane-catalog` 7 passed/0 failed, package clippy `-D warnings` 통과.
 - NEXT: 같은 timestamp의 Attempt를 `rowid DESC`로 결정하는 edge contract를 RED로 고정한다.
 
 #### Cycle 3 — 최신 Attempt 동률 결정성
@@ -411,13 +411,13 @@
 - RED: drift/fault integration test가 `MigrationError::code()` 부재로 컴파일 실패했다.
 - FIX: 모든 migration 오류에 raw SQLite 문구와 분리된 stable application code를 부여했다. 기존 atomic runner의 rollback 경계를 checksum/version drift와 deterministic DDL collision로 검증 가능하게 했다.
 - VERIFY: 첫 적용/재실행은 applied true/false로 멱등, checksum·user_version drift는 각각 stable code로 거부, 중간 DDL 실패 뒤 신규 table/journal/user_version은 전부 rollback되고 충돌 전 table만 보존됨. focused 3 passed, clippy `-D warnings`, fmt 통과.
-- NEXT: `dbbackup-domain` crate를 추가하고 typed ID, serialized enum, Plan publish/occurrence/state transition pure contract를 RED부터 구현한다.
+- NEXT: `restoreplane-domain` crate를 추가하고 typed ID, serialized enum, Plan publish/occurrence/state transition pure contract를 RED부터 구현한다.
 
 #### Cycle 19 — typed domain IDs
 
 - ISSUE: v2 계층 사이에서 Connection/Target/Revision/Occurrence/Run/Work/Recovery 식별자를 raw `String`으로 섞지 않게 할 독립 domain crate와 typed ID가 없었다.
 - RED: `typed_ids` integration test가 domain ID와 `DomainError` export 부재로 컴파일 실패했다.
-- FIX: DB/IPC/Tauri를 의존하지 않는 `dbbackup-domain` crate를 workspace에 추가하고 20개 UUID newtype을 만들었다. v4 생성, v5 canonical-name 결정 ID, lowercase canonical boundary parse, serde string 계약과 stable error code를 제공한다.
+- FIX: DB/IPC/Tauri를 의존하지 않는 `restoreplane-domain` crate를 workspace에 추가하고 20개 UUID newtype을 만들었다. v4 생성, v5 canonical-name 결정 ID, lowercase canonical boundary parse, serde string 계약과 stable error code를 제공한다.
 - VERIFY: 생성/serde, deterministic v5, malformed/noncanonical rejection 3 passed. domain all-target clippy `-D warnings`, fmt 통과.
 - NEXT: DDL과 동일한 serialized enum 집합 및 Work Item/Attempt/Occurrence/Run/Recovery Point pure transition table을 golden test로 고정한다.
 
@@ -521,7 +521,7 @@
 #### Cycle 32 — v1 canonical shadow import와 원본 불변성
 
 - ISSUE: v1 TOML을 Connection/Target/Plan 관계로 분리하고 Secret payload 없이 별도 Operational Store에 멱등 import하는 실행 경계가 없었다.
-- RED: `v1_shadow_import` 통합 테스트가 `dbbackup_config::load_v1_shadow_model`과 `OperationalStore::shadow_import` 부재로 컴파일 실패했다.
+- RED: `v1_shadow_import` 통합 테스트가 `restoreplane_config::load_v1_shadow_model`과 `OperationalStore::shadow_import` 부재로 컴파일 실패했다.
 - FIX: v1 parser 결과를 정렬된 canonical intermediate model로 변환하고 endpoint/user별 Connection, DB별 Target, Destination, Plan revision 1, membership, 외부 Secret Ref를 deterministic UUID로 import했다. 전체 작업은 `BEGIN IMMEDIATE` 한 transaction이며 기존 control row가 있는 DB는 shadow 대상이 아니라고 거부한다. diff에는 source/imported row, skipped/ambiguous, next-due 미계산 상태, 안전한 secret binding, `legacy_direct`, `cutoverPerformed=false`를 기록한다.
 - SECURITY: 원본 EncField는 `LegacySecretSink` 경계에서만 처리하고 SQLite에는 반환된 Secret Ref metadata만 저장한다. canary 검사는 main DB와 `-wal`/`-shm` 전체에 적용했다.
 - VERIFY: 같은 source를 같은 DB에 재실행하고 다른 shadow DB에 다른 timestamp로 import해 stable relation digest와 byte-identical diff를 확인했다. 중간 UNIQUE 실패는 import row 전체를 rollback하고 정상 model 재실행에 성공했다. focused 2 passed, catalog 34 passed, config 24 passed, 양 package all-target clippy `-D warnings`, fmt check 통과.
@@ -572,7 +572,7 @@
 #### Cycle 38 — application command와 authority 경계
 
 - ISSUE: CLI/Tauri와 향후 service가 공유할 transport-neutral command catalog가 없어 authorization, idempotency, destructive confirmation, G1 실행 차단을 한곳에서 강제할 수 없었다.
-- RED: 새 `dbbackup-application` 계약 테스트가 command/access/mutation/confirmation catalog, canonical payload digest, pre-G1 authority API 부재로 컴파일 실패했다.
+- RED: 새 `restoreplane-application` 계약 테스트가 command/access/mutation/confirmation catalog, canonical payload digest, pre-G1 authority API 부재로 컴파일 실패했다.
 - FIX: 35개 command를 read/operate/admin과 read-only/mutate/enqueue/destructive로 분류하고 schema의 8개 confirmation action과 연결했다. object payload는 key-order 독립 BLAKE3 digest로 canonicalize하며 float, 과도한 depth, 1 MiB 초과를 거부한다. Authority Snapshot은 G1 미입증 production enqueue/cutover를 `APPLICATION_REHEARSAL_ONLY`로 차단하고 stable public error만 노출한다.
 - VERIFY: command roundtrip/unknown denial, canonical digest, pre/post-G1 경계 3 passed. crate 전체 test, all-target clippy `-D warnings`, workspace fmt check 통과.
 - NEXT: protocol version, request identity/time/body length를 payload decode 전에 거부하는 bounded IPC frame codec과 malformed/fuzz corpus를 TDD로 구현한다.
@@ -662,9 +662,9 @@
 
 - ISSUE: CLI와 Tauri가 service wire request를 만들고 응답을 해석할 공통 client가 없어 향후 각각 protocol/timeout/오류 처리를 복제할 위험이 있었다.
 - RED: 실제 service diagnostics server에서 공통 client health/schema 왕복 테스트가 새 crate와 `IpcClient` 부재로 컴파일 실패했고, CLI `service status|schema` parsing도 command 부재로 실패했다.
-- FIX: `dbbackup-ipc-client` crate가 UUID request ID, 30초 TTL, canonical frame encode, 전체 deadline pipe roundtrip, response ID 대조, stable `CommandOutcome`을 단일 구현한다. CLI는 `service status|schema`, Tauri는 `service_health`/`schema_status` thin command로 같은 client를 호출하며 React data layer에도 동일 typed outcome을 추가했다. 기존 direct execution/config 경로는 아직 변경하지 않았다.
+- FIX: `restoreplane-ipc-client` crate가 UUID request ID, 30초 TTL, canonical frame encode, 전체 deadline pipe roundtrip, response ID 대조, stable `CommandOutcome`을 단일 구현한다. CLI는 `service status|schema`, Tauri는 `service_health`/`schema_status` thin command로 같은 client를 호출하며 React data layer에도 동일 typed outcome을 추가했다. 기존 direct execution/config 경로는 아직 변경하지 않았다.
 - VERIFY: 실제 protected pipe를 통한 shared client health/schema Windows integration 1 passed, CLI parsing 22 passed, client/CLI/Tauri all-target clippy `-D warnings`, Tauri cargo check, TypeScript+Vite production build, fmt와 scoped diff check 통과.
-- NEXT: SCM `ShellRuntime`을 실제 diagnostics pipe runtime으로 교체하고 install-time owner/service identity 설정을 검증·보호해 production endpoint `DbBackup.control.v1`이 service Running 전에 준비되고 stop/preshutdown에서 drain되도록 한다.
+- NEXT: SCM `ShellRuntime`을 실제 diagnostics pipe runtime으로 교체하고 install-time owner/service identity 설정을 검증·보호해 production endpoint `RestorePlane.control.v1`이 service Running 전에 준비되고 stop/preshutdown에서 drain되도록 한다.
 
 #### Cycle 50 — production SCM pipe runtime and protected install identity
 
@@ -672,15 +672,15 @@
 - RED: 첫 local owner session binding, host-owned pipe ready/drain, schema-drift read-only IPC, 보호된 identity config, SCM bootstrap 실파이프 테스트가 `new_unbound_owner`, `PipeHostRuntime`, read-only handler, identity loader와 assembly 부재로 컴파일 실패했다.
 - FIX: owner SID는 설치 설정에 지속하되 logon SID/session은 서비스 부팅 후 첫 유효 local owner 연결에서 원자적으로 고정하고 다른 session을 거부한다. `PipeHostRuntime`은 별도 Tokio runtime의 first listener 준비 handshake, accept 중단, bounded drain/report를 `ServiceHost` lifecycle에 연결했다. diagnostics-only host는 store 없이 health/schema read만 허용하고 mutation을 `APPLICATION_FORBIDDEN`으로 거부한다.
 - SECURITY: version 1 `service-identity.json`은 64 KiB/32-admin 상한, canonical SID, 중복·service/owner 충돌, unknown field, symlink를 거부한다. 실제 file DACL을 감사해 protected full-control ACE가 SYSTEM/service/owner에만 있는지 확인하며 Windows SDDL 별칭은 문자열 추측이 아니라 binary SID equality로 비교한다. 누락·오구성·ACL mismatch는 모두 fail-closed다.
-- SCM: 실제 process SID, 보호된 owner/admin 설정, authorization/DACL, healthy durable dispatcher 또는 drift read-only handler를 `DbBackup.control.v1`에 조립한다. initial listener가 준비된 뒤에만 bootstrap이 반환되어 SCM이 `Running`을 보고하며 stop/preshutdown은 accept→drain→WAL checkpoint 순서를 유지한다.
-- VERIFY: focused owner binding 1, protected identity 2, pipe runtime 2, SCM bootstrap real-pipe 1 passed. `dbbackup-service --all-targets` 29 passed/0 failed, all-target clippy `-D warnings`, workspace fmt와 scoped whitespace check 통과.
+- SCM: 실제 process SID, 보호된 owner/admin 설정, authorization/DACL, healthy durable dispatcher 또는 drift read-only handler를 `RestorePlane.control.v1`에 조립한다. initial listener가 준비된 뒤에만 bootstrap이 반환되어 SCM이 `Running`을 보고하며 stop/preshutdown은 accept→drain→WAL checkpoint 순서를 유지한다.
+- VERIFY: focused owner binding 1, protected identity 2, pipe runtime 2, SCM bootstrap real-pipe 1 passed. `restoreplane-service --all-targets` 29 passed/0 failed, all-target clippy `-D warnings`, workspace fmt와 scoped whitespace check 통과.
 - NEXT: section-03 acceptance를 현재 증거에 대조해 section-04 G1/cutover 및 section-10 installer에 속한 의존 항목을 명시한 뒤, durable dispatcher의 첫 미구현 process supervision/fault-matrix 경계를 TDD로 진행한다.
 
 #### Cycle 51 — suspended no-shell Windows process-tree supervisor
 
 - ISSUE: catalog에는 fenced process identity row만 있었고 실제 native tool을 검증·시작·소유하는 runtime crate와 Job Object 경계가 없어 child/grandchild orphan 및 path/hash swap을 막을 수 없었다.
-- RED: 상대 executable 거부, wrong-hash no-start, suspended launch와 grandchild tree termination 통합 테스트가 `dbbackup-runtime`, `LaunchSpec`, `ProcessSupervisor` 부재로 컴파일 실패했다.
-- FIX: 새 `dbbackup-runtime` crate에 secret-redacted launch spec, 최대 256 args/128 env의 NUL·길이 검증, parent environment를 상속하지 않는 Unicode allowlist block, Windows command-line quoting을 구현했다. absolute non-symlink executable을 read-only sharing handle로 잠근 채 SHA-256을 다시 계산해 expected tool identity와 비교한다.
+- RED: 상대 executable 거부, wrong-hash no-start, suspended launch와 grandchild tree termination 통합 테스트가 `restoreplane-runtime`, `LaunchSpec`, `ProcessSupervisor` 부재로 컴파일 실패했다.
+- FIX: 새 `restoreplane-runtime` crate에 secret-redacted launch spec, 최대 256 args/128 env의 NUL·길이 검증, parent environment를 상속하지 않는 Unicode allowlist block, Windows command-line quoting을 구현했다. absolute non-symlink executable을 read-only sharing handle로 잠근 채 SHA-256을 다시 계산해 expected tool identity와 비교한다.
 - WINDOWS: `CreateProcessW(CREATE_SUSPENDED|CREATE_NO_WINDOW|CREATE_UNICODE_ENVIRONMENT)` 뒤 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`이며 breakaway flag가 없는 Job Object에 먼저 assign하고 main thread를 resume한다. PID와 kernel creation time, random Job Object key를 함께 노출하며 terminate/drop이 전체 inherited process tree를 소유한다.
 - VERIFY: 재실행된 test helper가 실제 grandchild를 만들고 job termination 뒤 grandchild process handle도 signaled됨을 확인했다. wrong hash는 marker 0건, relative path는 spec 단계에서 거부됐다. runtime 3 passed/0 failed, all-target clippy `-D warnings`, workspace fmt 통과.
 - SOURCE: Microsoft Job Objects/AssignProcessToJobObject 공식 계약의 child 기본 상속, suspended assign, breakaway opt-in, kill-on-last-handle semantics를 기준으로 구현했다.
@@ -692,7 +692,7 @@
 - RED: stdout/stderr 각각 4 MiB를 동시에 쓰는 실제 helper, 4 KiB bounded tail과 literal redaction, timeout 뒤 ownership 유지 및 explicit cancel/reap, 대소문자만 다른 Windows 환경 변수 중복, read 경계를 가로지르는 겹치는 redaction literal 테스트가 각각 필요한 API 또는 경계 위반으로 실패했다.
 - FIX: `STARTUPINFOEXW`의 `PROC_THREAD_ATTRIBUTE_HANDLE_LIST`로 stdin/stdout/stderr 세 handle만 상속하고 두 전용 drain thread를 resume 전에 시작했다. zeroizing fixed ring과 streaming longest-first literal redactor가 총 byte 수·truncation·bounded tail만 보존하며, parent environment는 비우고 Windows 환경 키를 case-insensitive하게 유일화한다.
 - LIFECYCLE: `wait_timeout`은 관찰 timeout에서 ownership을 보존한다. 정상 종료와 explicit terminate는 root를 wait하고 Job Object로 descendants를 종료한 뒤 stdout/stderr drain을 join하여 `ProcessExit` 하나로 반환하며, suspended launch 실패는 root를 직접 종료한다.
-- VERIFY: focused redaction 및 pre-launch rejection GREEN. `dbbackup-runtime --all-targets` unit 1 + Windows integration 5 passed/0 failed; 4 MiB × 2 flood, 4 KiB tails, cross-boundary secret 제거, timeout/cancel/reap를 실제 프로세스로 확인했다. all-target clippy `-D warnings`와 workspace fmt check도 통과했다.
+- VERIFY: focused redaction 및 pre-launch rejection GREEN. `restoreplane-runtime --all-targets` unit 1 + Windows integration 5 passed/0 failed; 4 MiB × 2 flood, 4 KiB tails, cross-boundary secret 제거, timeout/cancel/reap를 실제 프로세스로 확인했다. all-target clippy `-D warnings`와 workspace fmt check도 통과했다.
 - NEXT: catalog의 durable work/occurrence/resource/process primitives를 실제 dispatcher tick과 연결하여 claim→admit→launch→heartbeat→terminal finalize의 첫 영속 실행 경계를 TDD로 구현한다.
 
 #### Cycle 53 — retry settlement releases durable admission atomically
@@ -700,7 +700,7 @@
 - ISSUE: `requeue_claim`은 Work/Attempt만 갱신하고 `resource_allocations`와 `spool_reservations`를 lease 만료까지 활성 상태로 남겨, 실패한 Attempt가 permit과 디스크 예산을 계속 점유했다.
 - RED: capacity 1 resource와 900-byte usable spool을 첫 Attempt가 전부 예약한 뒤 retry로 반환하고, lease 만료 전 두 번째 Work가 즉시 같은 용량을 획득하는 통합 테스트가 admission 거절로 실패했다.
 - FIX: 현재 Work Item/Attempt/owner/boot/fence를 확인한 동일 `BEGIN IMMEDIATE` transaction 안에서 retry 상태 전이와 allocation `failed` release, non-quarantined spool release를 함께 commit한다. allocation/spool fence가 하나라도 다르면 전체 transaction을 `WORK_ITEM_FENCE_STALE`로 rollback하며 quarantine은 cleanup 전까지 보존한다.
-- VERIFY: focused RED→GREEN. stale retry가 새 Attempt의 예약을 건드리지 않고 첫 Attempt의 release timestamp/reason과 spool terminal state가 정확함을 직접 SQL로 확인했다. `dbbackup-catalog --all-targets` 43 passed/0 failed, all-target clippy `-D warnings`, workspace fmt check 통과.
+- VERIFY: focused RED→GREEN. stale retry가 새 Attempt의 예약을 건드리지 않고 첫 Attempt의 release timestamp/reason과 spool terminal state가 정확함을 직접 SQL로 확인했다. `restoreplane-catalog --all-targets` 43 passed/0 failed, all-target clippy `-D warnings`, workspace fmt check 통과.
 - NEXT: claim의 leased→starting→running→committing→terminal 수명주기와 subject Run/Occurrence 및 자원 반환을 하나의 fenced repository 계약으로 구현한다.
 
 #### Cycle 54 — fenced claim, process, subject, and terminal lifecycle
@@ -726,9 +726,9 @@
 #### Cycle 56 — startup fencing for expired pre-launch work and real Job identity
 
 - ISSUE: expired leased/starting Work를 찾는 durable scan과 boot recovery가 없었고, DB의 `job_object_key`는 실제로는 익명 Job Object와 무관한 임의 UUID라 Windows에서 다시 열거나 소유 관계를 확인할 수 없었다.
-- RED: expired starting claim scan/reconcile API와 `StartupReconciler` 부재로 compile-fail했다. supervisor test는 persisted job key가 `Local\DbBackup.Job.*` 실제 kernel object name이 아니어서 실패했다.
+- RED: expired starting claim scan/reconcile API와 `StartupReconciler` 부재로 compile-fail했다. supervisor test는 persisted job key가 `Local\RestorePlane.Job.*` 실제 kernel object name이 아니어서 실패했다.
 - FIX: bounded `expired_claims(now, limit)` projection이 current Work/Attempt/fence/owner/dual lease와 latest process identity를 읽는다. process row 없이 만료된 operation은 동일 immediate transaction에서 old fence를 즉시 증가시키고, started Attempt를 reconcile-failed로 기록하고, Work를 delayed로 되돌리며 permit/spool을 `reconciled`로 반환한다. old worker write는 다음 claim 전부터 stale이다.
-- WINDOWS: supervisor가 UUID 기반 `Local\DbBackup.Job.{uuid}` named Job을 실제로 생성하고 그 정확한 이름을 process row에 기록한다. existing-name collision은 fail-closed한다. 실제 child tree 실행 중 `OpenJobObjectW(JOB_OBJECT_QUERY)`로 같은 Job을 다시 여는 테스트가 통과했다.
+- WINDOWS: supervisor가 UUID 기반 `Local\RestorePlane.Job.{uuid}` named Job을 실제로 생성하고 그 정확한 이름을 process row에 기록한다. existing-name collision은 fail-closed한다. 실제 child tree 실행 중 `OpenJobObjectW(JOB_OBJECT_QUERY)`로 같은 Job을 다시 여는 테스트가 통과했다.
 - SAFETY: startup reconciler는 현재 processless `operation`만 자동 requeue한다. recorded process는 OS creation-time/Job membership 확인 전 `process_inspection_required`, backup 등 artifact-bearing subject는 Manifest/spool 증거 확인 전 `subject_evidence_required`로 주차하여 성공이나 retry를 추정하지 않는다.
 - VERIFY: stale fence가 1→reconcile 2→new claim 3으로 증가하고 first Attempt failure 및 allocation release timestamp를 SQL로 확인했다. catalog 46 passed/0 failed, runtime 11 passed/0 failed, 두 package all-target clippy `-D warnings`, workspace fmt check 통과.
 - SOURCE: Microsoft `CreateJobObjectW`/Job Objects 문서의 named-only reopen, last-handle kill/destroy 계약과 `OpenJobObjectW` case-sensitive name/access 계약을 기준으로 구현했다.
@@ -738,7 +738,7 @@
 
 - ISSUE: startup scan의 recorded PID가 실제 원래 process인지, PID가 재사용됐는지, 해당 process가 supervisor의 named Job에 속하는지 판별할 OS 경계가 없어 모든 process-bearing claim이 수동 attention에 머물렀다.
 - RED: 실제 Windows helper를 Job Object 아래 실행한 뒤 `ProcessInspector`, `ProcessProbe`, `ProcessObservation`, `WindowsProcessInspector`를 요구하는 통합 테스트가 공개 API 부재로 compile-fail했다.
-- FIX: inspector가 `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE)`와 `GetProcessTimes`로 PID+creation time을 함께 비교하고, zero-time wait로 exit를 확인한 뒤 persisted `Local\DbBackup.Job.*` 이름을 `OpenJobObjectW`로 다시 열어 `IsProcessInJob` membership을 확인한다. 결과는 `Missing`, `Reused`, `Exited`, `MatchingOwned`, `MatchingUnowned`로 분리한다.
+- FIX: inspector가 `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE)`와 `GetProcessTimes`로 PID+creation time을 함께 비교하고, zero-time wait로 exit를 확인한 뒤 persisted `Local\RestorePlane.Job.*` 이름을 `OpenJobObjectW`로 다시 열어 `IsProcessInJob` membership을 확인한다. 결과는 `Missing`, `Reused`, `Exited`, `MatchingOwned`, `MatchingUnowned`로 분리한다.
 - RECONCILE: processless와 달리 recorded-process 경로는 candidate의 process ID/start time/boot/job/state 및 다른 active process 부재를 같은 immediate transaction에서 재검증한다. OS가 missing/reused/exited를 확인한 operation만 process를 `killed/reconciled_process_gone`으로 정리하고 old fence 증가, Attempt failure, Work delay/requeue, permit/spool 반환을 원자적으로 수행한다. matching-owned/unowned는 각각 별도 attention으로 보존한다.
 - VERIFY: 실제 Windows owned process는 `MatchingOwned`, 변조한 creation time은 `Reused`, explicit terminate 후에는 `Exited`로 관찰됐다. repository SQL 검증에서 process/Attempt/allocation이 `killed/failed/released`로 수렴하고 old heartbeat가 stale임을 확인했다. catalog 47 passed/0 failed, runtime 14 passed/0 failed, 두 package all-target clippy `-D warnings`, workspace fmt check 통과.
 - SOURCE: Microsoft `GetProcessTimes`, `OpenProcess`, `WaitForSingleObject`, `OpenJobObjectW`, `IsProcessInJob` 및 Job Objects의 named-object/handle lifetime 계약을 기준으로 구현했다.
@@ -819,7 +819,7 @@
 
 - ISSUE: v1 Manifest는 한 spool payload의 dump flag와 checksum만 서명해 Recovery Point origin, 여러 Part, native tool hash, destination requirement/reader 역할을 복원 가능한 한 집합으로 인증할 수 없었다.
 - RED: provider-neutral Artifact contract, canonical set Manifest golden vector, Part/Replica truth 변조, unknown field/version, deterministic object prefix 테스트가 새 타입 부재로 compile-fail했다.
-- CORE: `dbbackup-core`에 `ArtifactSpec`, `PartSpec`, `ArtifactPartRole`, `ConsistencyGrade`를 추가했다. nil/중복 ID, 중복 logical name, 잘못된 format, required database dump 부재를 stable code로 거부하며 engine provider가 storage 구현을 알지 않고 필요한 Part 집합을 선언할 수 있다.
+- CORE: `restoreplane-core`에 `ArtifactSpec`, `PartSpec`, `ArtifactPartRole`, `ConsistencyGrade`를 추가했다. nil/중복 ID, 중복 logical name, 잘못된 format, required database dump 부재를 stable code로 거부하며 engine provider가 storage 구현을 알지 않고 필요한 Part 집합을 선언할 수 있다.
 - MANIFEST: additive `SetManifestV2`는 schema 2, Recovery Point/instance/occurrence/Backup Run/Target/source identity, engine/consistency, commit time, signing key ID, native tool name/version/SHA-256, 정렬된 sanitized options, 모든 encoded Part checksum·크기·format·wrap generation·object key, 정렬된 Replica requirement/reader/immutability/Manifest key를 고정 필드 순서 JSON으로 서명한다.
 - FAIL-CLOSED: v2와 모든 하위 wire struct는 unknown field를 거부하고 schema 2 외 버전을 거부한다. Part와 Replica는 deterministic `v2/{occurrence}/{target}/{recovery-point}` prefix 및 정렬·유일성을 강제한다. 제공된 pinned verifying key와 envelope key가 다르거나 어떤 복원 사실이 변조돼도 `MANIFEST_V2_SIGNATURE_INVALID`다.
 - COMPATIBILITY: 기존 `Manifest`/`SignedManifest` 타입과 v1 write/read/fan-out API는 변경하지 않고 v2 타입을 병렬 추가했다. v1 pipeline E2E 5개가 그대로 통과했다.
@@ -833,7 +833,7 @@
 - FIX: `DestinationReaderV2`와 bounded Manifest read, streaming object probe를 writer와 분리했다. `publish_set_manifest_v2`는 서명·pinned key, Part source ID 집합, Replica endpoint fingerprint 집합, source file, bounded parallelism을 fan-out 전에 fail-closed 검증한다.
 - COMMIT: 각 목적지는 모든 encoded Part를 순서대로 commit하고 별도 Reader가 signed evidence의 ciphertext bytes/BLAKE3를 확인한 경우에만 signed set Manifest를 마지막 객체로 게시한다. Manifest도 Reader로 4 MiB 이내에서 다시 읽어 strict JSON parse, pinned signature, 원본 envelope 동일성을 검증한다. 실패 목적지는 `Unavailable`과 stable error code를 반환하며 이미 게시된 payload는 commit된 Recovery Point가 아닌 진단 가능한 orphan으로 남는다.
 - CONCURRENCY: 목적지 fan-out은 `max_parallel_destinations` 기본 4와 `buffer_unordered`로 제한했다. 결과는 fingerprint 순으로 정렬하며 required/best-effort 역할, payload/Manifest receipt, 시도 횟수, Reader 상태를 분리해 보존한다.
-- VERIFY: `manifest_v2` 5 passed/0 failed, 기존 pipeline E2E 5 passed/0 failed, pipeline 전체 10 passed/0 failed, `cargo clippy -p dbbackup-pipeline --all-targets -- -D warnings`, `cargo fmt --all -- --check` 통과.
+- VERIFY: `manifest_v2` 5 passed/0 failed, 기존 pipeline E2E 5 passed/0 failed, pipeline 전체 10 passed/0 failed, `cargo clippy -p restoreplane-pipeline --all-targets -- -D warnings`, `cargo fmt --all -- --check` 통과.
 - NEXT: 실제 publish outcome과 Part/Replica 상태만으로 completeness·durability·compliance·restore eligibility 4축을 계산하는 단일 truth projector를 TDD로 추가하고 catalog projection의 수동 축 입력을 제거한다.
 
 #### Cycle 67 — evidence-derived Recovery Point four-axis projection
@@ -1005,7 +1005,7 @@
 - POLICY: complete+valid Recovery Point의 origin Backup Run, published immutable Plan Revision, exact destination membership/override와 IANA timezone을 한 transaction에서 결합한다. legacy `daily/weekly/monthly` GFS는 local day/ISO week/month별 최신 세대를 union하고 0-policy, 과대 세대 수, timezone/JSON/origin 증거 누락을 `RETENTION_AUTHORITY_INVALID`로 fail-closed한다. Asia/Seoul의 UTC 월 경계 fixture로 local-month 선택도 고정했다.
 - RUNTIME SAFETY: 같은 snapshot에서 Snapshot protection projection을 읽어 source target 전체의 마지막 compliant RP를 보호하고, active Restore Run의 exact/unspecified source Replica와 schema-v1/v2 durable Repair Operation의 source fingerprint를 계산한다. malformed active repair request는 삭제 가능으로 간주하지 않고 fail-closed한다. Replica의 governance/compliance/server-append-only와 retention-until 증거도 Catalog 값만 사용한다.
 - TOMBSTONE/CREDENTIAL/OBJECTS: staged retention Operation의 schema, RP/Destination, grace, 시각, 정렬된 `(key, version, role)` 집합을 현재 present Catalog objects와 다시 대조한다. remote destination은 active `retention_delete` Secret Ref만 authorization에 고정하고 Local은 Secret Ref 부재를 요구한다. `ServiceRetentionPlannerV2`가 이 repository를 서비스 application 경계로 노출한다.
-- VERIFY: authoritative matrix integration 2 passed/0 failed, IANA GFS unit 1 passed/0 failed. `cargo test -p dbbackup-pipeline -p dbbackup-catalog -p dbbackup-service` 전체 통과, 세 package all-target clippy `-D warnings`, workspace fmt check, scoped `git diff --check` 통과. Windows MSVC의 기존 `linker_messages` 경고만 있었고 test failure는 0이었다.
+- VERIFY: authoritative matrix integration 2 passed/0 failed, IANA GFS unit 1 passed/0 failed. `cargo test -p restoreplane-pipeline -p restoreplane-catalog -p restoreplane-service` 전체 통과, 세 package all-target clippy `-D warnings`, workspace fmt check, scoped `git diff --check` 통과. Windows MSVC의 기존 `linker_messages` 경고만 있었고 test failure는 0이었다.
 - NEXT: service `ApplicationUseCases`/local IPC가 health/schema 조회만 노출하는 현재 경계를 RED로 고정하고, authoritative retention dry-run→pin/hold control→tombstone/confirmation 요청을 권한·idempotency ledger에 연결한다.
 
 #### Cycle 84 — read-only retention dry-run application/IPC 경계
@@ -1016,7 +1016,7 @@
 - APPLICATION: payload를 `recoveryPointId`, `destinationFingerprint`, `gracePeriodMs` 세 필드로 deny-unknown 역직렬화하고 server clock과 `OperationalStore::retention_planner()`만 사용한다. 결과는 disposition/reasons/compliance impact/exact object set/canonical digest를 schema-versioned 응답으로 반환하며 저장소 상세 오류는 redacted `APPLICATION_INTERNAL`로 닫는다.
 - AUTHORITY SEPARATION: `RetentionDeletePlanV2::preview_json()`을 추가해 `TombstoneRequired`/`WaitForGrace` 계획은 표시할 수 있게 하되, `RetentionDeleteAuthorizationV2::from_json()`과 `confirm()`의 `DeleteEligible` 검증은 완화하지 않았다. preview를 실행 권한으로 재사용하면 `RETENTION_DELETE_NOT_ELIGIBLE`로 거부되는 RED/GREEN 테스트를 고정했다.
 - INPUT SAFETY: 클라이언트가 `pinned`를 위조해 추가하면 `APPLICATION_PAYLOAD_INVALID`로 거부되고 Catalog·ledger mutation은 0건이다.
-- VERIFY: targeted command/application/IPC 4 passed/0 failed, preview authority-separation 1 passed/0 failed. `cargo test -p dbbackup-application -p dbbackup-pipeline -p dbbackup-catalog -p dbbackup-service`, 4-package all-target Clippy `-D warnings`, workspace fmt check, `git diff --check`가 모두 통과했다. Windows MSVC의 기존 `linker_messages` 경고 외 test failure는 0건이다.
+- VERIFY: targeted command/application/IPC 4 passed/0 failed, preview authority-separation 1 passed/0 failed. `cargo test -p restoreplane-application -p restoreplane-pipeline -p restoreplane-catalog -p restoreplane-service`, 4-package all-target Clippy `-D warnings`, workspace fmt check, `git diff --check`가 모두 통과했다. Windows MSVC의 기존 `linker_messages` 경고 외 test failure는 0건이다.
 - NEXT: pin/legal-hold control 변경을 admin typed command로 추가하고, control document 변경과 IPC idempotency ledger 완료를 하나의 Catalog transaction에서 원자화한다. tombstone/confirmation은 별도 Cycle로 유지한다.
 
 #### Cycle 85 — atomic retention pin/legal-hold control IPC
@@ -1027,7 +1027,7 @@
 - ATOMIC TRANSACTION: `IpcRepository::set_retention_safety_control`이 command/SID/idempotency key/payload digest를 검증하고, ledger `accepted` insert→Catalog replica 확인 및 typed `app_meta` control upsert→stored success response와 terminal ledger completion을 하나의 `BEGIN IMMEDIATE`에서 처리한다. 완료 단계가 실패하면 control과 ledger row가 모두 롤백된다.
 - REPLAY/CONFLICT: `(client SID hash, command, idempotency key)` replay는 저장된 success response만 반환하고 handler/control을 재실행하지 않는다. digest가 다른 payload는 `IPC_IDEMPOTENCY_CONFLICT`, 불완전하거나 비정상 stored row는 `IPC_REQUEST_INCOMPLETE`로 fail-closed한다.
 - BYPASS HARDENING: production service wrapper의 직접 `set_safety_control` mutation API를 제거했다. 서비스에서 control을 바꾸는 노출 경로는 권한검사와 typed IPC transaction뿐이며, Catalog의 저수준 setter는 repository 테스트/setup 경계에 남겼다.
-- VERIFY: command/application targeted 5 passed/0 failed, completion-failure injection matrix 1 passed/0 failed. `cargo test -p dbbackup-application -p dbbackup-pipeline -p dbbackup-catalog -p dbbackup-service`, 4-package all-target Clippy `-D warnings`, workspace fmt check, `git diff --check`가 모두 통과했다.
+- VERIFY: command/application targeted 5 passed/0 failed, completion-failure injection matrix 1 passed/0 failed. `cargo test -p restoreplane-application -p restoreplane-pipeline -p restoreplane-catalog -p restoreplane-service`, 4-package all-target Clippy `-D warnings`, workspace fmt check, `git diff --check`가 모두 통과했다.
 - NEXT: retention tombstone 생성을 별도 admin typed command와 atomic IPC ledger transaction으로 노출하고, Catalog가 server-accepted 시각·exact present object 집합·grace를 직접 고정하도록 한다. confirmation/delete enqueue는 다음 Cycle로 분리한다.
 
 #### Cycle 86 — authoritative retention tombstone typed transaction
@@ -1038,7 +1038,7 @@
 - AUTHORITY GATE: authoritative planner 계산을 transaction 내부 helper로 추출했다. tombstone transaction은 published policy, pin/hold, last compliant, active restore/repair, Object Lock, delete credential과 현재 Catalog objects를 같은 snapshot에서 다시 계산하고 disposition이 정확히 `TombstoneRequired`일 때만 진행한다.
 - ATOMIC STAGE: `IpcRepository::stage_retention_tombstone_request`가 ledger accepted insert→authority gate→server-generated Operation Run과 typed tombstone document→resource-bound stored response/ledger success를 하나의 `BEGIN IMMEDIATE`에서 처리한다. response resource와 ledger `operation_run` ref도 replay 시 상호 검증한다.
 - OBJECT/GRACE TRUTH: tombstone은 caller object 목록을 받지 않고 해당 Replica의 `state='present'` 객체만 `(key, version, role)` 순서로 고정한다. `tombstoned_at_ms`와 `eligibleAfterMs`는 server accepted time과 checked grace 합으로 계산하며, 같은 key의 다른 grace는 idempotency conflict다.
-- VERIFY: command/application targeted 6 passed/0 failed, tombstone authority/atomicity matrix 1 passed/0 failed. `cargo test -p dbbackup-application -p dbbackup-pipeline -p dbbackup-catalog -p dbbackup-service`, 4-package all-target Clippy `-D warnings`, workspace fmt check, `git diff --check`가 모두 통과했다.
+- VERIFY: command/application targeted 6 passed/0 failed, tombstone authority/atomicity matrix 1 passed/0 failed. `cargo test -p restoreplane-application -p restoreplane-pipeline -p restoreplane-catalog -p restoreplane-service`, 4-package all-target Clippy `-D warnings`, workspace fmt check, `git diff --check`가 모두 통과했다.
 - NEXT: one-time confirmation prepare를 실제 IPC command로 노출하고, grace 종료 후 authoritative eligible authorization과 SID/action/RP/Destination/digest를 결합한 `retention.delete` typed enqueue를 end-to-end로 연결한다.
 
 #### Cycle 87 — authoritative one-time retention confirmation IPC
@@ -1048,7 +1048,7 @@
 - AUTHORITY: `confirmation.prepare`는 action, Recovery Point, Destination, grace, TTL만 받는다. Catalog의 `BEGIN IMMEDIATE` 안에서 server accepted time 기준 retention plan을 다시 계산하고 정확히 `DeleteEligible`일 때만 해당 authorization digest를 SID/action/RP/Destination에 결합한다.
 - TOKEN CUSTODY: 32-byte 원문 토큰은 서비스 메모리에서 생성되어 최초 성공 응답에만 포함된다. Catalog에는 BLAKE3 digest와 raw-token 필드가 없는 typed replay document만 저장하며, 같은 idempotency key 재생은 동일 token ID와 authorization을 반환하되 `confirmationToken=null`, `tokenAvailable=false`로 고정했다.
 - ATOMICITY/FAIL-CLOSED: ledger accepted, current authority 계산, confirmation token digest insert, redacted replay document, ledger succeeded가 하나의 transaction이다. ledger completion 실패 trigger에서 confirmation/ledger가 모두 rollback되고, grace 이전 요청·caller token 주입·payload conflict는 token/work를 남기지 않는다.
-- VERIFY: focused RED→GREEN 1 passed, retention application 4 passed, command contract 3 passed, 기존 confirmation/delete repository 7 passed. `cargo test -p dbbackup-application -p dbbackup-pipeline -p dbbackup-catalog -p dbbackup-service`, 4-package all-target Clippy `-D warnings`, workspace fmt check, `git diff --check`가 모두 통과했다. Windows MSVC의 기존 `linker_messages` 경고 외 test failure는 0건이었다.
+- VERIFY: focused RED→GREEN 1 passed, retention application 4 passed, command contract 3 passed, 기존 confirmation/delete repository 7 passed. `cargo test -p restoreplane-application -p restoreplane-pipeline -p restoreplane-catalog -p restoreplane-service`, 4-package all-target Clippy `-D warnings`, workspace fmt check, `git diff --check`가 모두 통과했다. Windows MSVC의 기존 `linker_messages` 경고 외 test failure는 0건이었다.
 - NEXT: `retention.delete` typed IPC를 추가해 one-time token을 consume하고, 삭제 수락 시점의 authoritative plan을 다시 계산해 confirmation 시점 authorization과 동일 대상임을 검증한 뒤 Operation/Work/ledger를 하나의 transaction으로 enqueue한다.
 
 #### Cycle 88 — authoritative retention delete enqueue
@@ -1139,7 +1139,7 @@
 - EPOCH: cutover transaction이 `production_epoch.v1=rollback_eligible`을 authority와 함께 기록한다. IPC terminal success와 occurrence/run/work/catalog-backup 등 핵심 운영 row의 최초 insert trigger가 같은 transaction 안에서 이를 `forward_fix_required:<cause>`로 한 번만 전이하며, SQLite trigger가 dirty 상태의 수정·삭제를 거부한다.
 - FAIL-CLOSED: production authority에 epoch가 없거나 시각·형식이 authority audit과 모순되면 `CONFIG_CUTOVER_STATE_INVALID`로 거부한다. 정상 dirty epoch는 재시작 후에도 `ForwardFixRequired`로 복원된다.
 - GUARD: 공통 CLI guard가 고정 ProgramData Operational Store에서 persisted authority를 확인한다. service authority이면 backup, L1 verify, restore, schedule 등록, prune 실행을 `LEGACY_DIRECT_EXECUTION_BLOCKED`로 차단하며 dry-run과 기존 Task 제거는 안전한 진단·철회 경로로 허용한다. Tauri는 동일 CLI sidecar를 사용하므로 같은 경계를 상속한다.
-- VERIFY: `cargo test -p dbbackup-catalog -p dbbackup-service -p dbbackup-cli` 전체 통과(원격 실환경 fixture 2건만 명시적 ignored), `cargo clippy -p dbbackup-catalog -p dbbackup-service -p dbbackup-cli --all-targets -- -D warnings`, `cargo fmt --all -- --check`, `git diff --check` 모두 exit 0.
+- VERIFY: `cargo test -p restoreplane-catalog -p restoreplane-service -p restoreplane-cli` 전체 통과(원격 실환경 fixture 2건만 명시적 ignored), `cargo clippy -p restoreplane-catalog -p restoreplane-service -p restoreplane-cli --all-targets -- -D warnings`, `cargo fmt --all -- --check`, `git diff --check` 모두 exit 0.
 - NEXT: clean epoch에서만 실행 가능한 원자적 rollback과 dirty epoch의 forward-fix 거부/runbook 경계를 구현한 뒤, real SCM cutover verifier wiring 및 section-03 증거 gate를 닫는다.
 
 #### Cycle 97 — atomic clean rollback and forward-fix refusal
@@ -1158,7 +1158,7 @@
 - RED: protected `service-identity.json`의 optional verifier 계약과 path escape 거부를 먼저 테스트해 getter 부재 compile-fail을 확인했다. typed cutover 뒤 같은 dispatcher의 backup route가 persisted service authority를 봐야 한다는 테스트는 실제로 `APPLICATION_REHEARSAL_ONLY`를 반환해 stale snapshot 결함을 재현했다.
 - DEPLOYMENT CONTRACT: identity config의 `cutoverVerifier`가 ProgramData 설치 루트 하위 relative evidence directory와 canonical source revision/tree/build digest를 제공한다. 파일은 기존 exact protected DACL 검사를 그대로 통과해야 하며 unknown field, 절대/상위 경로, 잘못된 digest는 시작 전에 거부된다.
 - SCM WIRING: 실제 SCM assembly가 embedded G1 requirements/matrix, protected build identity, service health probe, live Windows Task Scheduler probe로 `FileCutoverReadinessVerifierV1`를 구성해 dispatcher에 주입한다. 선언된 evidence root가 없거나 잘못되면 `CONFIG_CUTOVER_READINESS_INVALID`로 시작 실패하고 이미 획득한 singleton/host를 정리한다. verifier 미선언 설치는 진단 service로 시작하되 cutover typed branch는 fail-closed다.
-- LIVE TASK PROBE: `schtasks.exe /Query /TN <exact task> /XML`을 shell 없이 호출하고 UTF-8/UTF-16 BOM을 명시적으로 해석한다. DBBackup namespace 외 task, 실패/stderr, 중복·모호한 Enabled 값은 상태를 추정하지 않고 `None`으로 거부한다.
+- LIVE TASK PROBE: `schtasks.exe /Query /TN <exact task> /XML`을 shell 없이 호출하고 UTF-8/UTF-16 BOM을 명시적으로 해석한다. RestorePlane namespace 외 task, 실패/stderr, 중복·모호한 Enabled 값은 상태를 추정하지 않고 `None`으로 거부한다.
 - AUTHORITY REFRESH: durable dispatcher는 매 request마다 cross-validated persisted authority를 읽는다. pre-cutover에서는 protected build hint로 cutover만 허용하고, marker commit 직후에는 재시작 없이 service/production 권한을 관찰한다. 향후 clean rollback 뒤 static production snapshot이 남아도 persisted legacy가 우선되어 production 실행을 거부한다.
 - VERIFY: Catalog+Service 전체 unit/integration/doc tests 통과, 두 package all-target Clippy `-D warnings`, workspace fmt check, `git diff --check` 모두 exit 0.
 - NEXT: owner/admin 확인 토큰과 scheduler recovery evidence를 묶은 typed rollback service command를 구현하고 section-03 current-build evidence collector로 전체 fault matrix를 봉인한다.
@@ -1169,7 +1169,7 @@
 - RED: S03 collector 계약 테스트가 모든 command의 `minimumPassedTests` 부재를 즉시 검출했다. 별도 fixture는 명령이 exit 0이더라도 `0 passed`이면 gate가 실패하고 나머지 행은 계속 수집해야 한다고 요구했다.
 - FIX: `s03-evidence-requirements.json`과 12행 quality matrix, thin collector, CI 수집·업로드를 추가했다. 공용 collector는 raw output을 저장하지 않으면서 libtest 결과를 관찰해 최소 통과 수 미달을 stable nonzero로 바꾼다. 동적 Chronos 로그는 실행 가능한 source tree가 아니므로 build identity 입력에서 제외했다.
 - BOUNDARY: 레거시 guard 증거를 rehearsal 허용 테스트에서 실제 production cutover 뒤 `LEGACY_DIRECT_EXECUTION_BLOCKED`를 확인하는 CLI 테스트로 교체했다. 12개 행은 singleton, kernel DACL/impersonation, bounded codec, durable replay, destructive confirmation, DPAPI, typed cutover, clean rollback, SCM wiring, shutdown drain, real pipe, legacy guard를 모두 포함한다.
-- VERIFY: collector pass/fail 계약 테스트 통과, `dbbackup-cli` 45 passed/0 failed/2 explicit ignored, CLI all-target Clippy `-D warnings`, workspace fmt check, `git diff --check` 모두 exit 0. 실제 S03 collector는 12/12 실행·통과, failure 0, same revision/tree/build, minimum observed pass 1, raw output field 0을 `artifacts/s03/evidence.json`에 기록한다.
+- VERIFY: collector pass/fail 계약 테스트 통과, `restoreplane-cli` 45 passed/0 failed/2 explicit ignored, CLI all-target Clippy `-D warnings`, workspace fmt check, `git diff --check` 모두 exit 0. 실제 S03 collector는 12/12 실행·통과, failure 0, same revision/tree/build, minimum observed pass 1, raw output field 0을 `artifacts/s03/evidence.json`에 기록한다.
 - SAFETY DECISION: service IPC rollback은 DB authority와 Windows Task enablement를 한 원자 transaction으로 묶을 수 없어 dual-run 위험이 있다. rollback 실행은 service와 같은 singleton을 선점하는 offline recovery 경로로 제한한다.
 - NEXT: offline singleton recovery tool이 recovery bundle/task inventory를 재검증하고 clean DB rollback 뒤에만 legacy Task를 복원하도록 TDD로 구현한다. post-commit task 복원 실패는 service가 정지된 채 재시도 가능한 incomplete 상태로 남긴다.
 
@@ -1180,7 +1180,7 @@
 - AUTHORITY: recovery는 SCM과 동일한 고정 `default` global mutex를 먼저 획득하고, protected `service-identity.json`의 설치 owner와 정확히 일치하는 local elevated token만 허용한다. CLI에서 mutex key를 덮는 옵션은 존재하지 않으며 marker 전체를 두 번 입력해야 한다.
 - EVIDENCE: protected root 아래 recovery manifest, 필수 bundle item의 크기·BLAKE3, scheduler inventory의 원본 XML·digest·현재 상태를 모두 재검증한다. 비교에서는 `Settings/Enabled`만 제외하고 Trigger enablement와 나머지 definition은 보존하며, restore 직전과 직후에도 definition을 다시 검사한다.
 - ORDER/RECOVERY: clean `rollback_eligible` epoch에서 Catalog authority/audit를 먼저 원자 commit한 뒤에만 legacy Task를 복원한다. 일부 Task 실패는 service claims가 꺼진 legacy 상태로 남고 동일 rollback UUID·marker·bundle·owner·reason·timestamp 재실행만 idempotent하게 계속한다. 첫 production write 뒤에는 scheduler 접근 전 `CONFIG_CUTOVER_FORWARD_FIX_REQUIRED`로 거부한다.
-- OPERATOR PATH: `dbbackup service recover-cutover`와 health의 `cutoverMarker`/`recoveryDisposition`, ADR-008, `docs/runbooks/rollback.md`를 연결했다. 수동 SQL과 독립 `schtasks /ENABLE`은 허용 절차가 아니다.
+- OPERATOR PATH: `restoreplane service recover-cutover`와 health의 `cutoverMarker`/`recoveryDisposition`, ADR-008, `docs/runbooks/rollback.md`를 연결했다. 수동 SQL과 독립 `schtasks /ENABLE`은 허용 절차가 아니다.
 - COLLECTOR: S03 gate를 offline fault suite 5개와 managed real Task를 포함한 14개 all-required 행으로 확장했다. generic collector는 각 command의 최소 실제 pass 수를 확인하고 raw output을 저장하지 않으며, 계약 테스트는 child process의 실제 exit code를 관찰한다.
 - VERIFY: Service 전체 unit/integration/doc tests와 CLI 전체 테스트가 통과했고, Service+CLI all-target Clippy `-D warnings`, workspace fmt, `git diff --check`, G1/S03/S05 collector 계약 테스트가 exit 0이다. managed Task restore는 1/1 pass 후 fixture 잔존 0건이다. 실제 S03 evidence는 14/14 pass, failure 0, identity mismatch 0, raw output field 0, build ID `a568c4a9b4f9066d8c037568dd6714229c50bed1db1f14f55dc19f1a5603645d`다.
 - STATE: V2-R03을 `proved`로 전환한다. production authority의 clean rollback은 offline owner-only이며 dirty epoch는 영구 forward-fix-only다.
@@ -1231,7 +1231,7 @@
 - ISSUE: UI에 Snapshot inventory가 있었지만 production `snapshot.list`는 `UnknownCommand`였고, complete/incomplete 구분과 4축·서명·Part·Replica·verification evidence를 bounded Catalog query로 읽는 경계가 없었다.
 - RED: complete/degraded/non-compliant/conditional Recovery Point와 unknown-key incomplete Recovery Point를 함께 넣은 Service integration test가 `snapshot.list`에서 `UnknownCommand`로 실패했다.
 - FIX: opaque time+ID cursor와 최대 100행 제한을 가진 Catalog snapshot query를 추가했다. 기본 scope는 valid complete만 반환하고 diagnostics는 incomplete/orphaned/quarantined/invalid/unknown-key를 분리한다. Target Connection, engine, time, completeness, durability, compliance, 최소 verification, eligibility, signature, search 필터와 signed Manifest metadata, Part, Replica retention/reader, L1-L3 projection evidence를 직렬화한다.
-- VERIFY: `cargo test -p dbbackup-service --test snapshot_application` 1 passed/0 failed. 테스트는 complete 기본 목록 1건, diagnostics 1건, 4축 독립 상태, Connection 결합, 필터 전체, Manifest/Part/Replica/L2 evidence, unknown scope fail-closed를 실제 Operational Store에서 검증했다.
+- VERIFY: `cargo test -p restoreplane-service --test snapshot_application` 1 passed/0 failed. 테스트는 complete 기본 목록 1건, diagnostics 1건, 4축 독립 상태, Connection 결합, 필터 전체, Manifest/Part/Replica/L2 evidence, unknown scope fail-closed를 실제 Operational Store에서 검증했다.
 - NEXT: `verification.enqueue`를 기존 durable Verification Repository/Worker에 연결하고 unsupported L3의 무강등 계약을 application boundary에서 증명한다.
 
 #### Cycle 106 — exact-level manual verification enqueue
@@ -1265,7 +1265,7 @@
 - ISSUE: application-level create-new enqueue는 동작했지만 production dispatcher에는 SID·idempotency ledger·preflight 재검사·Restore Run·Work Item·응답 완료를 하나의 원자적 경계로 묶는 증거가 없었다.
 - RED: 잘못된 Recovery Point, 동일 키 재실행, 동일 키의 다른 payload를 포함한 저장소 테스트와 실제 production/G1 dispatcher 테스트를 추가했다.
 - FIX: `enqueue_safe_restore_request`가 IMMEDIATE transaction 안에서 ledger accepted, authoritative source/Replica/target 재검사, Restore Run/Work insert, ledger succeeded를 함께 커밋한다. dispatcher는 완료된 요청을 preflight보다 먼저 재생하고, 신규 요청만 service-authoritative preflight를 다시 수행한다. 동시 재생 응답 검증은 새로 생성한 로컬 ID가 아니라 저장된 Restore Run/Work 형식에 결합하도록 수정했다.
-- VERIFY: `cargo test -p dbbackup-catalog --test ipc_safe_restore_repository` 1 passed/0 failed. `cargo test -p dbbackup-service --test restore_ipc_dispatch` 1 passed/0 failed. 실패 경로의 ledger/Restore/Work는 0건, 성공·재생·충돌 뒤에는 각각 정확히 1건이며 process instance는 0건이었다. 재생 시 preflight use case 호출 횟수도 1에서 증가하지 않았다.
+- VERIFY: `cargo test -p restoreplane-catalog --test ipc_safe_restore_repository` 1 passed/0 failed. `cargo test -p restoreplane-service --test restore_ipc_dispatch` 1 passed/0 failed. 실패 경로의 ledger/Restore/Work는 0건, 성공·재생·충돌 뒤에는 각각 정확히 1건이며 process instance는 0건이었다. 재생 시 preflight use case 호출 횟수도 1에서 증가하지 않았다.
 - NEXT: durable restore worker가 typed Restore context를 claim하고 실제 restore/validation/cleanup 단계를 fencing·cancel·retry 계약 안에서 실행하도록 구현한다.
 
 #### Cycle 110 — durable Restore Worker and false-success barrier
@@ -1274,7 +1274,7 @@
 - RED: native exit 0+oracle pass, native exit 0+oracle mismatch, target 생성 뒤 cancel, 실행 중 lease expiry/crash 네 시나리오를 Restore Worker integration test로 고정했다.
 - FIX: authoritative Restore claim context가 submit 당시 preflight binding과 현재 Recovery Point/Replica, target Connection·Secret·probe·server, discovery existence, spool, current certification, trusted signed tool을 다시 계산하고 fingerprint/version drift를 차단한다. Restore Worker는 restore와 validation을 별도 phase로 실행하고 validation pass 뒤에만 commit한다. 증거 객체는 credential/token/connection-string 형태를 거부한다.
 - SAFETY: oracle mismatch와 target 생성 뒤 cancel은 `cleanup_required`·`targetPreserved=true`로 정산한다. 시작된 Restore claim의 lease가 만료되면 자동 재시도·자동 삭제하지 않고 `RESTORE_CRASH_CLEANUP_REQUIRED` evidence와 함께 terminal 처리한다. 시작 전 만료만 재queue 가능하다.
-- VERIFY: `cargo test -p dbbackup-runtime --test restore_worker` 4 passed/0 failed. `cargo test -p dbbackup-runtime --tests` 전체 통과, `cargo test -p dbbackup-catalog --test runtime_repository` 5 passed/0 failed. exit 0/oracle fail의 succeeded row는 0건이었다.
+- VERIFY: `cargo test -p restoreplane-runtime --test restore_worker` 4 passed/0 failed. `cargo test -p restoreplane-runtime --tests` 전체 통과, `cargo test -p restoreplane-catalog --test runtime_repository` 5 passed/0 failed. exit 0/oracle fail의 succeeded row는 0건이었다.
 - NEXT: PostgreSQL/MySQL/MariaDB의 trusted native tool/reader/Secret resolver를 Restore Executor에 연결하고 실제 create-new restore/oracle fixture를 같은 Work/Restore Run에 귀속한다.
 
 #### Cycle 111 — actual create-new Restore Run and content oracle
@@ -1282,7 +1282,7 @@
 - ISSUE: G2 Docker fixture는 세 엔진의 실제 backup/restore를 증명했지만 durable Restore Run/Work, fencing, process evidence, validation terminal과 분리돼 있어 G3-B의 실제 create-new journey를 입증하지 못했다.
 - RED: pinned PostgreSQL G2 custom dump를 Restore Worker에 태운 첫 실행에서 native restore exit 0 뒤 oracle digest가 G2 digest와 달랐다. Worker는 성공을 만들지 않고 Restore Run을 `cleanup_required`와 `RESTORE_ORACLE_MISMATCH`로 정산했다.
 - FIX: Restore Executor에 현재 fenced claim을 전달하고, 이미 running인 in-process Work도 active process가 없을 때 순차 native phase를 등록할 수 있게 Repository를 확장했다. Docker fixture Executor는 hash-verified Docker CLI를 Windows Job Object로 실행하고 각 process start/running/exit, heartbeat, cancel, timeout을 같은 Attempt에 기록한다. G2의 deterministic oracle 계약처럼 줄 trim/filter/sort 뒤 SHA-256을 비교한다.
-- VERIFY: ignored live gate `live_postgresql_create_new_restore_runs_through_durable_restore_work_and_oracle` 1 passed/0 failed. pinned image `sha256:3a82…4744a`, dump `d69a…c29a`, oracle `f232…b75`, process 8건, Restore/Work 모두 succeeded이고 `artifacts/g3-b/restore-worker-postgresql.json`에 비밀 없는 증거를 기록했다. `cargo test -p dbbackup-catalog --test runtime_repository` 6 passed, 기본 Restore Worker 4 passed/1 ignored.
+- VERIFY: ignored live gate `live_postgresql_create_new_restore_runs_through_durable_restore_work_and_oracle` 1 passed/0 failed. pinned image `sha256:3a82…4744a`, dump `d69a…c29a`, oracle `f232…b75`, process 8건, Restore/Work 모두 succeeded이고 `artifacts/g3-b/restore-worker-postgresql.json`에 비밀 없는 증거를 기록했다. `cargo test -p restoreplane-catalog --test runtime_repository` 6 passed, 기본 Restore Worker 4 passed/1 ignored.
 - SAFETY: Docker credential은 command line·환경에 넣지 않고 격리 fixture의 trust auth만 사용했다. 첫 oracle mismatch 사례가 cleanup-required로 보존돼 exit 0 false-success barrier도 실제 프로세스에서 입증됐다.
 - NEXT: owner-only overwrite prepare/execute confirmation을 authoritative preflight와 같은 atomic Restore enqueue에 연결하고 mismatch/expiry/replay process 0을 검증한다.
 
@@ -1292,7 +1292,7 @@
 - RED: owner가 발급한 token을 다른 승인 관리자 SID, 변경된 payload, 만료 시각, 소비 후 새 idempotency key로 제출하는 dispatcher integration matrix를 추가했다. 기존 경로에서는 prepare/execute가 연결되지 않아 실행할 수 없었다.
 - FIX: overwrite prepare가 service-authoritative overwrite preflight, target identity 재입력, final source/target/cleanup summary를 요구하도록 연결했다. raw token과 exact execute payload는 첫 응답 메모리에만 반환하며 ledger에는 safe summary와 digest만 저장한다. execute는 submit 직전 preflight를 재실행하고 SID/action/resource/fingerprint/full-payload/expiry bound token을 같은 IMMEDIATE transaction에서 한 번 소비하면서 source Replica가 결합된 Restore Run/Work와 replayable response를 생성한다.
 - SAFETY: SID mismatch, payload mismatch, expiry, consumed-token replay는 모두 `CONFIRMATION_TOKEN_INVALID_OR_REPLAYED`로 종료되고 transaction rollback 후 Restore Run 0, restore Work 0, process instance 0을 유지한다. 정확히 같은 IPC replay는 preflight를 다시 실행하지 않고 기존 결과만 반환한다.
-- VERIFY: `cargo test -p dbbackup-catalog --test ipc_confirmation_repository` 7 passed/0 failed. `cargo test -p dbbackup-service --test restore_ipc_dispatch` 2 passed/0 failed. `cargo test -p dbbackup-service --test ipc_authorization` 4 passed/0 failed.
+- VERIFY: `cargo test -p restoreplane-catalog --test ipc_confirmation_repository` 7 passed/0 failed. `cargo test -p restoreplane-service --test restore_ipc_dispatch` 2 passed/0 failed. `cargo test -p restoreplane-service --test ipc_authorization` 4 passed/0 failed.
 - NEXT: Replica repair/restore drill/catalog rebuild preview를 durable command와 공통 Activity 모델에 연결한 뒤 Snapshot/Recovery UI와 keyboard/zoom/theme/a11y gate를 완성한다.
 
 #### Cycle 113 — atomic Replica repair request
@@ -1300,7 +1300,7 @@
 - ISSUE: `repair.enqueue`가 generic application 경로에만 의존해 production dispatcher에서는 typed transaction이 없었고, source Replica·target Destination·현재 Secret Ref·Operation/Work/Activity/IPC response가 한 원자 경계에 결합되지 않았다.
 - RED: complete+valid Snapshot의 committed reader Replica와 별도 ready Destination을 선택해 enqueue/replay/payload-conflict를 검증하는 production dispatcher 테스트를 추가했다. 기존 경로는 `IPC_TYPED_TRANSACTION_REQUIRED`로 실패했다.
 - FIX: Catalog IPC Repository가 authoritative Recovery Point/Replica projection과 target Destination 상태를 재검사하고, 현재 source reader 및 target writer/reader Secret Ref를 같은 IMMEDIATE transaction에서 resolve/pin한다. deterministic Operation Run/Work Item, `REPLICA_REPAIR_QUEUED` Activity, replay-safe IPC completion을 함께 생성하며 이미 healthy한 동일 target과 source=target을 거부한다.
-- VERIFY: focused production dispatcher test 1 passed/0 failed, `cargo check -p dbbackup-catalog -p dbbackup-service` 통과. 정확한 replay는 같은 response를 반환하고 변경된 target payload는 `IPC_IDEMPOTENCY_CONFLICT`; 성공 뒤 repair ledger/Operation/Work/Activity가 각각 1건, process instance는 0건이었다.
+- VERIFY: focused production dispatcher test 1 passed/0 failed, `cargo check -p restoreplane-catalog -p restoreplane-service` 통과. 정확한 replay는 같은 response를 반환하고 변경된 target payload는 `IPC_IDEMPOTENCY_CONFLICT`; 성공 뒤 repair ledger/Operation/Work/Activity가 각각 1건, process instance는 0건이었다.
 - NEXT: restore drill을 incident restore와 분리하고 registered test target, RTO, L3 evidence를 같은 Restore 수명주기에 결합한다.
 
 #### Cycle 114 — isolated restore drill and bound L3 evidence
@@ -1308,7 +1308,7 @@
 - ISSUE: schema와 Verification Repository에는 `restore_drill` 목적/L3 binding이 있었지만 모든 safe restore가 `incident_recovery`로 고정돼 실제 drill Run을 만들 수 없었다. 일반 Connection과 test target 구분, Restore terminal과 L3 evidence 정산도 없었다.
 - RED: production IPC가 하나의 Restore Work와 결합된 L3 Verification Run을 만들고, Restore Worker 성공 시 L3 passed/RTO/evidence를 정착시키며 별도 Verification Work를 만들지 않는 두 integration test를 추가했다. 초기 구현은 drill 목적을 수용하지 않아 실패했다.
 - FIX: Connection `adapter_config_json.restoreTestTarget`을 명시적 등록 경계로 노출하고 preflight에 `restore_target_role` check를 추가했다. drill은 create-new+level 3만 허용하며 일반 Connection에서는 eligible=false다. safe enqueue는 Restore Run/Work와 deterministic L3 Verification Run을 원자 생성하고, start/terminal/cancel이 linked verification의 running/passed/failed/cancelled, achieved level, validation evidence를 같은 transaction에서 정산한다. Snapshot query에는 target/RTO/cleanup evidence가 결합된 restore drill history를 추가했다.
-- VERIFY: `cargo test -p dbbackup-service --test restore_ipc_dispatch` 4 passed/0 failed. `cargo test -p dbbackup-runtime --test restore_worker` 5 passed/0 failed/1 ignored. `cargo test -p dbbackup-service --test snapshot_application` 1 passed/0 failed. `cargo check -p dbbackup-catalog -p dbbackup-service -p dbbackup-runtime` 통과.
+- VERIFY: `cargo test -p restoreplane-service --test restore_ipc_dispatch` 4 passed/0 failed. `cargo test -p restoreplane-runtime --test restore_worker` 5 passed/0 failed/1 ignored. `cargo test -p restoreplane-service --test snapshot_application` 1 passed/0 failed. `cargo check -p restoreplane-catalog -p restoreplane-service -p restoreplane-runtime` 통과.
 - NEXT: `verification.enqueue` production IPC와 Catalog rebuild preview/diagnostics contract를 닫고 Recovery UI를 authoritative command shape에 연결한다.
 
 #### Cycle 115 — atomic manual verification IPC
@@ -1316,7 +1316,7 @@
 - ISSUE: application-level manual verification은 exact level을 보존했지만 production dispatcher의 SID·idempotency·authoritative source/Replica/capability 재검사와 Verification Run/Work/응답 완료가 하나의 transaction이라는 증거가 없었다.
 - RED: L2 enqueue/replay/payload conflict와 Restore Run 없는 L3를 production dispatcher로 호출하는 integration matrix를 추가했다.
 - FIX: IMMEDIATE transaction 안에서 complete+valid Recovery Point, committed reader-eligible Replica, current provider capability를 다시 확인하고 L1/L2 Verification Run과 Work, IPC ledger completion을 함께 커밋한다. L3는 `VERIFICATION_RESTORE_RUN_REQUIRED` unsupported 결과를 level 3 그대로 기록하고 낮은 level Work를 만들지 않는다.
-- VERIFY: `cargo test -p dbbackup-service --test restore_ipc_dispatch` 5 passed/0 failed. exact replay는 같은 응답을 반환하고 변경 payload는 idempotency conflict, unsupported L3 뒤에는 process instance와 하위-level Work가 0건이었다.
+- VERIFY: `cargo test -p restoreplane-service --test restore_ipc_dispatch` 5 passed/0 failed. exact replay는 같은 응답을 반환하고 변경 payload는 idempotency conflict, unsupported L3 뒤에는 process instance와 하위-level Work가 0건이었다.
 - NEXT: trusted signing key를 사용하는 read-only Catalog rebuild preview와 v2 Manifest source discovery를 service boundary에 연결한다.
 
 #### Cycle 116 — read-only Catalog rebuild preview
@@ -1351,7 +1351,7 @@
 - ISSUE: live SQLite를 파일 복사하면 WAL/동시 writer 상태에서 불완전 artifact가 생기고, overwrite 중 고장 나면 원본을 잃을 수 있었다.
 - RED: WAL active writer, exclusive lock timeout, 출력 budget 부족, cancellation, symlink/reparse, create-new restore, identity drift, replace fault, 실제 Windows atomic overwrite를 포함한 conformance matrix를 먼저 고정했다.
 - FIX: exact `rusqlite 0.31.0` Online Backup API를 bounded page step/retry/cancel/free-space budget으로 실행한다. staged DB의 `integrity_check`, `foreign_key_check`, read-only scalar oracle와 fsync 뒤 source/target file identity를 재검사한다. create-new는 write-through move, overwrite는 Windows `ReplaceFileW`로 원본 ACL/속성을 보존하며 실패 시 원본을 남긴다.
-- VERIFY: `cargo test -p dbbackup-source-sqlite --test conformance` 8 passed/0 failed. active uncommitted writer의 행은 복구본에 섞이지 않았고, lock/space/cancel/replace-fault에서 partial final artifact 또는 원본 손상은 0건이었다.
+- VERIFY: `cargo test -p restoreplane-source-sqlite --test conformance` 8 passed/0 failed. active uncommitted writer의 행은 복구본에 섞이지 않았고, lock/space/cancel/replace-fault에서 partial final artifact 또는 원본 손상은 0건이었다.
 - NEXT: production Connection probe/discovery와 common stream pipeline에 SQLite를 연결한다.
 
 #### Cycle 120 — SQLite service integration and certification
@@ -1409,7 +1409,7 @@
 - ISSUE: 상승 권한 Windows fixture의 첫 update에서 서비스가 `STOP_PENDING`에 고착됐다. 운영 drain을 SCM shutdown으로 보고해 IPC가 끊기는 상태 모델 오류였다.
 - RED: operational drain 중 SCM 상태와 accepted control을 검증하는 `scm_contract` 회귀 테스트가 기존 매핑에서 실패했다.
 - FIX: 작업 claim만 중단하는 `Draining`은 IPC가 살아 있는 SCM `Running`으로 보고하고, 실제 Stop/Preshutdown 신호 뒤에만 별도 shutdown-pending 상태를 보고하도록 분리했다.
-- VERIFY: 개발 fixture에서 clean install, status/diagnostics, repair, 비동기 support bundle, 14개 update stage, control backup/rehearsal, uninstall 후 운영 저장소·4개 control backup·1개 support bundle 보존을 확인했다. 검증 뒤 이 실행이 만든 `C:\Program Files\DbBackup`, `C:\ProgramData\DbBackup`과 임시 package만 제거했으며 service/process가 남지 않았다.
+- VERIFY: 개발 fixture에서 clean install, status/diagnostics, repair, 비동기 support bundle, 14개 update stage, control backup/rehearsal, uninstall 후 운영 저장소·4개 control backup·1개 support bundle 보존을 확인했다. 검증 뒤 이 실행이 만든 `C:\Program Files\RestorePlane`, `C:\ProgramData\RestorePlane`과 임시 package만 제거했으며 service/process가 남지 않았다.
 - NEXT: release workflow의 clean-fixture 주장과 증거 신선도를 공격한다.
 
 #### Cycle 127 — signed-fixture policy fail-closed
@@ -1441,7 +1441,7 @@
 - RUN: `scripts/test-release-matrix.ps1 -RunManaged -RequireUpstreamEvidence`를 변경 없는 tree에서 실행했다.
 - IDENTITY: revision `bd6a97145db03fe2ccb2fa46e453f84f1e1ca575`, source tree digest `e1e19e2c9402807f5d4db1172dfed3ccabb9dbfead4c0079c9e83e9969d076d6`, build ID `f60bf75e8e3cc8a93a47599344204460f3efabffab0715e0f0f05137aaf2012e`.
 - VERIFY: managed 7/7와 G5 8/8이 모두 exit 0이다. G0 6/6, G1 9 evidence rows, G2 PostgreSQL/MySQL/MariaDB 3/3와 contract 4/4, G3 remote/PostgreSQL restore, G4 6/6, G5 update/support/telemetry/installer/release 8/8이 동일 source identity로 통과했다. 직접 G0 truth도 `evidenceGate=true`, `durableGate=true`를 반환했다.
-- HYGIENE: `cargo fmt --all -- --check`, `git diff --check`가 통과했고 DbBackup service와 workspace Vite process는 0개다. 테스트 fixture container는 정리했으며 사전 존재한 unrelated workload는 보존했다.
+- HYGIENE: `cargo fmt --all -- --check`, `git diff --check`가 통과했고 RestorePlane service와 workspace Vite process는 0개다. 테스트 fixture container는 정리했으며 사전 존재한 unrelated workload는 보존했다.
 - STATE: V2-R10은 `proved`다. 전체 계약은 R01–R08/R10 proved, R09의 SQLite 및 SQL Server candidate 구현 proved/SQL Server live BACPAC만 parked다.
 - PARKED: `promotionStatus=parked`는 코드 실패가 아니다. production Authenticode, RFC3161 timestamp, signed clean/update Windows fixture, owner rollout-stop metric 승인과 실제 SQL Server fixture는 외부 자격증명·인프라·제품 결정이 필요하며 Owner Decision Brief에 인계했다.
 - DONE: 실행 가능한 인스코프 구현과 검증을 모두 소진했고 최종 증거는 `artifacts/g5/release-matrix.json`에 귀속된다.
@@ -1453,7 +1453,7 @@
 ## Run Metadata
 
 - Started: 2026-07-23
-- Project: `D:\git\dbbackupsystem`
+- Project: `D:\git\restoreplane`
 - Branch: `main`
 - Engine: native goal + direct Chronos loop
 - Scope: 현재 작업 트리의 원격 manifest source 구현을 보존하면서 콘솔 reader 신원 등록, 재현 가능한 S3/SSH 복구 드릴, 전체 품질 게이트까지 마감
@@ -1489,7 +1489,7 @@
 ### Cycle 1 — S3 reader 저장 계약
 
 - FIND: `NewDestination`에 reader 입력이 없고 저장 시 `reader: None`으로 고정됐다.
-- RED: `cargo test -p dbbackup-console add_destination_s3_encrypts_separate_reader_identity --no-run`이 `reader`/`NewReaderIdentity` 부재로 실패했다.
+- RED: `cargo test -p restoreplane-console add_destination_s3_encrypts_separate_reader_identity --no-run`이 `reader`/`NewReaderIdentity` 부재로 실패했다.
 - FIX: 중첩 `NewReaderIdentity` 입력과 S3 reader Access Key/Secret의 KEK 기반 EncField 저장을 추가했다.
 - VERIFY: `add_destination_s3_encrypts_separate_reader_identity` 1 passed.
 - NEXT: SSH reader 개인키/비밀번호 저장 계약.
@@ -1499,7 +1499,7 @@
 - FIND: SSH reader 사용자·개인키·암호문·비밀번호가 콘솔 저장 경계에서 소실됐다.
 - RED: 개인키 테스트는 `reader 저장` 단언에서 실패했고, 비밀번호 테스트는 reader 인증 거부로 실패했다.
 - FIX: 개인키 또는 비밀번호 중 하나만 허용하고 passphrase/password만 EncField로 암호화하도록 구현했다.
-- VERIFY: `cargo test -p dbbackup-console add_destination_ssh_encrypts_reader` 결과 2 passed.
+- VERIFY: `cargo test -p restoreplane-console add_destination_ssh_encrypts_reader` 결과 2 passed.
 - NEXT: 복구 reader 없는 원격 목적지 생성 차단.
 
 ### Cycle 3 — 복구 불가능한 GUI 설정 차단

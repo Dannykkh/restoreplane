@@ -8,7 +8,7 @@
 
 ### SQLite DDL
 
-`schema-v2.sql`을 기존 workspace의 `dbbackup-catalog`와 pinned
+`schema-v2.sql`을 기존 workspace의 `restoreplane-catalog`와 pinned
 `rusqlite = 0.31.0, bundled`를 사용하는 임시 in-memory integration test로 실행했다.
 
 | Check | Result |

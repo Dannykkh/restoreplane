@@ -6,7 +6,7 @@
 서명된 배포 후보 package는 다음 package qualification 입력과 G0~G5 managed evidence가
 준비될 때 만들 수 있다.
 
-- owner가 별도 신뢰 채널로 승인한 DbBackup Authenticode signer thumbprint
+- owner가 별도 신뢰 채널로 승인한 RestorePlane Authenticode signer thumbprint
 - PG18, MySQL8, MariaDB11 client와 dependency/license를 모두 포함한 사전 감사 native-tool tree
 - 위 tree의 owner-approved `native-tools-audit.json` SHA-256
 - 현재 source revision에 연결된 G0~G5 managed evidence
@@ -87,7 +87,7 @@ revision/tree/build 불일치는 안정된 reason code로 `status=fail`을 기�
 완료되기 전에는 90일 보관 candidate artifact를 publish하지 않는다.
 
 build ID 선언값만 같아서는 충분하지 않다. signing metadata와 fixture evidence는 실제
-`package-manifest.json` SHA-256 및 manifest에 포함된 `dbbackup-service.exe`, `dbbackup.exe`
+`package-manifest.json` SHA-256 및 manifest에 포함된 `restoreplane-service.exe`, `restoreplane.exe`
 SHA-256도 기록한다. final reevaluation은 다운로드된 package의 정확한 파일 집합을 다시
 열거하고 각 파일을 재해시한다. 따라서 같은 revision/tree/build ID를 복사한 다른 binary나
 manifest 변조도 promotion evidence로 사용할 수 없다.

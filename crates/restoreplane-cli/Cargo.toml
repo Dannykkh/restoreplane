@@ -1,0 +1,46 @@
+[package]
+name = "restoreplane-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "restoreplane"
+path = "src/main.rs"
+
+[dependencies]
+restoreplane-core = { path = "../restoreplane-core" }
+restoreplane-config = { path = "../restoreplane-config" }
+restoreplane-pipeline = { path = "../restoreplane-pipeline" }
+restoreplane-dest-s3 = { path = "../restoreplane-dest-s3" }
+restoreplane-dest-ssh = { path = "../restoreplane-dest-ssh" }
+restoreplane-source-pg = { path = "../restoreplane-source-pg" }
+restoreplane-source-mysql = { path = "../restoreplane-source-mysql" }
+restoreplane-secrets = { path = "../restoreplane-secrets" }
+restoreplane-catalog = { path = "../restoreplane-catalog" }
+restoreplane-verify = { path = "../restoreplane-verify" }
+restoreplane-scheduler = { path = "../restoreplane-scheduler" }
+restoreplane-ipc-client = { path = "../restoreplane-ipc-client" }
+restoreplane-application = { path = "../restoreplane-application" }
+restoreplane-service = { path = "../restoreplane-service" }
+clap.workspace = true
+anyhow.workspace = true
+async-trait = "0.1"
+serde_json = "1"
+rpassword.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tokio = { version = "=1.52.3", features = ["rt-multi-thread", "macros"] }
+time = { version = "0.3", features = ["std"] }
+zeroize = { version = "=1.9.0" }
+ed25519-dalek = { version = "=2.2.0" }
+uuid = { version = "=1.11.0", features = ["v4"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-service = "=0.8.1"
+
+[dev-dependencies]
+tempfile = "=3.14.0"
+restoreplane-domain = { path = "../restoreplane-domain" }

@@ -2,12 +2,12 @@
 
 - **상태**: accepted
 - **날짜**: 2026-08-24
-- **결정자**: DbBackup project owner
+- **결정자**: RestorePlane project owner
 - **태그**: windows-service, installer, data-root, repair, uninstall
 
 ## Context
 
-DbBackup은 signed binary와 bundled native tools를 배치하면서 Operational Store, secret, spool,
+RestorePlane은 signed binary와 bundled native tools를 배치하면서 Operational Store, secret, spool,
 control backup과 recovery material을 장기간 보존해야 한다. binary 손실이나 repair/update가
 프로그램 데이터를 함께 삭제하면 일정과 복구 근거를 잃는다. 반대로 mutable data를 executable
 directory에 두면 service account ACL과 binary read/execute ACL도 분리할 수 없다.
@@ -34,10 +34,10 @@ directory에 두면 service account ACL과 binary read/execute ACL도 분리할 
 - `InstallRoot`는 running service executable의 parent이며 CLI와 bundled tools를 포함한다.
 - `DataRoot`는 Operational Store, service identity/secrets, spool, control backup, support bundle,
   telemetry archive, update journal을 포함한다.
-- service definition은 quoted `dbbackup-service.exe --data-root "<DataRoot>"`를 저장한다.
+- service definition은 quoted `restoreplane-service.exe --data-root "<DataRoot>"`를 저장한다.
 - `--data-root`를 사용하면 정확히 한 번의 absolute path만 허용한다. 잘못된 추가 인자, 상대
   경로, 중복 인자, 같거나 중첩된 두 roots는 fail closed한다. 인자가 없는 legacy service
-  definition은 `%ProgramData%\DbBackup`으로 제한해 호환하지만 새 lifecycle script는 항상
+  definition은 `%ProgramData%\RestorePlane`으로 제한해 호환하지만 새 lifecycle script는 항상
   explicit argument를 기록한다.
 - repair는 기존 service entry를 대상으로 binary/service definition/ACL을 복구하고 DataRoot를
   보존한다.

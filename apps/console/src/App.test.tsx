@@ -55,7 +55,7 @@ describe("application shell", () => {
       expect(selector).not.toHaveValue("00000000-0000-4000-8000-000000000001");
       expect((selector as HTMLSelectElement).selectedOptions[0]?.text).toBe("Finance Ops");
     });
-    expect(window.localStorage.getItem("dbbackup.workspaceId")).toBe(
+    expect(window.localStorage.getItem("restoreplane.workspaceId")).toBe(
       (selector as HTMLSelectElement).value,
     );
   });

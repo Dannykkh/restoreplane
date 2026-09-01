@@ -2,7 +2,7 @@
 
 - **상태**: accepted
 - **날짜**: 2026-08-24
-- **결정자**: DbBackup project owner
+- **결정자**: RestorePlane project owner
 - **태그**: crash-recovery, signed-manifest, metadata-probe, fencing, recovery-point
 
 ## Context

@@ -14,7 +14,7 @@
 ## 1. Authority 보존과 초기 triage
 
 ```powershell
-$cli = "$env:ProgramFiles\DbBackup\dbbackup.exe"
+$cli = "$env:ProgramFiles\RestorePlane\restoreplane.exe"
 $status = & $cli service status | ConvertFrom-Json
 $diagnostics = & $cli service diagnostics | ConvertFrom-Json
 ```

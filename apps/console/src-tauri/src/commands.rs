@@ -2,16 +2,16 @@
 //!
 //! 증분1 범위: 읽기 전용 대시보드. config(잡/DB/목적지 정의) + catalog(최신 백업/검증)만 읽어
 //! DashboardData(프론트 types.ts와 camelCase로 형태 일치)를 만든다. 액션(init/run/restore 등)은
-//! 후속 증분에서 dbbackup.exe 사이드카로 배선한다.
+//! 후속 증분에서 restoreplane.exe 사이드카로 배선한다.
 
 use std::collections::HashMap;
 
-use dbbackup_catalog::{
+use restoreplane_catalog::{
     artifacts_for_backup, latest_backup_per_job, latest_run_per_job, open_reader_conn,
     ArtifactRecord, BackupRecord, LatestRunRecord,
 };
-use dbbackup_config::schema::Config;
-use dbbackup_secrets::Keystore;
+use restoreplane_config::schema::Config;
+use restoreplane_secrets::Keystore;
 use serde::Serialize;
 
 use crate::paths::{config_path, keystore_path};
@@ -83,13 +83,13 @@ fn to_artifact_view(record: &ArtifactRecord) -> DestArtifactView {
     }
 }
 
-fn engine_str(e: dbbackup_core::Engine) -> &'static str {
+fn engine_str(e: restoreplane_core::Engine) -> &'static str {
     match e {
-        dbbackup_core::Engine::Postgresql => "postgresql",
-        dbbackup_core::Engine::Mysql => "mysql",
-        dbbackup_core::Engine::Mariadb => "mariadb",
-        dbbackup_core::Engine::Sqlserver => "sqlserver",
-        dbbackup_core::Engine::Sqlite => "sqlite",
+        restoreplane_core::Engine::Postgresql => "postgresql",
+        restoreplane_core::Engine::Mysql => "mysql",
+        restoreplane_core::Engine::Mariadb => "mariadb",
+        restoreplane_core::Engine::Sqlserver => "sqlserver",
+        restoreplane_core::Engine::Sqlite => "sqlite",
     }
 }
 
@@ -242,7 +242,7 @@ pub fn dashboard() -> Result<DashboardData, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dbbackup_catalog::{ArtifactRecord, LatestRunRecord};
+    use restoreplane_catalog::{ArtifactRecord, LatestRunRecord};
 
     fn successful_backup() -> BackupRecord {
         BackupRecord {

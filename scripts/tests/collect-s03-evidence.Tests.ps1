@@ -11,7 +11,7 @@ $requirements =
         -Encoding UTF8 |
     ConvertFrom-Json
 $fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) (
-    "dbbackup-s03-collector-tests-" + [Guid]::NewGuid().ToString("N")
+    "restoreplane-s03-collector-tests-" + [Guid]::NewGuid().ToString("N")
 )
 
 function Write-Matrix {
@@ -125,7 +125,7 @@ try {
     )
     if ($realSchedulerRecovery.Count -ne 1 -or
         -not ([string] $realSchedulerRecovery[0].display).Contains(
-            "real_windows_scheduler_controller_restores_a_throwaway_dbbackup_task"
+            "real_windows_scheduler_controller_restores_a_throwaway_restoreplane_task"
         ) -or
         -not ([string] $realSchedulerRecovery[0].display).Contains("--ignored --exact")) {
         throw "S03 scheduler recovery evidence must exercise the managed Windows task"

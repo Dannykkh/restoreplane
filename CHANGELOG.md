@@ -24,6 +24,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Korean, English, and Japanese README guides with deterministic Console
   screenshots and an MIT license owned by dannykkh.
 
+### Changed
+
+- Renamed the product, repository surface, Windows service, CLI, IPC namespace,
+  installation roots, environment variables, and Rust crates to RestorePlane.
+
+### Fixed
+
+- Minimum-reader and service update compatibility now use full Semantic
+  Versioning, so release candidates such as `0.1.0-rc.1` start correctly and
+  remain ordered below the corresponding final release.
+
 ### Security
 
 - Native backup tools and dependency closures are bound to verified package

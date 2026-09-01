@@ -365,7 +365,7 @@ function Invoke-SelectivePipelineRoundTrip {
     $recoveredPath = Join-Path $pipelineRoot "o"
     $evidencePath = Join-Path $pipelineRoot "e.json"
     $arguments = @(
-        "run", "--locked", "--quiet", "-p", "dbbackup-pipeline",
+        "run", "--locked", "--quiet", "-p", "restoreplane-pipeline",
         "--example", "selective_scope_pipeline", "--",
         "--input", $InputPath,
         "--destination", $destinationRoot,
@@ -395,11 +395,11 @@ function Invoke-SelectivePipelineRoundTrip {
     }
     if ($exitCode -ne 0) {
         $detail = @($lines | Select-Object -Last 20 | ForEach-Object { $_.ToString() }) -join "`n"
-        throw "selective DbBackup pipeline failed (exit=$exitCode): $detail"
+        throw "selective RestorePlane pipeline failed (exit=$exitCode): $detail"
     }
     if (-not (Test-Path -LiteralPath $recoveredPath -PathType Leaf) -or
         -not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) {
-        throw "selective DbBackup pipeline did not commit recovery evidence"
+        throw "selective RestorePlane pipeline did not commit recovery evidence"
     }
     $evidence = Get-Content -LiteralPath $evidencePath -Raw -Encoding UTF8 |
         ConvertFrom-Json
@@ -424,11 +424,11 @@ function Invoke-SelectivePipelineRoundTrip {
         $evidence.manifestReaderRoundTripVerified -ne $true -or
         $evidence.requiredReplicaRequirement -ne "required" -or
         $evidence.requiredReplicaReaderStatus -ne "eligible") {
-        throw "selective DbBackup pipeline evidence contract is invalid"
+        throw "selective RestorePlane pipeline evidence contract is invalid"
     }
     if ((Get-FileSha256 -Path $InputPath) -ne
         (Get-FileSha256 -Path $recoveredPath)) {
-        throw "selective DbBackup pipeline recovery bytes do not match the native dump"
+        throw "selective RestorePlane pipeline recovery bytes do not match the native dump"
     }
     return [PSCustomObject] @{
         recoveredPath = $recoveredPath
@@ -548,9 +548,9 @@ function Invoke-PostgresqlSelectiveRoundTrip {
         [Parameter(Mandatory = $true)] [string] $TemporaryRoot
     )
 
-    $password = "dbbackup_g2_scope_ephemeral"
-    $sourceContainer = "dbbackup-g2-scope-pg-source-$RunId"
-    $targetContainer = "dbbackup-g2-scope-pg-target-$RunId"
+    $password = "restoreplane_g2_scope_ephemeral"
+    $sourceContainer = "restoreplane-g2-scope-pg-source-$RunId"
+    $targetContainer = "restoreplane-g2-scope-pg-target-$RunId"
     $containers = [System.Collections.Generic.List[string]]::new()
     $dumpPath = Join-Path $TemporaryRoot "postgresql-selected.dump"
     try {
@@ -726,9 +726,9 @@ function Invoke-MySqlFamilySelectiveRoundTrip {
     $engineName = [string] $Contract.engine
     $isMaria = $engineName -eq "mariadb"
     $client = if ($isMaria) { "mariadb" } else { "mysql" }
-    $password = "dbbackup_g2_scope_ephemeral"
-    $sourceContainer = "dbbackup-g2-scope-$engineName-source-$RunId"
-    $targetContainer = "dbbackup-g2-scope-$engineName-target-$RunId"
+    $password = "restoreplane_g2_scope_ephemeral"
+    $sourceContainer = "restoreplane-g2-scope-$engineName-source-$RunId"
+    $targetContainer = "restoreplane-g2-scope-$engineName-target-$RunId"
     $containers = [System.Collections.Generic.List[string]]::new()
     $dumpPath = Join-Path $TemporaryRoot "$engineName-selected.sql"
     try {
@@ -914,7 +914,7 @@ SELECT CONCAT('trigger_effect=', note) FROM selected_records WHERE id = 3;
 $mutexCreated = $false
 $gateMutex = [Threading.Mutex]::new(
     $false,
-    "Local\dbbackup-g2-selective-scope-gate",
+    "Local\restoreplane-g2-selective-scope-gate",
     [ref] $mutexCreated
 )
 $mutexAcquired = $false
@@ -1001,7 +1001,7 @@ try {
         status = "pass"
     }
     $serialized = $artifact | ConvertTo-Json -Depth 32
-    if ($serialized.Contains("dbbackup_g2_scope_ephemeral") -or
+    if ($serialized.Contains("restoreplane_g2_scope_ephemeral") -or
         $serialized.Contains('"signatureEd25519"') -or
         $serialized.Contains('"verifyingKey"') -or
         $serialized.Contains('"dekWrap.')) {

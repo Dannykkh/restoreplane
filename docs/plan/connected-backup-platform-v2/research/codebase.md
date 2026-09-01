@@ -1,8 +1,8 @@
-# Codebase Research: Connected Backup Platform v2
+﻿# Codebase Research: Connected Backup Platform v2
 
 ## 조사 범위와 판정 기준
 
-- 조사 기준은 기존 `codemap/index.md`와 관련 카테고리 맵, `README.md`, `docs/plan/db-backup-system/`, 최근 원격 복구 핸드오프다.
+- 조사 기준은 기존 `codemap/index.md`와 관련 카테고리 맵, `README.md`, `docs/plan/restoreplane/`, 최근 원격 복구 핸드오프다.
 - v2의 제품 정의는 “여러 DB 서버를 연결·탐색하고, 선택한 데이터베이스를 여러 목적지에 예약 백업하며, 스냅샷·로그·복원을 한 콘솔에서 관리하는 연결형 백업 플랫폼”으로 둔다.
 - 현재 보안 기능은 별도 제품 방향이 아니라 연결형 백업 플랫폼의 공통 안전 계층으로 재사용한다.
 - 상태 분류:
@@ -27,25 +27,25 @@
 
 | 영역 | 현재 상태 | 코드 근거 | v2에서 필요한 변화 |
 |---|---|---|---|
-| PostgreSQL 논리 백업 | Implemented | `Engine::Postgresql` 및 `PostgresSource`: `crates/dbbackup-core/src/lib.rs:114-120`, `crates/dbbackup-source-pg/src/lib.rs:160-257` | 서버 연결과 DB 선택을 분리하고 발견 목록을 UI에 노출 |
-| MySQL·MariaDB 논리 백업 | Implemented | 엔진 enum과 `MySqlSource`의 버전·테이블 엔진·charset preflight: `crates/dbbackup-core/src/lib.rs:116-120`, `crates/dbbackup-source-mysql/src/lib.rs:124-200` | 서버 단위 DB 탐색 및 다중 DB 선택 |
-| SQL Server, MongoDB, SQLite, Firebird, Redis·Valkey | Missing | 엔진 enum이 PostgreSQL/MySQL/MariaDB만 허용: `crates/dbbackup-core/src/lib.rs:114-120` | engine adapter, restore capability, tool packaging, 전용 폼과 E2E 추가 |
+| PostgreSQL 논리 백업 | Implemented | `Engine::Postgresql` 및 `PostgresSource`: `crates/restoreplane-core/src/lib.rs:114-120`, `crates/restoreplane-source-pg/src/lib.rs:160-257` | 서버 연결과 DB 선택을 분리하고 발견 목록을 UI에 노출 |
+| MySQL·MariaDB 논리 백업 | Implemented | 엔진 enum과 `MySqlSource`의 버전·테이블 엔진·charset preflight: `crates/restoreplane-core/src/lib.rs:116-120`, `crates/restoreplane-source-mysql/src/lib.rs:124-200` | 서버 단위 DB 탐색 및 다중 DB 선택 |
+| SQL Server, MongoDB, SQLite, Firebird, Redis·Valkey | Missing | 엔진 enum이 PostgreSQL/MySQL/MariaDB만 허용: `crates/restoreplane-core/src/lib.rs:114-120` | engine adapter, restore capability, tool packaging, 전용 폼과 E2E 추가 |
 | DB 등록 | Partial | Tauri가 alias/host/port/dbname/user/password를 즉시 config에 저장: `apps/console/src-tauri/src/config_edit.rs:26-93` | 서버 연결 프로필과 선택된 DB 대상을 별도 엔터티로 분리 |
-| 연결 테스트 | Missing | CLI가 명시적으로 `not implemented yet` 반환: `crates/dbbackup-cli/src/commands/test_connection.rs:8-14` | 실제 인증·권한·버전·도구 호환성 진단을 공통 API로 제공 |
-| DB 발견 | Partial | PostgreSQL source 내부 plan은 live DB와 등록 DB를 비교하지만 실행 시점 내부 로직이며 UI API가 아님: `crates/dbbackup-source-pg/src/lib.rs:210-252` | `discover_databases(connection_id)`를 독립 read operation으로 추출 |
-| SSH 터널 기반 DB 연결 | Partial | config에는 `Database.tunnel`이 있으나 Tauri 추가 경로는 항상 `None`: `crates/dbbackup-config/src/schema.rs:69-87`, `apps/console/src-tauri/src/config_edit.rs:78-89` | 등록 UI, test/discovery/run 모두 동일 tunnel resolver 사용 |
-| Local 목적지 | Implemented | `DestKind::Local`과 `LocalDest` 배선: `crates/dbbackup-core/src/lib.rs:122-128`, `crates/dbbackup-cli/src/commands/run.rs:250-257` | 볼륨 상태·여유 공간·접근성 health 노출 |
-| S3 및 Object Lock | Implemented | S3 destination 배선, capability/assert, 분리 reader identity가 존재: `crates/dbbackup-config/src/schema.rs:106-161`, `crates/dbbackup-cli/src/commands/run.rs:258-260` | 연결 self-test를 UI에 연결하고 provider preset 확장 |
+| 연결 테스트 | Missing | CLI가 명시적으로 `not implemented yet` 반환: `crates/restoreplane-cli/src/commands/test_connection.rs:8-14` | 실제 인증·권한·버전·도구 호환성 진단을 공통 API로 제공 |
+| DB 발견 | Partial | PostgreSQL source 내부 plan은 live DB와 등록 DB를 비교하지만 실행 시점 내부 로직이며 UI API가 아님: `crates/restoreplane-source-pg/src/lib.rs:210-252` | `discover_databases(connection_id)`를 독립 read operation으로 추출 |
+| SSH 터널 기반 DB 연결 | Partial | config에는 `Database.tunnel`이 있으나 Tauri 추가 경로는 항상 `None`: `crates/restoreplane-config/src/schema.rs:69-87`, `apps/console/src-tauri/src/config_edit.rs:78-89` | 등록 UI, test/discovery/run 모두 동일 tunnel resolver 사용 |
+| Local 목적지 | Implemented | `DestKind::Local`과 `LocalDest` 배선: `crates/restoreplane-core/src/lib.rs:122-128`, `crates/restoreplane-cli/src/commands/run.rs:250-257` | 볼륨 상태·여유 공간·접근성 health 노출 |
+| S3 및 Object Lock | Implemented | S3 destination 배선, capability/assert, 분리 reader identity가 존재: `crates/restoreplane-config/src/schema.rs:106-161`, `crates/restoreplane-cli/src/commands/run.rs:258-260` | 연결 self-test를 UI에 연결하고 provider preset 확장 |
 | SFTP/SSH 목적지 | Implemented | SSH destination, host-key pinning, 별도 reader source가 존재 | append-only 실제 보장 상태와 연결 health를 운영 UI에 노출 |
-| Azure Blob, SMB, FTP 등 | Missing | `DestKind`가 S3/Ssh/Local만 허용: `crates/dbbackup-core/src/lib.rs:122-128` | destination adapter와 credential/test UX 추가 |
-| job 모델 | Partial | source 1개, destination N개, GFS retention, verify policy, schedule 보유: `crates/dbbackup-config/src/schema.rs:164-200` | 서버/DB 선택 집합, 실행 우선순위, RPO, resource class 추가 |
-| 수동 다중 job 실행 | Implemented, 순차 | 필터된 job을 하나의 runtime에서 `for`로 순차 실행: `crates/dbbackup-cli/src/commands/run.rs:53-60`, `crates/dbbackup-cli/src/commands/run.rs:113-136` | 중앙 dispatcher가 bounded worker pool로 처리 |
-| 목적지 fan-out | Implemented, 무제한 fan-out | part마다 `fan_out`을 호출하고 목적지별 부분 성공을 합산: `crates/dbbackup-cli/src/commands/run.rs:395-435`; `crates/dbbackup-pipeline/src/fanout.rs:75-130` | 목적지별 semaphore와 bandwidth/backpressure 정책 |
-| 전역 동시성 | Missing | `max_parallel_dumps`는 config→`PipelineCfg`에 복사되지만 실행부에서 읽히지 않는다: `crates/dbbackup-config/src/schema.rs:213-233`, `crates/dbbackup-cli/src/commands/run.rs:287-296`; 전체 참조는 선언·기본값·대입뿐 | job/host/destination/verify/restore별 실제 semaphore와 중앙 큐 |
-| scheduler | Partial | job마다 별도 Task Scheduler 항목을 만들고 CLI를 기동: `crates/dbbackup-cli/src/commands/schedule.rs:32-75` | dispatcher 1개 또는 daemon 1개가 due job을 큐잉 |
-| 같은 job 중복 방지 | Implemented | Task XML `IgnoreNew`와 catalog overlap guard: `crates/dbbackup-scheduler/src/xml.rs:101-110`, `crates/dbbackup-catalog/src/overlap.rs:76-130` | 서로 다른 job 간 전역 자원 경합까지 확장 |
+| Azure Blob, SMB, FTP 등 | Missing | `DestKind`가 S3/Ssh/Local만 허용: `crates/restoreplane-core/src/lib.rs:122-128` | destination adapter와 credential/test UX 추가 |
+| job 모델 | Partial | source 1개, destination N개, GFS retention, verify policy, schedule 보유: `crates/restoreplane-config/src/schema.rs:164-200` | 서버/DB 선택 집합, 실행 우선순위, RPO, resource class 추가 |
+| 수동 다중 job 실행 | Implemented, 순차 | 필터된 job을 하나의 runtime에서 `for`로 순차 실행: `crates/restoreplane-cli/src/commands/run.rs:53-60`, `crates/restoreplane-cli/src/commands/run.rs:113-136` | 중앙 dispatcher가 bounded worker pool로 처리 |
+| 목적지 fan-out | Implemented, 무제한 fan-out | part마다 `fan_out`을 호출하고 목적지별 부분 성공을 합산: `crates/restoreplane-cli/src/commands/run.rs:395-435`; `crates/restoreplane-pipeline/src/fanout.rs:75-130` | 목적지별 semaphore와 bandwidth/backpressure 정책 |
+| 전역 동시성 | Missing | `max_parallel_dumps`는 config→`PipelineCfg`에 복사되지만 실행부에서 읽히지 않는다: `crates/restoreplane-config/src/schema.rs:213-233`, `crates/restoreplane-cli/src/commands/run.rs:287-296`; 전체 참조는 선언·기본값·대입뿐 | job/host/destination/verify/restore별 실제 semaphore와 중앙 큐 |
+| scheduler | Partial | job마다 별도 Task Scheduler 항목을 만들고 CLI를 기동: `crates/restoreplane-cli/src/commands/schedule.rs:32-75` | dispatcher 1개 또는 daemon 1개가 due job을 큐잉 |
+| 같은 job 중복 방지 | Implemented | Task XML `IgnoreNew`와 catalog overlap guard: `crates/restoreplane-scheduler/src/xml.rs:101-110`, `crates/restoreplane-catalog/src/overlap.rs:76-130` | 서로 다른 job 간 전역 자원 경합까지 확장 |
 | 백업 카탈로그 | Implemented core | SQLite가 backup/artifact/verification/run을 기록하고 signed manifest로 rebuild 가능 | catalog를 cache로 유지하되 read model과 pagination/search 추가 |
-| 스냅샷 목록·검색·상세 | Missing UI | query는 최신 job별 1건과 최근 N건만 제공: `crates/dbbackup-catalog/src/query.rs:58-90`; dashboard는 job별 최신만 조회: `apps/console/src-tauri/src/commands.rs:154-178` | snapshot inventory, 필터, 상세, artifact/verification timeline |
+| 스냅샷 목록·검색·상세 | Missing UI | query는 최신 job별 1건과 최근 N건만 제공: `crates/restoreplane-catalog/src/query.rs:58-90`; dashboard는 job별 최신만 조회: `apps/console/src-tauri/src/commands.rs:154-178` | snapshot inventory, 필터, 상세, artifact/verification timeline |
 | 복원 엔진 | Implemented core | Local/S3/SSH manifest source, 서명 게이트, decrypt-only/target restore가 CLI에 연결됨 | catalog-selected restore와 preflight plan을 표준 진입점으로 |
 | 복원 UI | Partial | 사용자가 backup ID와 source destination을 직접 입력: `apps/console/src/screens/Restore.tsx:13-35`, `apps/console/src/screens/Restore.tsx:58-108` | snapshot 선택→자격 확인→target 선택→dry-run→확인→실행 |
 | L1/L2/L3 검증 | Partial | 서명·무결성·format·Docker restore 구현 및 별도 verify command가 존재 | job의 `verify.schedule/level`을 자동 실행 경로에 연결하고 결과 cadence 관리 |
@@ -59,7 +59,7 @@
 
 `BackupSource`가 `plan()`과 `spawn(part)`를 분리해 새 엔진 추가의 기본 seam은 좋다. PostgreSQL은 globals와 DB part를 구분하고, 서버의 live DB 목록과 등록 목록을 비교한다. MySQL/MariaDB는 버전 분기, client compatibility, non-transactional table, charset/collation, binlog anchor를 캡처한다.
 
-하지만 config의 `Database`는 “서버 연결”과 “선택된 단일 DB”를 하나로 합친 구조다: `crates/dbbackup-config/src/schema.rs:69-87`. 실행부도 PostgreSQL `registered_databases`에 단 하나의 `dbname`만 전달하고 MySQL connection에도 하나의 DB를 고정한다: `crates/dbbackup-cli/src/commands/run.rs:305-360`.
+하지만 config의 `Database`는 “서버 연결”과 “선택된 단일 DB”를 하나로 합친 구조다: `crates/restoreplane-config/src/schema.rs:69-87`. 실행부도 PostgreSQL `registered_databases`에 단 하나의 `dbname`만 전달하고 MySQL connection에도 하나의 DB를 고정한다: `crates/restoreplane-cli/src/commands/run.rs:305-360`.
 
 v2에서는 다음 경계를 분리해야 한다.
 
@@ -111,9 +111,9 @@ BackupPlan
 Rust 자체의 thread 처리 능력보다 현재 orchestration이 병목이다.
 
 - 한 CLI 실행에서 여러 job은 순차다.
-- 한 PostgreSQL plan의 globals와 DB parts도 `for part in &parts`로 순차다: `crates/dbbackup-cli/src/commands/run.rs:365-435`.
+- 한 PostgreSQL plan의 globals와 DB parts도 `for part in &parts`로 순차다: `crates/restoreplane-cli/src/commands/run.rs:365-435`.
 - 각 part 내부 목적지 fan-out만 concurrent다.
-- 예약은 job마다 별도 Windows task와 별도 `dbbackup.exe` 프로세스를 만든다.
+- 예약은 job마다 별도 Windows task와 별도 `restoreplane.exe` 프로세스를 만든다.
 - `IgnoreNew`와 overlap guard는 같은 job 중복만 막는다. 같은 시각의 서로 다른 job은 각자 runtime, dump process, spool, upload를 만들 수 있다.
 - `max_parallel_dumps`는 현재 비활성 설정이다. 이름만 보고 이미 제한된다고 가정하면 안 된다.
 
@@ -181,7 +181,7 @@ SQLite는 desktop 단일 노드 read model로 계속 적합하다. 다중 agent/
 - recovery code와 decrypt-only 경로
 - catalog rebuild 후 복원 가능
 
-다만 `Job.verify`의 level/schedule은 설정과 UI에 있으나 백업 완료 후 자동 검증을 실행하는 배선은 확인되지 않았다. `run.rs`는 upload와 catalog upsert 후 job result를 반환하고 verify를 호출하지 않는다: `crates/dbbackup-cli/src/commands/run.rs:365-439`. verification cadence 모듈도 독립 테스트 중심이다. 이를 “자동 검증 완료”로 표시하면 안 된다.
+다만 `Job.verify`의 level/schedule은 설정과 UI에 있으나 백업 완료 후 자동 검증을 실행하는 배선은 확인되지 않았다. `run.rs`는 upload와 catalog upsert 후 job result를 반환하고 verify를 호출하지 않는다: `crates/restoreplane-cli/src/commands/run.rs:365-439`. verification cadence 모듈도 독립 테스트 중심이다. 이를 “자동 검증 완료”로 표시하면 안 된다.
 
 복원 UX는 수동 backup ID 입력 대신 다음 흐름으로 바꾼다.
 

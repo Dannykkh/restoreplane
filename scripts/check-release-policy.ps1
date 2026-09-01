@@ -49,16 +49,16 @@ if ($claims.schemaVersion -ne 1 -or
     $rollout.schemaVersion -ne 1 -or
     $expansion.schemaVersion -ne 1 -or
     $g5.gateId -ne "G5" -or
-    $packageSchema.title -ne "DbBackup signed package manifest" -or
-    $signingMetadataSchema.title -ne "DbBackup production signing metadata" -or
+    $packageSchema.title -ne "RestorePlane signed package manifest" -or
+    $signingMetadataSchema.title -ne "RestorePlane production signing metadata" -or
     $releaseFixtureSchema.title -ne
-        "DbBackup pristine signed lifecycle fixture evidence" -or
+        "RestorePlane pristine signed lifecycle fixture evidence" -or
     $artifactFunctionalSchema.title -ne
-        "DbBackup exact signed artifact functional qualification evidence" -or
+        "RestorePlane exact signed artifact functional qualification evidence" -or
     $providerCertificationSchema.title -ne
-        "DbBackup managed provider certifications" -or
-    $nativeToolAuditSchema.title -ne "DbBackup audited native tool bundle" -or
-    $providerSchema.title -ne "DbBackup provider promotion evidence") {
+        "RestorePlane managed provider certifications" -or
+    $nativeToolAuditSchema.title -ne "RestorePlane audited native tool bundle" -or
+    $providerSchema.title -ne "RestorePlane provider promotion evidence") {
     throw "RELEASE_POLICY_SCHEMA_INVALID"
 }
 if ("sourceTreeDigest" -notin @($packageSchema.required) -or
@@ -234,7 +234,7 @@ $deploymentScripts = @(
 foreach ($script in $deploymentScripts) {
     $text = Get-Content -LiteralPath (Join-Path $root $script) -Raw -Encoding UTF8
     $verificationIndex = $text.LastIndexOf(
-        "Assert-DbBackupDeploymentAuthenticode",
+        "Assert-RestorePlaneDeploymentAuthenticode",
         [StringComparison]::Ordinal
     )
     $importIndex = $text.IndexOf("Import-Module", [StringComparison]::Ordinal)
@@ -245,7 +245,7 @@ foreach ($script in $deploymentScripts) {
         throw "RELEASE_DEPLOYMENT_SCRIPT_TRUST_BOOTSTRAP_MISSING: $script"
     }
 }
-$installerModulePath = Join-Path $root "installer\DbBackup.Install.Common.psm1"
+$installerModulePath = Join-Path $root "installer\RestorePlane.Install.Common.psm1"
 if (-not (Test-Path -LiteralPath $installerModulePath -PathType Leaf)) {
     throw "RELEASE_INSTALLER_MODULE_MISSING"
 }
@@ -261,7 +261,7 @@ if (@($moduleErrors).Count -ne 0) {
 }
 $installerModuleText = Get-Content -LiteralPath $installerModulePath -Raw -Encoding UTF8
 foreach ($requiredContract in @(
-        "Move-DbBackupUnmanifestedInstallFiles",
+        "Move-RestorePlaneUnmanifestedInstallFiles",
         "INSTALL_TREE_REPARSE_POINT_BLOCKED",
         "install-tree-quarantine"
     )) {
@@ -324,7 +324,7 @@ foreach ($requiredTrustControl in @(
         "Prepare protected release staging",
         "Seal downloaded release staging",
         "SetAccessRuleProtection(`$true, `$false)",
-        "Assert-DbBackupProtectedAcl",
+        "Assert-RestorePlaneProtectedAcl",
         "-ExecutionPolicy AllSigned",
         "final-release-reevaluation:",
         "needs: [managed-evidence, signed-package, clean-windows-fixture, artifact-functional-qualification]",
@@ -335,18 +335,18 @@ foreach ($requiredTrustControl in @(
         "`$metadata.serviceBinarySha256",
         "`$metadata.cliBinarySha256",
         "`$metadata.artifactId",
-        "dbbackup-exact-artifact-v1",
+        "restoreplane-exact-artifact-v1",
         "artifact-functional-qualification:",
-        "dbbackup-managed-artifact",
+        "restoreplane-managed-artifact",
         "ephemeral",
-        "DBBACKUP_ARTIFACT_RUNNER_EPHEMERAL",
+        "RESTOREPLANE_ARTIFACT_RUNNER_EPHEMERAL",
         ".\scripts\new-provider-certifications.ps1",
         "provider-certifications.json",
         ".\scripts\test-signed-artifact-functional.ps1",
         "artifact-functional-`${{ github.run_id }}",
         "-ArtifactFunctionalEvidencePath",
         "promotion-reevaluation-`${{ github.run_id }}",
-        "dbbackup-signed-candidate-`${{ github.run_id }}",
+        "restoreplane-signed-candidate-`${{ github.run_id }}",
         "publish-signed-package:",
         "needs: [signed-package, final-release-reevaluation]"
     )) {
@@ -366,7 +366,7 @@ $artifactFunctionalJobText = $artifactFunctionalJob.Value
 foreach ($forbiddenDirectExecution in @(
         "(?im)\bcargo(?:\.exe)?\s+(?:build|run|test)\b",
         "(?im)\b(?:pg_dump|pg_restore|mysqldump|mariadb-dump)(?:\.exe)?\b",
-        "(?im)\bdbbackup-pipeline\b"
+        "(?im)\brestoreplane-pipeline\b"
     )) {
     if ($artifactFunctionalJobText -match $forbiddenDirectExecution) {
         throw "RELEASE_ARTIFACT_FUNCTIONAL_DIRECT_EXECUTION_FORBIDDEN"

@@ -1,9 +1,9 @@
 {
-  "name": "dbbackup-console",
+  "name": "restoreplane-console",
   "private": true,
   "version": "0.1.0-rc.1",
   "type": "module",
-  "description": "dbbackupsystem 관리 GUI (Tauri 데스크톱 콘솔)",
+  "description": "RestorePlane management GUI (Tauri desktop console)",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

@@ -1,10 +1,15 @@
 [한국어](README.md) | [English](README.en.md) | **日本語**
 
-# DbBackup
+# RestorePlane
+
+[![CI](https://github.com/Dannykkh/restoreplane/actions/workflows/ci.yml/badge.svg)](https://github.com/Dannykkh/restoreplane/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Dannykkh/restoreplane?include_prereleases&label=release)](https://github.com/Dannykkh/restoreplane/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2f6f68.svg)](LICENSE)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-2f6f68.svg)](#プラットフォーム)
 
 **Windows上で複数データベースのバックアップ、検証、復元、保持を一元管理するRust製デスクトップツールです。**
 
-DbBackupはPostgreSQL、MySQL、MariaDB、SQLiteの論理バックアップをスケジュールし、データベース全体または明示的に選択したテーブルだけを圧縮・暗号化・署名して保存します。バックアップファイルが作成されたという事実だけでなく、実際に復号して復元できるという証拠を重視します。
+RestorePlaneはPostgreSQL、MySQL、MariaDB、SQLiteの論理バックアップをスケジュールし、データベース全体または明示的に選択したテーブルだけを圧縮・暗号化・署名して保存します。バックアップファイルが作成されたという事実だけでなく、実際に復号して復元できるという証拠を重視します。
 
 > **現在のステータス: Windows release candidate (`v0.1.0-rc.1`)**
 >
@@ -14,15 +19,15 @@ DbBackupはPostgreSQL、MySQL、MariaDB、SQLiteの論理バックアップを�
 
 > 次の画面は、決定的なPlaywright demo fixtureからレンダリングしたものです。レイアウトと操作を示すものであり、実際のservice実行やバックアップ成功の証拠ではありません。
 
-![DbBackupの証拠中心Overview画面](docs/assets/readme/overview-dark.png)
+![RestorePlaneの証拠中心Overview画面](docs/assets/readme/overview-dark.png)
 
 | 選択テーブルBackup Scope | Durable backupの進行状況 |
 |---|---|
 | ![明示的に選択したテーブルScopeとDatabase Targetの詳細](docs/assets/readme/explicit-table-scope.png) | ![実行中のnative dumpとReplica転送状態](docs/assets/readme/backup-running.png) |
 
-## DbBackupを選ぶ理由
+## RestorePlaneを選ぶ理由
 
-DbBackupは一般的なファイルバックアップツールではなく、データベースの復元可能性を運用するcontrol planeです。
+RestorePlaneは一般的なファイルバックアップツールではなく、データベースの復元可能性を運用するcontrol planeです。
 
 - **正確なBackup Scope** — データベース全体または明示的に選択したテーブル集合を不変の証拠として残します。
 - **UIから独立した実行エンジン** — Consoleを閉じても、Windows serviceがスケジュール、durable queue、retry、cancellationを継続して管理します。
@@ -85,18 +90,21 @@ MySQLとMariaDBではL1検証とcreate-new restoreに対応しています。公
 - live database fixtureを実行する場合はDocker Desktop
 
 ```powershell
+git clone https://github.com/Dannykkh/restoreplane.git
+cd restoreplane
+
 # ServiceとCLI
-cargo build --release --locked -p dbbackup-service -p dbbackup-cli
+cargo build --release --locked -p restoreplane-service -p restoreplane-cli
 
 # Console
 npm ci --prefix apps/console
 npm --prefix apps/console run build
 
 # 利用可能なコマンドを確認
-.\target\release\dbbackup.exe --help
+.\target\release\restoreplane.exe --help
 ```
 
-このビルドは開発・レビュー用です。すでに`DbBackupService`エントリが存在する場合、二重実行を防ぐためCLIのlegacy direct backup経路はブロックされます。
+このビルドは開発・レビュー用です。すでに`RestorePlaneService`エントリが存在する場合、二重実行を防ぐためCLIのlegacy direct backup経路はブロックされます。
 
 ## 一般的な利用フロー
 
@@ -116,7 +124,7 @@ CLIによるBackup Scopeの自動化にはidempotency keyが必要です。応�
 > `[unverified]` 次の例には、インストール済みのsigned candidateと実際のDatabase Targetが必要なため、今回のREADMEレビューでは実行していません。
 
 ```powershell
-$cli = "$env:ProgramFiles\DbBackup\dbbackup.exe"
+$cli = "$env:ProgramFiles\RestorePlane\restoreplane.exe"
 $targetId = '<database-target-uuid>'
 
 & $cli service scope discover `
@@ -128,13 +136,13 @@ $targetId = '<database-target-uuid>'
     --limit 100
 ```
 
-CLIの完全な契約については、`dbbackup.exe --help`と[`docs/plan/connected-backup-platform-v2/ipc-spec.md`](docs/plan/connected-backup-platform-v2/ipc-spec.md)を参照してください。
+CLIの完全な契約については、`restoreplane.exe --help`と[`docs/plan/connected-backup-platform-v2/ipc-spec.md`](docs/plan/connected-backup-platform-v2/ipc-spec.md)を参照してください。
 
 ## 動作の仕組み
 
 ```mermaid
 flowchart LR
-    UI["Tauri Console / CLI"] -->|"authenticated local IPC"| SVC["DbBackupService"]
+    UI["Tauri Console / CLI"] -->|"authenticated local IPC"| SVC["RestorePlaneService"]
     SVC --> SCH["Scheduler + durable queue"]
     SCH --> SRC["DB-native backup provider"]
     SRC --> PIPE["zstd + ChaCha20-Poly1305 STREAM"]
@@ -154,7 +162,7 @@ flowchart LR
 
 ## セキュリティモデル
 
-DbBackupは「暗号化済みだから安全」とは仮定しません。
+RestorePlaneは「暗号化済みだから安全」とは仮定しません。
 
 - 認証情報の保護とランサムウェア耐性を別の問題として扱います。
 - バックアップごとのDEK、zstd、ChaCha20-Poly1305 STREAM、Ed25519 signed Manifestを使用します。
@@ -221,13 +229,13 @@ powershell -NoProfile -File .\scripts\test-remote-recovery.ps1
 
 | 領域 | 主要crateまたはアプリ |
 |---|---|
-| Domainとapplication | `dbbackup-core`、`dbbackup-domain`、`dbbackup-application` |
-| Operational Store | `dbbackup-catalog` |
-| Queueとworkers | `dbbackup-runtime`、`dbbackup-service`、`dbbackup-scheduler` |
-| Backup pipeline | `dbbackup-pipeline`、`dbbackup-secrets`、`dbbackup-verify` |
-| Database providers | `dbbackup-source-pg`、`dbbackup-source-mysql`、`dbbackup-source-sqlite`、`dbbackup-source-sqlserver` |
-| Destinations | `dbbackup-dest-s3`、`dbbackup-dest-ssh` |
-| User interfaces | `dbbackup-cli`、`dbbackup-ipc-client`、`apps/console` |
+| Domainとapplication | `restoreplane-core`、`restoreplane-domain`、`restoreplane-application` |
+| Operational Store | `restoreplane-catalog` |
+| Queueとworkers | `restoreplane-runtime`、`restoreplane-service`、`restoreplane-scheduler` |
+| Backup pipeline | `restoreplane-pipeline`、`restoreplane-secrets`、`restoreplane-verify` |
+| Database providers | `restoreplane-source-pg`、`restoreplane-source-mysql`、`restoreplane-source-sqlite`、`restoreplane-source-sqlserver` |
+| Destinations | `restoreplane-dest-s3`、`restoreplane-dest-ssh` |
+| User interfaces | `restoreplane-cli`、`restoreplane-ipc-client`、`apps/console` |
 
 </details>
 
@@ -241,7 +249,7 @@ powershell -NoProfile -File .\scripts\test-remote-recovery.ps1
 | インストールとupdate | [Install](docs/runbooks/install.md)、[Update](docs/runbooks/update.md) |
 | 運用rollout | [Rollout plan](docs/rollout-plan-program-owned-backup-engine.md) |
 | 障害対応 | [Incident runbook](docs/runbooks/incident.md) |
-| 設定例 | [`config/dbbackup.example.toml`](config/dbbackup.example.toml) |
+| 設定例 | [`config/restoreplane.example.toml`](config/restoreplane.example.toml) |
 | セキュリティ報告 | [SECURITY.md](SECURITY.md) |
 
 ## コントリビューション
@@ -257,7 +265,7 @@ powershell -NoProfile -File .\scripts\test-remote-recovery.ps1
 
 ## ライセンス
 
-DbBackupは[MIT License](LICENSE)で配布されます。Copyright (c) 2026 dannykkh.
+RestorePlaneは[MIT License](LICENSE)で配布されます。Copyright (c) 2026 dannykkh.
 
 ---
 

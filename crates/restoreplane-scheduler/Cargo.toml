@@ -1,0 +1,35 @@
+[package]
+name = "restoreplane-scheduler"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# S10 — Scheduler(schtasks) + Overlap Guard 어댑터 + 알림 + 리댁션.
+# overlap guard 로직은 신규 구현하지 않고 S08(restoreplane-catalog)의 try_acquire_run/RunGuard를 재사용한다.
+
+[dependencies]
+restoreplane-core = { path = "../restoreplane-core" }
+restoreplane-config = { path = "../restoreplane-config" }
+restoreplane-catalog = { path = "../restoreplane-catalog" }
+restoreplane-domain = { path = "../restoreplane-domain" }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+time = { version = "0.3", features = ["formatting", "parsing", "serde-well-known"] }
+regex = "1"
+chrono = "=0.4.45"
+chrono-tz = "=0.10.4"
+async-trait = "0.1"
+serde_json = "1"
+tokio = { version = "1", features = ["process", "fs", "rt-multi-thread", "macros"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+zeroize = "=1.9.0"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Win32_System_EventLog", "Win32_Foundation", "Win32_Security"] }
+
+[dev-dependencies]
+tempfile = "3"

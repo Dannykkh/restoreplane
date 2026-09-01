@@ -24,7 +24,7 @@ flowchart TB
     end
     UI --> IPC[Authenticated local IPC]
     CLI --> IPC
-    IPC --> SVC[dbbackup-service]
+    IPC --> SVC[restoreplane-service]
     SCHED[Task Scheduler] -->|start/wake| SVC
     SVC --> APP[Application Services]
     APP --> STORE[(Operational Store)]
@@ -48,28 +48,28 @@ flowchart TB
 
 | Crate | Responsibility | Must not own |
 |-------|----------------|--------------|
-| `dbbackup-domain` | IDs, Plan Revision, Plan Occurrence, Run, Work Item, Attempt, capability, state machine DTO | SQLite, Tauri, native process |
-| `dbbackup-application` | connection/plan/snapshot/restore use cases와 내부 Rust command/result | raw DB connection, UI types, public remote protocol |
-| `dbbackup-runtime` | dispatcher, Resource Permit, Process Supervisor, spool, Reconciliation | React/Tauri, engine-specific UI |
-| `dbbackup-service` | Windows service host, singleton, authenticated local IPC, lifecycle/update/drain | domain logic duplication |
+| `restoreplane-domain` | IDs, Plan Revision, Plan Occurrence, Run, Work Item, Attempt, capability, state machine DTO | SQLite, Tauri, native process |
+| `restoreplane-application` | connection/plan/snapshot/restore use cases와 내부 Rust command/result | raw DB connection, UI types, public remote protocol |
+| `restoreplane-runtime` | dispatcher, Resource Permit, Process Supervisor, spool, Reconciliation | React/Tauri, engine-specific UI |
+| `restoreplane-service` | Windows service host, singleton, authenticated local IPC, lifecycle/update/drain | domain logic duplication |
 
 ### Existing crates
 
 | Crate | v2 role |
 |-------|---------|
-| `dbbackup-core` | 기존 `BackupSource`, `Destination`, pipeline primitives 유지; provider contracts의 저수준 타입 |
-| `dbbackup-config` | legacy TOML schema, versioned import/export, validation, cutover marker |
-| `dbbackup-catalog` | 한 SQLite 파일의 Operational Store repository와 rebuildable projection을 논리 분리해 소유 |
-| `dbbackup-pipeline` | encode, encryption, spool, Artifact Part/Replica commit |
-| `dbbackup-source-pg` | PostgreSQL Connection/Backup/Restore/Tool provider |
-| `dbbackup-source-mysql` | MySQL과 MariaDB provider, 별도 Engine Matrix |
-| `dbbackup-dest-*` | Destination Adapter와 capability/preflight/reader |
-| `dbbackup-verify` | Verification Policy, L1/L2/L3, Restore Drill evidence |
-| `dbbackup-scheduler` | service install/wake와 occurrence 계산 보조 |
-| `dbbackup-cli` | application command client, 진단 및 migration entrypoint |
+| `restoreplane-core` | 기존 `BackupSource`, `Destination`, pipeline primitives 유지; provider contracts의 저수준 타입 |
+| `restoreplane-config` | legacy TOML schema, versioned import/export, validation, cutover marker |
+| `restoreplane-catalog` | 한 SQLite 파일의 Operational Store repository와 rebuildable projection을 논리 분리해 소유 |
+| `restoreplane-pipeline` | encode, encryption, spool, Artifact Part/Replica commit |
+| `restoreplane-source-pg` | PostgreSQL Connection/Backup/Restore/Tool provider |
+| `restoreplane-source-mysql` | MySQL과 MariaDB provider, 별도 Engine Matrix |
+| `restoreplane-dest-*` | Destination Adapter와 capability/preflight/reader |
+| `restoreplane-verify` | Verification Policy, L1/L2/L3, Restore Drill evidence |
+| `restoreplane-scheduler` | service install/wake와 occurrence 계산 보조 |
+| `restoreplane-cli` | application command client, 진단 및 migration entrypoint |
 | `apps/console` | Tauri Control Plane, direct sidecar 실행 제거 |
 
-`dbbackup-catalog`라는 crate 이름은 호환성을 위해 유지하되 공개 도메인에서는 `Operational
+`restoreplane-catalog`라는 crate 이름은 호환성을 위해 유지하되 공개 도메인에서는 `Operational
 Store`와 `Catalog Projection`을 구분한다. SQLite write connection은 service의 단일
 Transaction Owner만 연다.
 
@@ -86,9 +86,9 @@ adapter를 만들지 않는다.
 
 1. 현재 direct execution 경로를 inventory한다.
    - `apps/console/src-tauri/src/run.rs`
-   - `crates/dbbackup-cli/src/commands/run.rs`
-   - `crates/dbbackup-cli/src/commands/schedule.rs`
-   - `crates/dbbackup-scheduler/src/xml.rs`
+   - `crates/restoreplane-cli/src/commands/run.rs`
+   - `crates/restoreplane-cli/src/commands/schedule.rs`
+   - `crates/restoreplane-scheduler/src/xml.rs`
 2. verify cadence, retention/prune, 실제 target restore, connection probe, management stub,
    result persistence의 미배선을 실패 테스트로 고정한다.
 3. ignored live test를 CI pass 집계와 분리하고 managed testbed 결과 형식을 정의한다.
@@ -118,19 +118,19 @@ Connection과 Target, Plan과 Run을 분리하고 모든 제어 상태의 권위
 
 ### Work
 
-1. `dbbackup-domain`을 생성한다.
+1. `restoreplane-domain`을 생성한다.
    - stable typed ID
    - `ConnectionProfile`, `DatabaseTarget`, `DestinationProfile`
    - `BackupPlan`, `PlanRevision`, `PlanOccurrence`
    - `BackupRun`, `RestoreRun`, `VerificationRun`, `OperationRun`, `WorkItem`, `Attempt`
    - `RecoveryPoint`, `ArtifactPart`, `ArtifactReplica`
    - allowed state transition table
-2. `dbbackup-catalog`에 versioned migration runner와 schema journal을 추가한다.
+2. `restoreplane-catalog`에 versioned migration runner와 schema journal을 추가한다.
 3. control tables와 rebuildable projection tables를 분리한다.
 4. FK, scheduled/manual unique occurrence, 부분 성공 aggregate, fencing CAS, tombstone,
    revision immutability, required Destination, destructive confirmation 불변성을 DB constraint와
    repository transaction으로 강제한다.
-5. `dbbackup-config`에 v1 TOML shadow importer와 v2 export/import를 구현한다.
+5. `restoreplane-config`에 v1 TOML shadow importer와 v2 export/import를 구현한다.
 6. migration recovery bundle을 만든다.
    - TOML
    - keystore
@@ -146,11 +146,11 @@ Connection과 Target, Plan과 Run을 분리하고 모든 제어 상태의 권위
 
 ### Key Files
 
-- 신규: `crates/dbbackup-domain/`
-- 신규/수정: `crates/dbbackup-catalog/src/migrations/`
-- 수정: `crates/dbbackup-config/src/migrate.rs`
-- 수정: `crates/dbbackup-config/src/schema.rs`
-- 수정: `crates/dbbackup-cli/src/commands/`
+- 신규: `crates/restoreplane-domain/`
+- 신규/수정: `crates/restoreplane-catalog/src/migrations/`
+- 수정: `crates/restoreplane-config/src/migrate.rs`
+- 수정: `crates/restoreplane-config/src/schema.rs`
+- 수정: `crates/restoreplane-cli/src/commands/`
 
 ### Tests
 
@@ -178,7 +178,7 @@ Connection과 Target, Plan과 Run을 분리하고 모든 제어 상태의 권위
 
 ### Work
 
-1. `dbbackup-application` use case를 정의한다.
+1. `restoreplane-application` use case를 정의한다.
    - connection create/probe/discover
    - target select/drift
    - destination create/probe
@@ -186,7 +186,7 @@ Connection과 Target, Plan과 Run을 분리하고 모든 제어 상태의 권위
    - manual run enqueue
    - snapshot query/rebuild
    - restore prepare/confirm/enqueue
-2. `dbbackup-service`를 Windows service singleton shell로 구현한다.
+2. `restoreplane-service`를 Windows service singleton shell로 구현한다.
 3. ADR-007에 따라 named-pipe DACL, client SID impersonation, command authorization,
    version/size/timeout과 durable replay/idempotency ledger를 구현한다. 같은 key의 다른
    canonical payload는 거부한다.
@@ -201,12 +201,12 @@ Connection과 Target, Plan과 Run을 분리하고 모든 제어 상태의 권위
 
 ### Key Files
 
-- 신규: `crates/dbbackup-application/`
-- 신규: `crates/dbbackup-service/`
+- 신규: `crates/restoreplane-application/`
+- 신규: `crates/restoreplane-service/`
 - 수정: `apps/console/src-tauri/src/lib.rs`
 - 수정: `apps/console/src-tauri/src/run.rs`
-- 수정: `crates/dbbackup-cli/src/main.rs`
-- 수정: `crates/dbbackup-scheduler/`
+- 수정: `crates/restoreplane-cli/src/main.rs`
+- 수정: `crates/restoreplane-scheduler/`
 - 신규/수정: installer와 Windows service scripts
 
 ### Tests
@@ -235,7 +235,7 @@ Connection과 Target, Plan과 Run을 분리하고 모든 제어 상태의 권위
 
 ### Work
 
-1. `dbbackup-runtime`에 persistent dispatcher를 구현한다.
+1. `restoreplane-runtime`에 persistent dispatcher를 구현한다.
 2. claim은 `BEGIN IMMEDIATE`의 짧은 SQLite transaction에서 due, attempt limit, current
    state를 검사하고 writer actor의 high-priority control lane을 사용한다.
 3. Attempt마다 Lease, Lease Heartbeat, Fencing Token, worker/service boot identity를 기록한다.
@@ -294,11 +294,11 @@ Connection과 Target, Plan과 Run을 분리하고 모든 제어 상태의 권위
 
 ### Key Files
 
-- 신규: `crates/dbbackup-runtime/src/{queue,dispatcher,lease,permits,supervisor,reconcile}.rs`
-- 수정: `crates/dbbackup-pipeline/src/{fanout,manifest,dest}.rs`
-- 수정: `crates/dbbackup-cli/src/commands/run.rs`
-- 수정: `crates/dbbackup-catalog/src/`
-- 수정: `crates/dbbackup-scheduler/src/`
+- 신규: `crates/restoreplane-runtime/src/{queue,dispatcher,lease,permits,supervisor,reconcile}.rs`
+- 수정: `crates/restoreplane-pipeline/src/{fanout,manifest,dest}.rs`
+- 수정: `crates/restoreplane-cli/src/commands/run.rs`
+- 수정: `crates/restoreplane-catalog/src/`
+- 수정: `crates/restoreplane-scheduler/src/`
 
 ### Initial Limits
 

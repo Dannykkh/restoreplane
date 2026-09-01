@@ -2,9 +2,9 @@
 param(
     [Parameter(Mandatory = $true)] [string] $PackageRoot,
     [Parameter(Mandatory = $true)] [string] $ManifestPath,
-    [string] $InstallRoot = "$env:ProgramFiles\DbBackup",
-    [string] $DataRoot = "$env:ProgramData\DbBackup",
-    [string] $ServiceName = "DbBackupService",
+    [string] $InstallRoot = "$env:ProgramFiles\RestorePlane",
+    [string] $DataRoot = "$env:ProgramData\RestorePlane",
+    [string] $ServiceName = "RestorePlaneService",
     [string] $ExpectedSignerThumbprint,
     [string] $ExpectedNativeToolAuditSha256,
     [string] $ExpectedPackageManifestSha256,
@@ -33,7 +33,7 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-function Assert-DbBackupDeploymentAuthenticode {
+function Assert-RestorePlaneDeploymentAuthenticode {
     param(
         [Parameter(Mandatory = $true)] [string[]] $Paths,
         [Parameter(Mandatory = $true)] [string] $SignerThumbprint
@@ -62,9 +62,9 @@ function Assert-DbBackupDeploymentAuthenticode {
 }
 
 $installerModulePath = Join-Path (Split-Path -Parent $PSScriptRoot) `
-    "installer\DbBackup.Install.Common.psm1"
+    "installer\RestorePlane.Install.Common.psm1"
 if (-not $ValidateOnly -or -not $AllowUnsignedDevelopmentPackage) {
-    Assert-DbBackupDeploymentAuthenticode `
+    Assert-RestorePlaneDeploymentAuthenticode `
         -Paths @($PSCommandPath, $installerModulePath) `
         -SignerThumbprint $ExpectedSignerThumbprint
 }
@@ -103,12 +103,12 @@ $recoveryByStage = [ordered] @{
     resume_claims = "forward_fix_claims_stopped"
 }
 
-$package = Resolve-DbBackupAbsolutePath -Path $PackageRoot
-$manifestFile = Resolve-DbBackupAbsolutePath -Path $ManifestPath
-$install = Resolve-DbBackupAbsolutePath -Path $InstallRoot -AllowMissing
-$data = Resolve-DbBackupAbsolutePath -Path $DataRoot -AllowMissing
-Assert-DbBackupSeparatedRoots -InstallRoot $install -DataRoot $data
-$canonicalManifest = Assert-DbBackupChildPath -Root $package -Candidate (
+$package = Resolve-RestorePlaneAbsolutePath -Path $PackageRoot
+$manifestFile = Resolve-RestorePlaneAbsolutePath -Path $ManifestPath
+$install = Resolve-RestorePlaneAbsolutePath -Path $InstallRoot -AllowMissing
+$data = Resolve-RestorePlaneAbsolutePath -Path $DataRoot -AllowMissing
+Assert-RestorePlaneSeparatedRoots -InstallRoot $install -DataRoot $data
+$canonicalManifest = Assert-RestorePlaneChildPath -Root $package -Candidate (
     Join-Path $package "package-manifest.json"
 )
 if (-not $manifestFile.Equals(
@@ -117,7 +117,7 @@ if (-not $manifestFile.Equals(
     )) {
     throw "PACKAGE_MANIFEST_PATH_INVALID"
 }
-$trustedManifest = Read-DbBackupTrustedPackageManifest `
+$trustedManifest = Read-RestorePlaneTrustedPackageManifest `
     -ManifestPath $manifestFile `
     -ExpectedSha256 $ExpectedPackageManifestSha256 `
     -AllowMissingExpectedDevelopmentFixture:(
@@ -126,7 +126,7 @@ $trustedManifest = Read-DbBackupTrustedPackageManifest `
 $manifest = $trustedManifest.manifest
 $manifestSha256 = $trustedManifest.sha256
 $manifestBytes = $trustedManifest.bytes
-Test-DbBackupPackage -PackageRoot $package -Manifest $manifest `
+Test-RestorePlanePackage -PackageRoot $package -Manifest $manifest `
     -ExpectedSignerThumbprint $ExpectedSignerThumbprint `
     -ExpectedNativeToolAuditSha256 $ExpectedNativeToolAuditSha256 `
     -AllowUnsignedDevelopmentPackage:$AllowUnsignedDevelopmentPackage
@@ -156,52 +156,52 @@ if ($ValidateOnly) {
     return
 }
 
-Assert-DbBackupAdministrator
+Assert-RestorePlaneAdministrator
 & sc.exe query $ServiceName 2>$null | Out-Null
 if ($LASTEXITCODE -ne 0) {
     throw "UPDATE_SERVICE_NOT_FOUND"
 }
-$cli = Assert-DbBackupChildPath -Root $install -Candidate (
-    Join-Path $install "dbbackup.exe"
+$cli = Assert-RestorePlaneChildPath -Root $install -Candidate (
+    Join-Path $install "restoreplane.exe"
 )
 if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
     throw "UPDATE_CLI_MISSING"
 }
-if (-not $PSCmdlet.ShouldProcess($install, "Update DbBackup to $($manifest.version)")) {
+if (-not $PSCmdlet.ShouldProcess($install, "Update RestorePlane to $($manifest.version)")) {
     return
 }
-Assert-DbBackupSupportedRootLayout `
+Assert-RestorePlaneSupportedRootLayout `
     -InstallRoot $install `
     -DataRoot $data
 
-$ownerSid = Resolve-DbBackupOwnerSid `
+$ownerSid = Resolve-RestorePlaneOwnerSid `
     -DataRoot $data `
     -RequirePersisted
-$serviceSid = Get-DbBackupServiceSid -ServiceName $ServiceName
-Assert-DbBackupInstallRootProvenance `
+$serviceSid = Get-RestorePlaneServiceSid -ServiceName $ServiceName
+Assert-RestorePlaneInstallRootProvenance `
     -DataRoot $data `
     -InstallRoot $install `
     -OwnerSid $ownerSid `
     -ServiceSid $serviceSid
-$null = Initialize-DbBackupDataRoot `
+$null = Initialize-RestorePlaneDataRoot `
     -DataRoot $data `
     -OwnerSid $ownerSid `
     -ServiceSid $serviceSid `
     -InstallRoot $install
-$identityPath = Assert-DbBackupChildPath -Root $data -Candidate (
+$identityPath = Assert-RestorePlaneChildPath -Root $data -Candidate (
     Join-Path $data "service-identity.json"
 )
-$serviceExe = Assert-DbBackupChildPath -Root $install -Candidate (
-    Join-Path $install "dbbackup-service.exe"
+$serviceExe = Assert-RestorePlaneChildPath -Root $install -Candidate (
+    Join-Path $install "restoreplane-service.exe"
 )
 if (-not (Test-Path -LiteralPath $serviceExe -PathType Leaf)) {
     throw "UPDATE_SERVICE_BINARY_MISSING"
 }
-Assert-DbBackupProtectedAcl -Path $install -ServiceSid $serviceSid `
+Assert-RestorePlaneProtectedAcl -Path $install -ServiceSid $serviceSid `
     -OwnerSid $ownerSid -ServiceAccess "read-execute" -Recurse
-Assert-DbBackupProtectedAcl -Path $data -ServiceSid $serviceSid `
+Assert-RestorePlaneProtectedAcl -Path $data -ServiceSid $serviceSid `
     -OwnerSid $ownerSid
-Assert-DbBackupProtectedAcl -Path $identityPath -ServiceSid $serviceSid `
+Assert-RestorePlaneProtectedAcl -Path $identityPath -ServiceSid $serviceSid `
     -OwnerSid $ownerSid
 $updateId = [Guid]::NewGuid().ToString()
 $updatesRoot = Join-Path $data "updates"
@@ -211,12 +211,12 @@ $installedManifestPath = Join-Path $install "package-manifest.json"
 $pendingPath = Join-Path $updatesRoot "update-pending.json"
 $journalPath = Join-Path $updatesRoot ("update-" + $updateId + ".json")
 New-Item -ItemType Directory -Path $updatesRoot -Force | Out-Null
-Set-DbBackupProtectedAcl -Path $updatesRoot -ServiceSid $serviceSid `
+Set-RestorePlaneProtectedAcl -Path $updatesRoot -ServiceSid $serviceSid `
     -OwnerSid $ownerSid
 New-Item -ItemType Directory -Path $rollbackRoot -Force | Out-Null
-Set-DbBackupProtectedAcl -Path $rollbackRoot -ServiceSid $serviceSid `
+Set-RestorePlaneProtectedAcl -Path $rollbackRoot -ServiceSid $serviceSid `
     -OwnerSid $ownerSid
-$currentManifest = Read-DbBackupPackageManifest `
+$currentManifest = Read-RestorePlanePackageManifest `
     -ManifestPath $installedManifestPath
 $currentManifestSha256 = (
     Get-FileHash -LiteralPath $installedManifestPath -Algorithm SHA256
@@ -229,29 +229,29 @@ $currentNativeAuditSha256 = if (
 else {
     $null
 }
-Test-DbBackupPackage -PackageRoot $install -Manifest $currentManifest `
+Test-RestorePlanePackage -PackageRoot $install -Manifest $currentManifest `
     -ExpectedSignerThumbprint $ExpectedSignerThumbprint `
     -ExpectedNativeToolAuditSha256 $currentNativeAuditSha256 `
     -AllowUnsignedDevelopmentPackage:$AllowUnsignedDevelopmentPackage
 Copy-Item -LiteralPath $installedManifestPath -Destination $rollbackManifestPath
-Assert-DbBackupPackageManifest `
+Assert-RestorePlanePackageManifest `
     -ManifestPath $rollbackManifestPath `
     -InstallRoot $install `
     -ExpectedSha256 $currentManifestSha256
 foreach ($entry in @($currentManifest.files)) {
-    $source = Assert-DbBackupChildPath -Root $install -Candidate (
+    $source = Assert-RestorePlaneChildPath -Root $install -Candidate (
         Join-Path $install ([string] $entry.path)
     )
-    $backup = Assert-DbBackupChildPath -Root $rollbackRoot -Candidate (
+    $backup = Assert-RestorePlaneChildPath -Root $rollbackRoot -Candidate (
         Join-Path $rollbackRoot ([string] $entry.path)
     )
     New-Item -ItemType Directory -Path (Split-Path -Parent $backup) -Force |
         Out-Null
     Copy-Item -LiteralPath $source -Destination $backup
 }
-Set-DbBackupProtectedAcl -Path $rollbackRoot -ServiceSid $serviceSid `
+Set-RestorePlaneProtectedAcl -Path $rollbackRoot -ServiceSid $serviceSid `
     -OwnerSid $ownerSid -Recurse
-Test-DbBackupPackage `
+Test-RestorePlanePackage `
     -PackageRoot $rollbackRoot `
     -Manifest $currentManifest `
     -ExpectedSignerThumbprint $ExpectedSignerThumbprint `
@@ -273,7 +273,7 @@ $journal = [ordered] @{
 $script:installTreeTrustedForRestart = $true
 
 function Write-UpdateJournal {
-    Write-DbBackupJsonAtomic -Path $journalPath -Value $journal
+    Write-RestorePlaneJsonAtomic -Path $journalPath -Value $journal
 }
 
 function Invoke-InstalledCli {
@@ -287,38 +287,38 @@ function Invoke-InstalledCli {
     return $json | ConvertFrom-Json
 }
 
-function Wait-DbBackupService {
+function Wait-RestorePlaneService {
     param([Parameter(Mandatory = $true)] [string] $ExpectedStatus)
 
     $service = Get-Service -Name $script:ServiceName
     $service.WaitForStatus($ExpectedStatus, [TimeSpan]::FromSeconds(60))
 }
 
-function Assert-DbBackupInstalledStartGate {
+function Assert-RestorePlaneInstalledStartGate {
     param(
         [Parameter(Mandatory = $true)] [string] $ManifestSource,
         [Parameter(Mandatory = $true)] [string] $ManifestSha256
     )
 
-    Assert-DbBackupProtectedAcl `
+    Assert-RestorePlaneProtectedAcl `
         -Path $script:install `
         -ServiceSid $script:serviceSid `
         -OwnerSid $script:ownerSid `
         -ServiceAccess "read-execute" `
         -Recurse
-    Assert-DbBackupProtectedAcl `
+    Assert-RestorePlaneProtectedAcl `
         -Path $script:data `
         -ServiceSid $script:serviceSid `
         -OwnerSid $script:ownerSid
-    Assert-DbBackupProtectedAcl `
+    Assert-RestorePlaneProtectedAcl `
         -Path $script:identityPath `
         -ServiceSid $script:serviceSid `
         -OwnerSid $script:ownerSid
-    Assert-DbBackupPackageManifest `
+    Assert-RestorePlanePackageManifest `
         -ManifestPath $ManifestSource `
         -InstallRoot $script:install `
         -ExpectedSha256 $ManifestSha256
-    $installedManifest = Read-DbBackupPackageManifest `
+    $installedManifest = Read-RestorePlanePackageManifest `
         -ManifestPath $script:installedManifestPath
     $nativeAuditSha256 = if (
         $null -ne $installedManifest.PSObject.Properties["nativeTools"]
@@ -328,7 +328,7 @@ function Assert-DbBackupInstalledStartGate {
     else {
         $null
     }
-    Test-DbBackupPackage `
+    Test-RestorePlanePackage `
         -PackageRoot $script:install `
         -Manifest $installedManifest `
         -ExpectedSignerThumbprint $script:ExpectedSignerThumbprint `
@@ -336,7 +336,7 @@ function Assert-DbBackupInstalledStartGate {
         -AllowUnsignedDevelopmentPackage:$script:AllowUnsignedDevelopmentPackage
 }
 
-function Start-DbBackupVerifiedService {
+function Start-RestorePlaneVerifiedService {
     param(
         [Parameter(Mandatory = $true)] [string] $ManifestSource,
         [Parameter(Mandatory = $true)] [string] $ManifestSha256
@@ -345,20 +345,20 @@ function Start-DbBackupVerifiedService {
     $installTreeLock = $null
     $identityLock = $null
     try {
-        $installTreeLock = Enter-DbBackupInstallTreeLock `
+        $installTreeLock = Enter-RestorePlaneInstallTreeLock `
             -InstallRoot $script:install
-        $identityLock = Enter-DbBackupPathMutationLock `
+        $identityLock = Enter-RestorePlanePathMutationLock `
             -Path $script:identityPath
-        Assert-DbBackupInstalledStartGate `
+        Assert-RestorePlaneInstalledStartGate `
             -ManifestSource $ManifestSource `
             -ManifestSha256 $ManifestSha256
-        Assert-DbBackupInstallRootProvenance `
+        Assert-RestorePlaneInstallRootProvenance `
             -DataRoot $script:data `
             -InstallRoot $script:install `
             -OwnerSid $script:ownerSid `
             -ServiceSid $script:serviceSid
         Start-Service -Name $script:ServiceName
-        Wait-DbBackupService -ExpectedStatus "Running"
+        Wait-RestorePlaneService -ExpectedStatus "Running"
     }
     finally {
         if ($null -ne $identityLock) {
@@ -404,41 +404,41 @@ function Restart-CurrentService {
     $service = Get-Service -Name $script:ServiceName
     if ($service.Status -ne "Stopped") {
         Stop-Service -Name $script:ServiceName
-        Wait-DbBackupService -ExpectedStatus "Stopped"
+        Wait-RestorePlaneService -ExpectedStatus "Stopped"
     }
-    Start-DbBackupVerifiedService `
+    Start-RestorePlaneVerifiedService `
         -ManifestSource $script:rollbackManifestPath `
         -ManifestSha256 $script:currentManifestSha256
-    Wait-DbBackupService -ExpectedStatus "Running"
+    Wait-RestorePlaneService -ExpectedStatus "Running"
 }
 
 function Restore-PreviousBinary {
     $service = Get-Service -Name $script:ServiceName
     if ($service.Status -ne "Stopped") {
         Stop-Service -Name $script:ServiceName
-        Wait-DbBackupService -ExpectedStatus "Stopped"
+        Wait-RestorePlaneService -ExpectedStatus "Stopped"
     }
-    $previousManifest = Read-DbBackupPackageManifest `
+    $previousManifest = Read-RestorePlanePackageManifest `
         -ManifestPath $script:rollbackManifestPath
-    $null = Move-DbBackupUnmanifestedInstallFiles `
+    $null = Move-RestorePlaneUnmanifestedInstallFiles `
         -InstallRoot $script:install `
         -DataRoot $script:data `
         -Manifest $previousManifest
-    Copy-DbBackupPackageFiles `
+    Copy-RestorePlanePackageFiles `
         -PackageRoot $script:rollbackRoot `
         -InstallRoot $script:install `
         -Manifest $previousManifest
-    Copy-DbBackupPackageManifest `
+    Copy-RestorePlanePackageManifest `
         -ManifestPath $script:rollbackManifestPath `
         -InstallRoot $script:install `
         -ExpectedSha256 $script:currentManifestSha256
-    Set-DbBackupProtectedAcl `
+    Set-RestorePlaneProtectedAcl `
         -Path $script:install `
         -ServiceSid $script:serviceSid `
         -OwnerSid $script:ownerSid `
         -ServiceAccess "read-execute" `
         -Recurse
-    Assert-DbBackupInstalledStartGate `
+    Assert-RestorePlaneInstalledStartGate `
         -ManifestSource $script:rollbackManifestPath `
         -ManifestSha256 $script:currentManifestSha256
     $script:installTreeTrustedForRestart = $true
@@ -446,14 +446,14 @@ function Restore-PreviousBinary {
         throw "UPDATE_ROLLBACK_INSTALL_TREE_NOT_VERIFIED"
     }
     Remove-UpdatePendingMarker
-    Start-DbBackupVerifiedService `
+    Start-RestorePlaneVerifiedService `
         -ManifestSource $script:rollbackManifestPath `
         -ManifestSha256 $script:currentManifestSha256
-    Wait-DbBackupService -ExpectedStatus "Running"
+    Wait-RestorePlaneService -ExpectedStatus "Running"
 }
 
-Assert-DbBackupProtectedAcl -Path $package -OwnerSid $ownerSid -Recurse
-$packageTreeLock = Enter-DbBackupInstallTreeLock -InstallRoot $package
+Assert-RestorePlaneProtectedAcl -Path $package -OwnerSid $ownerSid -Recurse
+$packageTreeLock = Enter-RestorePlaneInstallTreeLock -InstallRoot $package
 try {
     Write-UpdateJournal
     Invoke-UpdateStage -Name "download" -Action {
@@ -462,7 +462,7 @@ try {
         }
     }
     Invoke-UpdateStage -Name "verify_downloaded_artifact" -Action {
-        Test-DbBackupPackage -PackageRoot $script:package -Manifest $script:manifest `
+        Test-RestorePlanePackage -PackageRoot $script:package -Manifest $script:manifest `
             -ExpectedSignerThumbprint $script:ExpectedSignerThumbprint `
             -ExpectedNativeToolAuditSha256 $script:ExpectedNativeToolAuditSha256 `
             -AllowUnsignedDevelopmentPackage:$script:AllowUnsignedDevelopmentPackage
@@ -498,7 +498,7 @@ try {
         if ($minimum -gt $target) {
             throw "UPDATE_COMPATIBILITY_INVALID"
         }
-        Write-DbBackupJsonAtomic -Path $script:pendingPath -Value ([ordered] @{
+        Write-RestorePlaneJsonAtomic -Path $script:pendingPath -Value ([ordered] @{
             schemaVersion = 1
             updateId = $script:updateId
             targetVersion = $script:manifest.version
@@ -508,8 +508,8 @@ try {
     Invoke-UpdateStage -Name "stop_service" -Action {
         $script:installTreeTrustedForRestart = $false
         Stop-Service -Name $script:ServiceName
-        Wait-DbBackupService -ExpectedStatus "Stopped"
-        Invoke-DbBackupNative -FilePath "sc.exe" -Arguments @(
+        Wait-RestorePlaneService -ExpectedStatus "Stopped"
+        Invoke-RestorePlaneNative -FilePath "sc.exe" -Arguments @(
             "config",
             $script:ServiceName,
             "binPath=",
@@ -517,13 +517,13 @@ try {
         ) | Out-Null
     }
     Invoke-UpdateStage -Name "verify_staged_artifact" -Action {
-        Test-DbBackupPackage -PackageRoot $script:package -Manifest $script:manifest `
+        Test-RestorePlanePackage -PackageRoot $script:package -Manifest $script:manifest `
             -ExpectedSignerThumbprint $script:ExpectedSignerThumbprint `
             -ExpectedNativeToolAuditSha256 $script:ExpectedNativeToolAuditSha256 `
             -AllowUnsignedDevelopmentPackage:$script:AllowUnsignedDevelopmentPackage
     }
     Invoke-UpdateStage -Name "replace_binary" -Action {
-        $quarantine = Move-DbBackupUnmanifestedInstallFiles `
+        $quarantine = Move-RestorePlaneUnmanifestedInstallFiles `
             -InstallRoot $script:install `
             -DataRoot $script:data `
             -Manifest $script:manifest
@@ -531,10 +531,10 @@ try {
         $script:journal.installTreeQuarantinePath = $quarantine.quarantinePath
         Write-UpdateJournal
         foreach ($entry in @($script:manifest.files)) {
-            $source = Assert-DbBackupChildPath -Root $script:package -Candidate (
+            $source = Assert-RestorePlaneChildPath -Root $script:package -Candidate (
                 Join-Path $script:package ([string] $entry.path)
             )
-            $destination = Assert-DbBackupChildPath -Root $script:install -Candidate (
+            $destination = Assert-RestorePlaneChildPath -Root $script:install -Candidate (
                 Join-Path $script:install ([string] $entry.path)
             )
             New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force |
@@ -545,36 +545,36 @@ try {
             if ($actual -ne ([string] $entry.sha256).ToUpperInvariant()) {
                 throw "UPDATE_REPLACEMENT_HASH_MISMATCH"
             }
-            Set-DbBackupFileAtomically `
+            Set-RestorePlaneFileAtomically `
                 -TemporaryPath $temporary `
                 -DestinationPath $destination
         }
-        Copy-DbBackupPackageManifest `
+        Copy-RestorePlanePackageManifest `
             -TrustedManifestBytes $script:manifestBytes `
             -InstallRoot $script:install `
             -ExpectedSha256 $script:manifestSha256
-        Set-DbBackupProtectedAcl `
+        Set-RestorePlaneProtectedAcl `
             -Path $script:install `
             -ServiceSid $script:serviceSid `
             -OwnerSid $script:ownerSid `
             -ServiceAccess "read-execute" `
             -Recurse
-        Assert-DbBackupPackageManifest `
+        Assert-RestorePlanePackageManifest `
             -ManifestPath $script:manifestFile `
             -InstallRoot $script:install `
             -ExpectedSha256 $script:manifestSha256
-        Test-DbBackupPackage -PackageRoot $script:install -Manifest $script:manifest `
+        Test-RestorePlanePackage -PackageRoot $script:install -Manifest $script:manifest `
             -ExpectedSignerThumbprint $script:ExpectedSignerThumbprint `
             -ExpectedNativeToolAuditSha256 $script:ExpectedNativeToolAuditSha256 `
             -AllowUnsignedDevelopmentPackage:$script:AllowUnsignedDevelopmentPackage
         $script:installTreeTrustedForRestart = $true
-        $script:cli = Join-Path $script:install "dbbackup.exe"
+        $script:cli = Join-Path $script:install "restoreplane.exe"
     }
     Invoke-UpdateStage -Name "migrate_schema" -Action {
-        Start-DbBackupVerifiedService `
+        Start-RestorePlaneVerifiedService `
             -ManifestSource $script:manifestFile `
             -ManifestSha256 $script:manifestSha256
-        Wait-DbBackupService -ExpectedStatus "Running"
+        Wait-RestorePlaneService -ExpectedStatus "Running"
         $outcome = Invoke-InstalledCli -Arguments @("service", "schema")
         if ($outcome.success -ne $true -or $outcome.result.userVersion -lt 2) {
             throw "UPDATE_SCHEMA_MIGRATION_FAILED"
@@ -607,11 +607,11 @@ try {
     }
     Invoke-UpdateStage -Name "resume_claims" -Action {
         Stop-Service -Name $script:ServiceName
-        Wait-DbBackupService -ExpectedStatus "Stopped"
-        Start-DbBackupVerifiedService `
+        Wait-RestorePlaneService -ExpectedStatus "Stopped"
+        Start-RestorePlaneVerifiedService `
             -ManifestSource $script:manifestFile `
             -ManifestSha256 $script:manifestSha256
-        Wait-DbBackupService -ExpectedStatus "Running"
+        Wait-RestorePlaneService -ExpectedStatus "Running"
         $health = Invoke-InstalledCli -Arguments @("service", "status")
         if ($health.success -ne $true -or
             $health.result.updatePending -ne $false -or
@@ -644,10 +644,10 @@ catch {
             "forward_fix_claims_stopped" {
                 $service = Get-Service -Name $ServiceName
                 if ($service.Status -eq "Stopped") {
-                    Start-DbBackupVerifiedService `
+                    Start-RestorePlaneVerifiedService `
                         -ManifestSource $script:manifestFile `
                         -ManifestSha256 $script:manifestSha256
-                    Wait-DbBackupService -ExpectedStatus "Running"
+                    Wait-RestorePlaneService -ExpectedStatus "Running"
                 }
             }
             default {

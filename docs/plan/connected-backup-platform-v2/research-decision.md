@@ -1,4 +1,4 @@
-# Research Decision
+﻿# Research Decision
 
 ## Selected
 
@@ -25,7 +25,7 @@
   유지하되, 중앙 dispatcher와 원격 agent 경계는 처음부터 분리한다.
 - [inferred] Databasement의 제품 기능은 패리티 기준선이며, 현재 Rust 보안 엔진은 폐기하지 않는다.
 - [inferred] DB 지원은 이름·설정 폼 추가가 아니라 연결 테스트부터 실제 복원 E2E까지를 의미한다.
-- [inferred] 기존 `docs/plan/db-backup-system/`은 v1 보안 엔진 설계 이력으로 보존한다.
+- [inferred] 기존 `docs/plan/restoreplane/`은 v1 보안 엔진 설계 이력으로 보존한다.
 
 ## Questions Deferred
 

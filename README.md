@@ -1,10 +1,15 @@
 **한국어** | [English](README.en.md) | [日本語](README.ja.md)
 
-# DbBackup
+# RestorePlane
+
+[![CI](https://github.com/Dannykkh/restoreplane/actions/workflows/ci.yml/badge.svg)](https://github.com/Dannykkh/restoreplane/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Dannykkh/restoreplane?include_prereleases&label=release)](https://github.com/Dannykkh/restoreplane/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2f6f68.svg)](LICENSE)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-2f6f68.svg)](#플랫폼)
 
 **Windows에서 여러 데이터베이스의 백업, 검증, 복원, 보존을 한곳에서 운영하는 Rust 기반 데스크톱 도구입니다.**
 
-DbBackup은 PostgreSQL, MySQL, MariaDB, SQLite의 논리 백업을 예약하고, 전체 데이터베이스 또는 선택한 테이블만 압축·암호화·서명해 보관합니다. 백업 파일이 만들어졌다는 사실보다 실제로 복호화하고 복원할 수 있는 증거를 중요하게 다룹니다.
+RestorePlane은 PostgreSQL, MySQL, MariaDB, SQLite의 논리 백업을 예약하고, 전체 데이터베이스 또는 선택한 테이블만 압축·암호화·서명해 보관합니다. 백업 파일이 만들어졌다는 사실보다 실제로 복호화하고 복원할 수 있는 증거를 중요하게 다룹니다.
 
 > **현재 상태: Windows release candidate (`v0.1.0-rc.1`)**
 >
@@ -14,13 +19,13 @@ DbBackup은 PostgreSQL, MySQL, MariaDB, SQLite의 논리 백업을 예약하고,
 
 > 아래 이미지는 결정적 Playwright demo fixture로 렌더링한 화면입니다. 레이아웃과 상호작용을 보여주며 실제 service 실행이나 백업 성공 증거를 의미하지 않습니다.
 
-![DbBackup의 근거 중심 Overview 화면](docs/assets/readme/overview-dark.png)
+![RestorePlane의 근거 중심 Overview 화면](docs/assets/readme/overview-dark.png)
 
 | 선택 테이블 Backup Scope | Durable backup 진행 상태 |
 |---|---|
 | ![명시적으로 선택한 테이블 Scope와 Database Target 상세](docs/assets/readme/explicit-table-scope.png) | ![실행 중인 native dump와 Replica 전송 상태](docs/assets/readme/backup-running.png) |
 
-## 왜 DbBackup인가
+## 왜 RestorePlane인가
 
 일반 파일 백업 도구가 아니라 데이터베이스 복구 가능성을 운영하는 control plane입니다.
 
@@ -85,18 +90,21 @@ MySQL과 MariaDB의 L1 검증과 create-new restore는 지원합니다. 공개 n
 - live database fixture를 실행할 경우 Docker Desktop
 
 ```powershell
+git clone https://github.com/Dannykkh/restoreplane.git
+cd restoreplane
+
 # Service와 CLI
-cargo build --release --locked -p dbbackup-service -p dbbackup-cli
+cargo build --release --locked -p restoreplane-service -p restoreplane-cli
 
 # Console
 npm ci --prefix apps/console
 npm --prefix apps/console run build
 
 # 사용 가능한 명령 확인
-.\target\release\dbbackup.exe --help
+.\target\release\restoreplane.exe --help
 ```
 
-이 빌드는 개발·검토용입니다. 이미 `DbBackupService` 항목이 존재하면 CLI의 legacy direct backup 경로는 이중 실행을 막기 위해 차단됩니다.
+이 빌드는 개발·검토용입니다. 이미 `RestorePlaneService` 항목이 존재하면 CLI의 legacy direct backup 경로는 이중 실행을 막기 위해 차단됩니다.
 
 ## 일반적인 사용 흐름
 
@@ -116,7 +124,7 @@ CLI의 Backup Scope 자동화에는 idempotency key가 필요합니다. 응답�
 > `[unverified]` 아래 예시는 설치된 signed candidate와 실제 Database Target이 필요하므로 이번 README 검토에서는 실행하지 않았습니다.
 
 ```powershell
-$cli = "$env:ProgramFiles\DbBackup\dbbackup.exe"
+$cli = "$env:ProgramFiles\RestorePlane\restoreplane.exe"
 $targetId = '<database-target-uuid>'
 
 & $cli service scope discover `
@@ -128,13 +136,13 @@ $targetId = '<database-target-uuid>'
     --limit 100
 ```
 
-전체 CLI 계약은 `dbbackup.exe --help`와 [`docs/plan/connected-backup-platform-v2/ipc-spec.md`](docs/plan/connected-backup-platform-v2/ipc-spec.md)를 참고하세요.
+전체 CLI 계약은 `restoreplane.exe --help`와 [`docs/plan/connected-backup-platform-v2/ipc-spec.md`](docs/plan/connected-backup-platform-v2/ipc-spec.md)를 참고하세요.
 
 ## 동작 방식
 
 ```mermaid
 flowchart LR
-    UI["Tauri Console / CLI"] -->|"authenticated local IPC"| SVC["DbBackupService"]
+    UI["Tauri Console / CLI"] -->|"authenticated local IPC"| SVC["RestorePlaneService"]
     SVC --> SCH["Scheduler + durable queue"]
     SCH --> SRC["DB-native backup provider"]
     SRC --> PIPE["zstd + ChaCha20-Poly1305 STREAM"]
@@ -154,7 +162,7 @@ flowchart LR
 
 ## 보안 모델
 
-DbBackup은 “암호화했으니 안전하다”는 가정을 하지 않습니다.
+RestorePlane은 “암호화했으니 안전하다”는 가정을 하지 않습니다.
 
 - 자격증명 보호와 랜섬웨어 내성을 별도 문제로 취급합니다.
 - 백업별 DEK, zstd, ChaCha20-Poly1305 STREAM, Ed25519 signed Manifest를 사용합니다.
@@ -221,13 +229,13 @@ powershell -NoProfile -File .\scripts\test-remote-recovery.ps1
 
 | 영역 | 주요 crate 또는 앱 |
 |---|---|
-| Domain과 application | `dbbackup-core`, `dbbackup-domain`, `dbbackup-application` |
-| Operational Store | `dbbackup-catalog` |
-| Queue와 workers | `dbbackup-runtime`, `dbbackup-service`, `dbbackup-scheduler` |
-| Backup pipeline | `dbbackup-pipeline`, `dbbackup-secrets`, `dbbackup-verify` |
-| Database providers | `dbbackup-source-pg`, `dbbackup-source-mysql`, `dbbackup-source-sqlite`, `dbbackup-source-sqlserver` |
-| Destinations | `dbbackup-dest-s3`, `dbbackup-dest-ssh` |
-| User interfaces | `dbbackup-cli`, `dbbackup-ipc-client`, `apps/console` |
+| Domain과 application | `restoreplane-core`, `restoreplane-domain`, `restoreplane-application` |
+| Operational Store | `restoreplane-catalog` |
+| Queue와 workers | `restoreplane-runtime`, `restoreplane-service`, `restoreplane-scheduler` |
+| Backup pipeline | `restoreplane-pipeline`, `restoreplane-secrets`, `restoreplane-verify` |
+| Database providers | `restoreplane-source-pg`, `restoreplane-source-mysql`, `restoreplane-source-sqlite`, `restoreplane-source-sqlserver` |
+| Destinations | `restoreplane-dest-s3`, `restoreplane-dest-ssh` |
+| User interfaces | `restoreplane-cli`, `restoreplane-ipc-client`, `apps/console` |
 
 </details>
 
@@ -241,7 +249,7 @@ powershell -NoProfile -File .\scripts\test-remote-recovery.ps1
 | 설치와 update | [Install](docs/runbooks/install.md), [Update](docs/runbooks/update.md) |
 | 운영 rollout | [Rollout plan](docs/rollout-plan-program-owned-backup-engine.md) |
 | 장애 대응 | [Incident runbook](docs/runbooks/incident.md) |
-| 예제 설정 | [`config/dbbackup.example.toml`](config/dbbackup.example.toml) |
+| 예제 설정 | [`config/restoreplane.example.toml`](config/restoreplane.example.toml) |
 | 보안 제보 | [SECURITY.md](SECURITY.md) |
 
 ## 기여
@@ -257,7 +265,7 @@ powershell -NoProfile -File .\scripts\test-remote-recovery.ps1
 
 ## 라이선스
 
-DbBackup은 [MIT License](LICENSE)로 배포됩니다. Copyright (c) 2026 dannykkh.
+RestorePlane은 [MIT License](LICENSE)로 배포됩니다. Copyright (c) 2026 dannykkh.
 
 ---
 

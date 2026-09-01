@@ -2,7 +2,7 @@
 
 - 상태: 승인됨
 - **날짜**: 2026-07-26
-- **결정자**: DbBackup project owner
+- **결정자**: RestorePlane project owner
 - **태그**: operational-store, manifest, backup-scope, scheduler, retention
 
 ## Context

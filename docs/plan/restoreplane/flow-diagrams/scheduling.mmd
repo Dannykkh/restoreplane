@@ -1,0 +1,86 @@
+flowchart TD
+    A["User runs: schedule<br/>--job prod-pg --time 03:00"]
+
+    B["Prepare schtasks XML"]
+    B1["Task name: restoreplane_prod-pg"]
+    B2["Scheduled trigger: daily 03:00"]
+    B3["StartWhenAvailable: true<br/>catch-up after reboot"]
+
+    C["Build command line:<br/>backup.exe run --job prod-pg"]
+    D["Add event logging:<br/>on-success: catalog record<br/>on-failure: webhook/email"]
+
+    E["Register with Windows<br/>Task Scheduler<br/>schtasks /create /xml"]
+
+    F["Confirm registration<br/>display task details"]
+
+    G["At scheduled time:<br/>Task Scheduler spawns process"]
+
+    H["Overlap Guard Check"]
+    H1["Query runs table"]
+    H2["Check: UNIQUE(job)<br/>WHERE status='running'"]
+    H2_running["Running: skip<br/>lock held"]
+    H2_free["Not running: acquire lock"]
+
+    I["Execute backup run"]
+    I1["run --job prod-pg"]
+    I_done["Backup completes"]
+
+    J["After reboot:<br/>missed schedule detected"]
+    J1["StartWhenAvailable=true"]
+    J2["Queue catch-up run"]
+    J3["Check overlap guard"]
+    J3_blocked["Blocked: skip<br/>or queue for next slot"]
+    J3_ok["OK: execute catch-up"]
+
+    K["Record to runs table"]
+    K1["runs.status = done"]
+    K2["Release overlap lock"]
+
+    L["On success"]
+    L1["Log to catalog:<br/>backups marked success"]
+    L2["Optional: send notification"]
+
+    M["On failure"]
+    M1["Log to catalog:<br/>backups marked failed"]
+    M2["Send alert:<br/>webhook or email"]
+    M3["Exit code nonzero"]
+
+    N["Task Scheduler logs<br/>completion in Event Log"]
+
+    A --> B
+    B --> B1 --> B2 --> B3
+    B3 --> C --> D --> E
+    E --> F
+    F --> G
+
+    G --> H
+    H --> H1 --> H2
+    H2 -->|Running| H2_running
+    H2 -->|Free| H2_free
+    H2_free --> I
+    I --> I1 --> I_done
+
+    G --> J
+    J --> J1 --> J2 --> J3
+    J3 -->|Blocked| J3_blocked
+    J3 -->|OK| J3_ok
+    J3_ok --> I
+
+    I_done --> K
+    K --> K1 --> K2
+    K2 --> L
+    K2 --> M
+
+    L --> L1 --> L2
+    M --> M1 --> M2 --> M3
+
+    L2 --> N
+    M3 --> N
+    H2_running --> N
+    J3_blocked --> N
+
+    style A fill:#e1f5ff
+    style L fill:#c8e6c9
+    style M fill:#fff3e0
+    style H2_running fill:#fff9c4
+    style J3_blocked fill:#fff9c4

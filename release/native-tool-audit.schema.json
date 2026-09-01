@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dbbackupsystem.local/schemas/native-tool-audit-v1.json",
-  "title": "DbBackup audited native tool bundle",
+  "$id": "https://restoreplane.local/schemas/native-tool-audit-v1.json",
+  "title": "RestorePlane audited native tool bundle",
   "type": "object",
   "additionalProperties": false,
   "required": [

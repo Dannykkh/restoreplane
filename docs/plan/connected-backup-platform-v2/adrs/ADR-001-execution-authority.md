@@ -2,7 +2,7 @@
 
 - 상태: 승인됨
 - **날짜**: 2026-07-26
-- **결정자**: DbBackup project owner
+- **결정자**: RestorePlane project owner
 - **태그**: windows-service, scheduler, operational-store, execution-authority
 
 ## Context
@@ -29,7 +29,7 @@ Tauri, CLI, Windows Task Scheduler가 각각 native backup process를 시작하�
 
 ## Decision
 
-singleton `dbbackup-service` process를 유일한 production execution authority로 사용한다.
+singleton `restoreplane-service` process를 유일한 production execution authority로 사용한다.
 Windows Service Control Manager는 그 process의 시작·중지·재시작 lifecycle만 소유하고 Plan
 configuration이나 Plan별 task를 소유하지 않는다.
 

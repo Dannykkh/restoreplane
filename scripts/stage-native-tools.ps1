@@ -11,14 +11,14 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 Import-Module (
-    Join-Path (Split-Path -Parent $PSScriptRoot) "installer\DbBackup.Install.Common.psm1"
+    Join-Path (Split-Path -Parent $PSScriptRoot) "installer\RestorePlane.Install.Common.psm1"
 ) -Force
 
 $maximumFileCount = 4096
 $maximumFileBytes = 512MB
 $maximumTreeBytes = 2GB
-$nativeRoot = Resolve-DbBackupAbsolutePath -Path $NativeToolRoot
-$package = Resolve-DbBackupAbsolutePath -Path $PackageRoot -AllowMissing
+$nativeRoot = Resolve-RestorePlaneAbsolutePath -Path $NativeToolRoot
+$package = Resolve-RestorePlaneAbsolutePath -Path $PackageRoot -AllowMissing
 $nativeRootMetadata = Get-Item -LiteralPath $nativeRoot -Force
 if (-not $nativeRootMetadata.PSIsContainer -or
     $nativeRootMetadata.Attributes -band [IO.FileAttributes]::ReparsePoint) {
@@ -36,9 +36,9 @@ $auditPath = if ([string]::IsNullOrWhiteSpace($AuditManifestPath)) {
     Join-Path $nativeRoot "native-tools-audit.json"
 }
 else {
-    Resolve-DbBackupAbsolutePath -Path $AuditManifestPath
+    Resolve-RestorePlaneAbsolutePath -Path $AuditManifestPath
 }
-$auditPath = Assert-DbBackupChildPath -Root $nativeRoot -Candidate $auditPath
+$auditPath = Assert-RestorePlaneChildPath -Root $nativeRoot -Candidate $auditPath
 if (-not (Test-Path -LiteralPath $auditPath -PathType Leaf)) {
     throw "NATIVE_TOOL_AUDIT_MISSING"
 }
@@ -268,7 +268,7 @@ foreach ($relative in $fileByPath.Keys) {
     if (-not $actualPaths.Contains($relative)) {
         throw "NATIVE_TOOL_FILE_MISSING"
     }
-    $path = Assert-DbBackupChildPath -Root $nativeRoot -Candidate (
+    $path = Assert-RestorePlaneChildPath -Root $nativeRoot -Candidate (
         Join-Path $nativeRoot $relative
     )
     $actualHash = (
@@ -310,7 +310,7 @@ if ($Channel -eq "production") {
         "mysql/mariadb11/mariadb.exe" = "(?i)Distrib\s+11\."
     }
     foreach ($relative in $versionPatterns.Keys) {
-        $path = Assert-DbBackupChildPath -Root $nativeRoot -Candidate (
+        $path = Assert-RestorePlaneChildPath -Root $nativeRoot -Candidate (
             Join-Path $nativeRoot $relative
         )
         try {
@@ -337,10 +337,10 @@ $temporary = Join-Path $package (
 try {
     New-Item -ItemType Directory -Path $temporary -Force | Out-Null
     foreach ($relative in $fileByPath.Keys) {
-        $source = Assert-DbBackupChildPath -Root $nativeRoot -Candidate (
+        $source = Assert-RestorePlaneChildPath -Root $nativeRoot -Candidate (
             Join-Path $nativeRoot $relative
         )
-        $destination = Assert-DbBackupChildPath -Root $temporary -Candidate (
+        $destination = Assert-RestorePlaneChildPath -Root $temporary -Candidate (
             Join-Path $temporary $relative
         )
         New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force |

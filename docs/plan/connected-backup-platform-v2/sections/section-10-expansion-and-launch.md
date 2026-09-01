@@ -201,10 +201,10 @@ release artifact metadata, provider fixture runner, rollout decision을 machine-
 ```text
 installer/
 scripts/{install,repair,update,uninstall,test-release-matrix}.ps1
-crates/dbbackup-service/src/{update,diagnostics,support_bundle}.rs
-crates/dbbackup-cli/src/commands/{diagnostics,support_bundle}.rs
-crates/dbbackup-source-{mongodb,firebird}/
-crates/dbbackup-dest-*/
+crates/restoreplane-service/src/{update,diagnostics,support_bundle}.rs
+crates/restoreplane-cli/src/commands/{diagnostics,support_bundle}.rs
+crates/restoreplane-source-{mongodb,firebird}/
+crates/restoreplane-dest-*/
 release/{claims,evidence,rollout}.json
 docs/runbooks/{install,update,rollback,incident,support-bundle}.md
 .github/workflows/{ci,managed-fixtures,release}.yml

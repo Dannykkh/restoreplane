@@ -1,0 +1,50 @@
+[package]
+name = "restoreplane-pipeline"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# S05 — Pipeline + Commit Protocol(옵션 C 스풀-후-팬아웃) + S06 Destination(LocalDest) +
+# S03 BackupSource trait 계약. 슬라이스 1의 하중 리스크(finish/절단, 평문해시 tee, 옵션 C)를
+# DB 없이 StubSource로 조기 증명한다.
+#
+# 섹션 대비 편차: 섹션은 payload 암호화에 `age`를 쓰지만, 이 프로젝트의 restoreplane-secrets는
+# chacha20poly1305 STREAM(Dek::payload_encryptor)을 공개 API로 제공한다. 따라서 인코딩 체인의
+# 암호화 계층을 age 대신 secrets 크레이트의 STREAM primitive로 구현한다(P0-5 계층 분리 유지).
+
+[dependencies]
+restoreplane-core = { path = "../restoreplane-core" }
+restoreplane-secrets = { path = "../restoreplane-secrets" }
+
+# --- 인코딩 체인(핀) ---
+zstd = "=0.13.3"
+blake3 = "=1.5.5"
+chacha20poly1305 = { version = "=0.10.1", features = ["stream", "alloc"] }
+
+# --- 런타임/IO ---
+tokio = { version = "=1.52.3", features = ["rt-multi-thread", "process", "io-util", "fs", "macros", "sync", "time"] }
+tokio-util = { version = "=0.7.18", features = ["io", "io-util"] }
+futures = "=0.3.31"
+tempfile = "=3.14.0"
+tar = "=0.4.45"
+fs2 = "=0.4.3"
+
+# --- 매니페스트 서명/직렬화 ---
+ed25519-dalek = { version = "=2.2.0", features = ["rand_core"] }
+serde = { workspace = true }
+serde_json = "1"
+uuid = { version = "=1.11.0", features = ["v4", "serde"] }
+data-encoding = "=2.6.0"
+
+async-trait = "0.1"
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows = { version = "=0.58.0", features = [
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
+] }

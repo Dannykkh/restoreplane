@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dbbackupsystem.local/schemas/release-fixture-evidence-v1.json",
-  "title": "DbBackup pristine signed lifecycle fixture evidence",
+  "$id": "https://restoreplane.local/schemas/release-fixture-evidence-v1.json",
+  "title": "RestorePlane pristine signed lifecycle fixture evidence",
   "type": "object",
   "additionalProperties": false,
   "required": [

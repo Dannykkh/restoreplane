@@ -1,7 +1,7 @@
 # Local IPC and Tauri Command Specification
 
 > HTTP API: initial v2에는 없음
-> Transport: Windows local named pipe between Tauri/CLI and `dbbackup-service`
+> Transport: Windows local named pipe between Tauri/CLI and `restoreplane-service`
 > Tauri command는 이 계약의 thin wrapper이며 native tool을 직접 실행하지 않는다.
 
 ## 1. Security Envelope

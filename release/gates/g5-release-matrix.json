@@ -9,7 +9,7 @@
       "arguments": [
         "test",
         "-p",
-        "dbbackup-service",
+        "restoreplane-service",
         "--test",
         "update_lifecycle"
       ]
@@ -20,7 +20,7 @@
       "arguments": [
         "test",
         "-p",
-        "dbbackup-service",
+        "restoreplane-service",
         "--test",
         "service_host",
         "minimum_reader_version_blocks_old_binary_writes_but_keeps_diagnostics_available",
@@ -34,7 +34,7 @@
       "arguments": [
         "test",
         "-p",
-        "dbbackup-service",
+        "restoreplane-service",
         "--test",
         "service_application"
       ]
@@ -45,7 +45,7 @@
       "arguments": [
         "test",
         "-p",
-        "dbbackup-service",
+        "restoreplane-service",
         "--test",
         "support_bundle"
       ]
@@ -56,7 +56,7 @@
       "arguments": [
         "test",
         "-p",
-        "dbbackup-service",
+        "restoreplane-service",
         "--test",
         "support_bundle_operation_worker"
       ]
@@ -67,7 +67,7 @@
       "arguments": [
         "test",
         "-p",
-        "dbbackup-service",
+        "restoreplane-service",
         "--test",
         "telemetry_archive"
       ]

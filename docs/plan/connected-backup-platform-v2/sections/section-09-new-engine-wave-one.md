@@ -155,10 +155,10 @@ tool invocation, file identity, certification publishing을 공통 provider cont
 ## Files to Create/Modify
 
 ```text
-crates/dbbackup-core/src/provider.rs
-crates/dbbackup-source-sqlserver/src/{lib,probe,discover,bacpac,restore,validate}.rs
-crates/dbbackup-source-sqlite/src/{lib,probe,backup,restore,validate}.rs
-crates/dbbackup-source-{sqlserver,sqlite}/tests/conformance/
+crates/restoreplane-core/src/provider.rs
+crates/restoreplane-source-sqlserver/src/{lib,probe,discover,bacpac,restore,validate}.rs
+crates/restoreplane-source-sqlite/src/{lib,probe,backup,restore,validate}.rs
+crates/restoreplane-source-{sqlserver,sqlite}/tests/conformance/
 apps/console/src/screens/{Connections,Databases,BackupPlans}.tsx
 scripts/test-engine-wave1.ps1
 Cargo.toml

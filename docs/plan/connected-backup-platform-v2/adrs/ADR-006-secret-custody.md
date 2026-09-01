@@ -5,7 +5,7 @@
 
 ## Context
 
-Tauri는 interactive user로, `dbbackup-service`는 최소권한 service account로 실행된다. 사용자
+Tauri는 interactive user로, `restoreplane-service`는 최소권한 service account로 실행된다. 사용자
 범위 DPAPI secret은 service가 열 수 없고, 무제한 machine-scope secret은 같은 머신의 다른
 주체에 과도하게 노출될 수 있다.
 

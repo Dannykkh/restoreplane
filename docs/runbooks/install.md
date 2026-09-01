@@ -1,6 +1,6 @@
 # Windows install, repair, and uninstall runbook
 
-이 문서는 서명된 DbBackup Windows release를 설치하고 검증하는 절차다. 개발 channel
+이 문서는 서명된 RestorePlane Windows release를 설치하고 검증하는 절차다. 개발 channel
 manifest는 개발·fixture에서만 사용한다. production 설치는 package hash와 유효한
 Authenticode 서명, 예상 signer thumbprint가 모두 일치해야 한다.
 
@@ -13,7 +13,7 @@ Authenticode 서명, 예상 signer thumbprint가 모두 일치해야 한다.
 - release와 별도 신뢰 경로로 전달받아 확인한 `native-tools-audit.json` SHA-256
 - `InstallRoot`와 `DataRoot`는 root directory 자체가 아닌 절대 경로여야 한다. 두 경로는
   서로 달라야 하고 어느 한쪽도 다른 쪽의 하위 경로여서는 안 된다.
-- 기존 `DbBackupService` 서비스가 없어야 한다. 있으면 `repair.ps1`을 사용한다.
+- 기존 `RestorePlaneService` 서비스가 없어야 한다. 있으면 `repair.ps1`을 사용한다.
 - 기존 `DataRoot\service-identity.json`을 재사용하는 reinstall/repair는 그 파일에 기록된
   persisted owner 계정 또는 SYSTEM 문맥에서 실행한다. 다른 관리자 계정으로 owner를 바꾸는
   작업은 별도 승인된 identity migration이며 installer가 암묵적으로 수행하지 않는다.
@@ -62,21 +62,21 @@ retroactively.
 release root에서 다음을 실행한다.
 
 ```powershell
-$releaseRoot = 'C:\staging\DbBackup-release'
+$releaseRoot = 'C:\staging\RestorePlane-release'
 $packageRoot = Join-Path $releaseRoot 'package'
 $manifestPath = Join-Path $packageRoot 'package-manifest.json'
 $expectedSigner = '<out-of-band signer thumbprint>'
 $expectedPackageManifest = '<out-of-band package manifest SHA-256>'
 $expectedNativeToolAudit = '<out-of-band native tool audit SHA-256>'
 $ownerSid = '<approved non-SYSTEM installer owner SID>'
-$installRoot = "$env:ProgramFiles\DbBackup"
-$dataRoot = "$env:ProgramData\DbBackup"
+$installRoot = "$env:ProgramFiles\RestorePlane"
+$dataRoot = "$env:ProgramData\RestorePlane"
 
 # Do not execute release code until this built-in verification passes.
 $deploymentFiles = @(
     Get-ChildItem (Join-Path $releaseRoot 'scripts') -Filter *.ps1 -File
 ) + @(
-    Get-Item (Join-Path $releaseRoot 'installer\DbBackup.Install.Common.psm1')
+    Get-Item (Join-Path $releaseRoot 'installer\RestorePlane.Install.Common.psm1')
 )
 foreach ($deploymentFile in $deploymentFiles) {
     $signature = Get-AuthenticodeSignature -LiteralPath $deploymentFile.FullName
@@ -109,7 +109,7 @@ foreach ($deploymentFile in $deploymentFiles) {
 - vendor entry-point EXE의 audit-pinned Authenticode signer/publisher 확인. OSS dependency DLL은
   audit가 서명을 요구하면 Authenticode도 확인하고, 그렇지 않으면 외부 audit digest와 파일별
   SHA-256을 신뢰 기준으로 사용
-- 모든 관리자 실행 PS1과 `DbBackup.Install.Common.psm1`을 artifact 외부에서 받은 signer
+- 모든 관리자 실행 PS1과 `RestorePlane.Install.Common.psm1`을 artifact 외부에서 받은 signer
   thumbprint로 검증한 뒤에만 실행
 - manifest에 없는 InstallRoot 파일은 service 시작 전에
   `DataRoot\updates\install-tree-quarantine\<timestamp-guid>`로 이동하고, 복사 후 전체 설치
@@ -117,10 +117,10 @@ foreach ($deploymentFile in $deploymentFiles) {
 - 최초 package 검증 때 고정한 SHA-256으로 `package-manifest.json` source를 다시 확인하고
   InstallRoot에 atomic copy한 뒤 destination도 같은 digest인지 비교. 검증 후 source 변경,
   installed manifest missing/tamper는 service 시작 전에 차단
-- `NT SERVICE\DbBackupService` virtual account와 unrestricted service SID
-- `%ProgramFiles%\DbBackup` 전체 tree의 protected exact allowlist ACL: SYSTEM/owner FullControl,
+- `NT SERVICE\RestorePlaneService` virtual account와 unrestricted service SID
+- `%ProgramFiles%\RestorePlane` 전체 tree의 protected exact allowlist ACL: SYSTEM/owner FullControl,
   service SID ReadAndExecute. 추가 allow/deny/inherited ACE는 허용하지 않음
-- `%ProgramData%\DbBackup`의 service/owner 전용 ACL
+- `%ProgramData%\RestorePlane`의 service/owner 전용 ACL
 - Operational Store, spool, control backup, support bundle, telemetry archive, update 디렉터리
 - 자동 시작과 service failure recovery
 - 새 Store에서만 사용할 서명 package/binary digest 기반 standalone authority bootstrap 증거
@@ -129,10 +129,10 @@ foreach ($deploymentFile in $deploymentFiles) {
 
 | Root | 내용 | lifecycle |
 |---|---|---|
-| `InstallRoot` | `dbbackup-service.exe`, CLI, bundled native tools | signed install/update/repair가 배치 |
+| `InstallRoot` | `restoreplane-service.exe`, CLI, bundled native tools | signed install/update/repair가 배치 |
 | `DataRoot` | Operational Store, service identity, secrets, spool, control backup, support bundle, telemetry archive, update journal | repair/uninstall/reinstall에서 보존 |
 
-service의 `binPath`는 `InstallRoot\dbbackup-service.exe --data-root "<DataRoot>"` 형태다.
+service의 `binPath`는 `InstallRoot\restoreplane-service.exe --data-root "<DataRoot>"` 형태다.
 service는 자신의 executable parent를 `InstallRoot`로 사용하며 root가 같거나 중첩되거나
 `--data-root`가 모호하면 시작하지 않는다. custom root를 사용한 설치는 이후 repair, update,
 uninstall에도 같은 두 값을 명시해야 한다.
@@ -143,13 +143,13 @@ random same-volume sibling quarantine path, and a fresh protected InstallRoot
 is created before package copy. InstallRoot and DataRoot may therefore reside on
 different volumes.
 
-Legacy `dbbackup run`, `schedule` 등의 direct execution guard는 `DbBackupService` 항목이
+Legacy `restoreplane run`, `schedule` 등의 direct execution guard는 `RestorePlaneService` 항목이
 SCM에 존재하면 service 상태나 configured `DataRoot`와 관계없이 실행을 차단한다. 지원되는
 uninstall 흐름으로 service 항목을 제거하고 SCM이 service 미설치(Windows error 1060)를 명확히
-반환할 때만 기존 `%ProgramData%\DbBackup` legacy 경로를 허용한다. SCM 조회 실패도 두 execution
+반환할 때만 기존 `%ProgramData%\RestorePlane` legacy 경로를 허용한다. SCM 조회 실패도 두 execution
 authority가 동시에 동작하지 않도록 fail-closed한다.
 
-설치기는 Plan별 Windows Task Scheduler 항목을 만들지 않는다. `DbBackupService`는 UI가
+설치기는 Plan별 Windows Task Scheduler 항목을 만들지 않는다. `RestorePlaneService`는 UI가
 닫힌 뒤에도 실행되는 singleton lifecycle host이며, 일정과 실행 cursor는 Operational Store에
 있다. 설치 대상에 기존 Store나 legacy/shadow 흔적이 있으면 standalone bootstrap을 거부하고
 기존 cutover 절차를 요구한다.
@@ -157,14 +157,14 @@ authority가 동시에 동작하지 않도록 fail-closed한다.
 ## 설치 후 검증
 
 ```powershell
-sc.exe query DbBackupService
-sc.exe qc DbBackupService
-sc.exe showsid DbBackupService
+sc.exe query RestorePlaneService
+sc.exe qc RestorePlaneService
+sc.exe showsid RestorePlaneService
 icacls.exe $installRoot
 icacls.exe $dataRoot
 
-& (Join-Path $installRoot 'dbbackup.exe') service status
-& (Join-Path $installRoot 'dbbackup.exe') service diagnostics
+& (Join-Path $installRoot 'restoreplane.exe') service status
+& (Join-Path $installRoot 'restoreplane.exe') service diagnostics
 ```
 
 통과 조건은 service가 `Running`이고, status가 성공이며, update pending이 없고,

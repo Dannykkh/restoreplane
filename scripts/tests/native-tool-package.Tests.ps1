@@ -9,7 +9,7 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $stageScript = Join-Path $repoRoot "scripts\stage-native-tools.ps1"
 $manifestScript = Join-Path $repoRoot "scripts\new-package-manifest.ps1"
 $fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) (
-    "dbbackup-native-tool-contract-" + [Guid]::NewGuid().ToString("N")
+    "restoreplane-native-tool-contract-" + [Guid]::NewGuid().ToString("N")
 )
 
 function Write-FixtureFile {
@@ -100,7 +100,7 @@ function New-FixtureAudit {
             role = $role
             authenticodeRequired = $false
             signerThumbprint = ""
-            publisher = "DbBackup development fixture"
+            publisher = "RestorePlane development fixture"
         }
     }
     $audit = [ordered] @{
@@ -213,8 +213,8 @@ try {
 
     $barePackageRoot = Join-Path $fixtureRoot "bare-package"
     New-Item -ItemType Directory -Path $barePackageRoot -Force | Out-Null
-    Write-FixtureFile -Root $barePackageRoot -RelativePath "dbbackup-service.exe"
-    Write-FixtureFile -Root $barePackageRoot -RelativePath "dbbackup.exe"
+    Write-FixtureFile -Root $barePackageRoot -RelativePath "restoreplane-service.exe"
+    Write-FixtureFile -Root $barePackageRoot -RelativePath "restoreplane.exe"
     Assert-ThrowsCode -Code "PACKAGE_NATIVE_TOOLS_REQUIRED" -Action {
         & $manifestScript `
             -PackageRoot $barePackageRoot `
@@ -224,7 +224,7 @@ try {
             -BuildId ("a" * 64) `
             -Revision ("b" * 40) `
             -SourceTreeDigest ("c" * 64) `
-            -Publisher "DbBackup fixture" `
+            -Publisher "RestorePlane fixture" `
             -Channel production | Out-Null
     }
 
@@ -273,8 +273,8 @@ try {
         throw "staging did not preserve the native tool audit manifest"
     }
 
-    Write-FixtureFile -Root $packageRoot -RelativePath "dbbackup-service.exe"
-    Write-FixtureFile -Root $packageRoot -RelativePath "dbbackup.exe"
+    Write-FixtureFile -Root $packageRoot -RelativePath "restoreplane-service.exe"
+    Write-FixtureFile -Root $packageRoot -RelativePath "restoreplane.exe"
     $manifestPath = Join-Path $packageRoot "package-manifest.json"
     $manifest = (& $manifestScript `
         -PackageRoot $packageRoot `
@@ -284,7 +284,7 @@ try {
         -BuildId ("a" * 64) `
         -Revision ("b" * 40) `
         -SourceTreeDigest ("c" * 64) `
-        -Publisher "DbBackup development fixture" `
+        -Publisher "RestorePlane development fixture" `
         -Channel development `
         -AllowUnsignedDevelopmentPackage) | ConvertFrom-Json
 
@@ -337,15 +337,15 @@ try {
     }
 
     Import-Module (
-        Join-Path $repoRoot "installer\DbBackup.Install.Common.psm1"
+        Join-Path $repoRoot "installer\RestorePlane.Install.Common.psm1"
     ) -Force
-    $loaded = Read-DbBackupPackageManifest -ManifestPath $manifestPath
-    Test-DbBackupPackage `
+    $loaded = Read-RestorePlanePackageManifest -ManifestPath $manifestPath
+    Test-RestorePlanePackage `
         -PackageRoot $packageRoot `
         -Manifest $loaded `
         -ExpectedNativeToolAuditSha256 $auditHash `
         -AllowUnsignedDevelopmentPackage
-    Copy-DbBackupPackageFiles `
+    Copy-RestorePlanePackageFiles `
         -PackageRoot $packageRoot `
         -InstallRoot $installRoot `
         -Manifest $loaded
@@ -358,7 +358,7 @@ try {
     Write-FixtureFile -Root $installRoot `
         -RelativePath "tools/pg/pg17/stale-client.dll"
     Write-FixtureFile -Root $installRoot -RelativePath "rogue-helper.exe"
-    $quarantine = Move-DbBackupUnmanifestedInstallFiles `
+    $quarantine = Move-RestorePlaneUnmanifestedInstallFiles `
         -InstallRoot $installRoot `
         -DataRoot $dataRoot `
         -Manifest $loaded
@@ -372,7 +372,7 @@ try {
             ) -PathType Leaf)) {
         throw "stale native-tool/install payload was not quarantined"
     }
-    Test-DbBackupPackage `
+    Test-RestorePlanePackage `
         -PackageRoot $installRoot `
         -Manifest $loaded `
         -ExpectedNativeToolAuditSha256 $auditHash `
@@ -380,7 +380,7 @@ try {
 
     Write-FixtureFile -Root $packageRoot -RelativePath "unmanifested.bin"
     Assert-ThrowsCode -Code "PACKAGE_UNMANIFESTED_FILE" -Action {
-        Test-DbBackupPackage `
+        Test-RestorePlanePackage `
             -PackageRoot $packageRoot `
             -Manifest $loaded `
             -ExpectedNativeToolAuditSha256 $auditHash `

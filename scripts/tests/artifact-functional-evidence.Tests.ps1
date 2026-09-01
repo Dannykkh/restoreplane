@@ -88,7 +88,7 @@ if ($failures.Count -eq 0) {
         "engines"
     )
     if ($schema.title -ne
-        "DbBackup exact signed artifact functional qualification evidence" -or
+        "RestorePlane exact signed artifact functional qualification evidence" -or
         @($requiredIdentity | Where-Object { $_ -notin @($schema.required) }).Count -ne 0) {
         Add-Failure "artifact functional evidence schema identity contract drifted"
     }
@@ -100,7 +100,7 @@ if ($failures.Count -eq 0) {
 }
 
 $temporary = Join-Path ([IO.Path]::GetTempPath()) (
-    "dbbackup-artifact-functional-" + [Guid]::NewGuid().ToString("N")
+    "restoreplane-artifact-functional-" + [Guid]::NewGuid().ToString("N")
 )
 New-Item -ItemType Directory -Path $temporary -Force | Out-Null
 try {
@@ -109,7 +109,7 @@ try {
         $serviceSha256 = "2" * 64
         $cliSha256 = "3" * 64
         $artifactId = Get-TextSha256 -Value (
-            "dbbackup-exact-artifact-v1`n" +
+            "restoreplane-exact-artifact-v1`n" +
             "$manifestSha256`n$serviceSha256`n$cliSha256`n"
         )
         $engines = @("postgresql", "mysql", "mariadb") | ForEach-Object {

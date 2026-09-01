@@ -1,10 +1,15 @@
 [한국어](README.md) | **English** | [日本語](README.ja.md)
 
-# DbBackup
+# RestorePlane
+
+[![CI](https://github.com/Dannykkh/restoreplane/actions/workflows/ci.yml/badge.svg)](https://github.com/Dannykkh/restoreplane/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Dannykkh/restoreplane?include_prereleases&label=release)](https://github.com/Dannykkh/restoreplane/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2f6f68.svg)](LICENSE)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-2f6f68.svg)](#platforms)
 
 **A Rust-based desktop tool for operating backup, verification, recovery, and retention for multiple databases in one place on Windows.**
 
-DbBackup schedules logical backups for PostgreSQL, MySQL, MariaDB, and SQLite, then compresses, encrypts, signs, and stores either an entire database or an explicitly selected set of tables. It prioritizes evidence that a backup can actually be decrypted and restored over merely confirming that a backup file exists.
+RestorePlane schedules logical backups for PostgreSQL, MySQL, MariaDB, and SQLite, then compresses, encrypts, signs, and stores either an entire database or an explicitly selected set of tables. It prioritizes evidence that a backup can actually be decrypted and restored over merely confirming that a backup file exists.
 
 > **Current status: Windows release candidate (`v0.1.0-rc.1`)**
 >
@@ -14,15 +19,15 @@ DbBackup schedules logical backups for PostgreSQL, MySQL, MariaDB, and SQLite, t
 
 > These screens are rendered from deterministic Playwright demo fixtures. They demonstrate layout and interaction, not evidence of a successful service execution or backup.
 
-![DbBackup evidence-oriented Overview screen](docs/assets/readme/overview-dark.png)
+![RestorePlane evidence-oriented Overview screen](docs/assets/readme/overview-dark.png)
 
 | Selected-table Backup Scope | Durable backup progress |
 |---|---|
 | ![Explicitly selected table Scope and Database Target details](docs/assets/readme/explicit-table-scope.png) | ![Running native dump and Replica transfer state](docs/assets/readme/backup-running.png) |
 
-## Why DbBackup
+## Why RestorePlane
 
-DbBackup is not a general-purpose file backup utility. It is a control plane for operating database recoverability.
+RestorePlane is not a general-purpose file backup utility. It is a control plane for operating database recoverability.
 
 - **Exact Backup Scope** — Preserves immutable evidence of either an entire database or an explicitly selected table set.
 - **Execution engine independent of the UI** — The Windows service continues to manage schedules, the durable queue, retries, and cancellation after the Console is closed.
@@ -85,22 +90,25 @@ Requirements:
 - Docker Desktop when running live database fixtures
 
 ```powershell
+git clone https://github.com/Dannykkh/restoreplane.git
+cd restoreplane
+
 # Service and CLI
-cargo build --release --locked -p dbbackup-service -p dbbackup-cli
+cargo build --release --locked -p restoreplane-service -p restoreplane-cli
 
 # Console
 npm ci --prefix apps/console
 npm --prefix apps/console run build
 
 # Inspect available commands
-.\target\release\dbbackup.exe --help
+.\target\release\restoreplane.exe --help
 ```
 
-This build is for development and review. If a `DbBackupService` entry already exists, the CLI blocks its legacy direct-backup path to prevent concurrent execution.
+This build is for development and review. If a `RestorePlaneService` entry already exists, the CLI blocks its legacy direct-backup path to prevent concurrent execution.
 
 ## Typical workflow
 
-In an environment with an approved signed installer, use DbBackup in this order:
+In an environment with an approved signed installer, use RestorePlane in this order:
 
 1. Install the Windows service and Console.
 2. Register and probe a PostgreSQL, MySQL, MariaDB, or SQLite connection.
@@ -116,7 +124,7 @@ Backup Scope automation through the CLI requires an idempotency key. Reuse a UUI
 > `[unverified]` The example below requires an installed signed candidate and a real Database Target, so it was not executed during this README review.
 
 ```powershell
-$cli = "$env:ProgramFiles\DbBackup\dbbackup.exe"
+$cli = "$env:ProgramFiles\RestorePlane\restoreplane.exe"
 $targetId = '<database-target-uuid>'
 
 & $cli service scope discover `
@@ -128,13 +136,13 @@ $targetId = '<database-target-uuid>'
     --limit 100
 ```
 
-For the complete CLI contract, see `dbbackup.exe --help` and [`docs/plan/connected-backup-platform-v2/ipc-spec.md`](docs/plan/connected-backup-platform-v2/ipc-spec.md).
+For the complete CLI contract, see `restoreplane.exe --help` and [`docs/plan/connected-backup-platform-v2/ipc-spec.md`](docs/plan/connected-backup-platform-v2/ipc-spec.md).
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    UI["Tauri Console / CLI"] -->|"authenticated local IPC"| SVC["DbBackupService"]
+    UI["Tauri Console / CLI"] -->|"authenticated local IPC"| SVC["RestorePlaneService"]
     SVC --> SCH["Scheduler + durable queue"]
     SCH --> SRC["DB-native backup provider"]
     SRC --> PIPE["zstd + ChaCha20-Poly1305 STREAM"]
@@ -154,7 +162,7 @@ See [Program-owned backup engine](docs/plan/program-owned-backup-engine.md) for 
 
 ## Security model
 
-DbBackup does not assume that encryption alone makes a backup safe.
+RestorePlane does not assume that encryption alone makes a backup safe.
 
 - Credential protection and ransomware resilience are treated as separate concerns.
 - Each backup uses a DEK, zstd, ChaCha20-Poly1305 STREAM, and an Ed25519-signed Manifest.
@@ -221,13 +229,13 @@ Do not run `cargo test --workspace -- --ignored` indiscriminately. The ignored i
 
 | Area | Main crates or app |
 |---|---|
-| Domain and application | `dbbackup-core`, `dbbackup-domain`, `dbbackup-application` |
-| Operational Store | `dbbackup-catalog` |
-| Queue and workers | `dbbackup-runtime`, `dbbackup-service`, `dbbackup-scheduler` |
-| Backup pipeline | `dbbackup-pipeline`, `dbbackup-secrets`, `dbbackup-verify` |
-| Database providers | `dbbackup-source-pg`, `dbbackup-source-mysql`, `dbbackup-source-sqlite`, `dbbackup-source-sqlserver` |
-| Destinations | `dbbackup-dest-s3`, `dbbackup-dest-ssh` |
-| User interfaces | `dbbackup-cli`, `dbbackup-ipc-client`, `apps/console` |
+| Domain and application | `restoreplane-core`, `restoreplane-domain`, `restoreplane-application` |
+| Operational Store | `restoreplane-catalog` |
+| Queue and workers | `restoreplane-runtime`, `restoreplane-service`, `restoreplane-scheduler` |
+| Backup pipeline | `restoreplane-pipeline`, `restoreplane-secrets`, `restoreplane-verify` |
+| Database providers | `restoreplane-source-pg`, `restoreplane-source-mysql`, `restoreplane-source-sqlite`, `restoreplane-source-sqlserver` |
+| Destinations | `restoreplane-dest-s3`, `restoreplane-dest-ssh` |
+| User interfaces | `restoreplane-cli`, `restoreplane-ipc-client`, `apps/console` |
 
 </details>
 
@@ -241,7 +249,7 @@ Do not run `cargo test --workspace -- --ignored` indiscriminately. The ignored i
 | Install and update | [Install](docs/runbooks/install.md), [Update](docs/runbooks/update.md) |
 | Operational rollout | [Rollout plan](docs/rollout-plan-program-owned-backup-engine.md) |
 | Incident response | [Incident runbook](docs/runbooks/incident.md) |
-| Example configuration | [`config/dbbackup.example.toml`](config/dbbackup.example.toml) |
+| Example configuration | [`config/restoreplane.example.toml`](config/restoreplane.example.toml) |
 | Security reports | [SECURITY.md](SECURITY.md) |
 
 ## Contributing
@@ -257,7 +265,7 @@ There is no separate `CONTRIBUTING.md` or Code of Conduct yet.
 
 ## License
 
-DbBackup is distributed under the [MIT License](LICENSE). Copyright (c) 2026 dannykkh.
+RestorePlane is distributed under the [MIT License](LICENSE). Copyright (c) 2026 dannykkh.
 
 ---
 

@@ -4,28 +4,28 @@
   "commands": [
     {
       "id": "s05.signature_boundary",
-      "display": "cargo test -p dbbackup-catalog --doc CompleteRecoveryPointSpec",
+      "display": "cargo test -p restoreplane-catalog --doc CompleteRecoveryPointSpec",
       "executable": "cargo",
       "arguments": [
-        "test", "-p", "dbbackup-catalog", "--doc", "CompleteRecoveryPointSpec"
+        "test", "-p", "restoreplane-catalog", "--doc", "CompleteRecoveryPointSpec"
       ],
       "platform": "windows"
     },
     {
       "id": "s05.manifest_part_truth",
-      "display": "cargo test -p dbbackup-pipeline --test manifest_v2",
+      "display": "cargo test -p restoreplane-pipeline --test manifest_v2",
       "executable": "cargo",
       "arguments": [
-        "test", "-p", "dbbackup-pipeline", "--test", "manifest_v2"
+        "test", "-p", "restoreplane-pipeline", "--test", "manifest_v2"
       ],
       "platform": "windows"
     },
     {
       "id": "s05.occurrence_target_uniqueness",
-      "display": "cargo test -p dbbackup-scheduler --test service_wake repeated_service_wake_materializes_one_occurrence_and_one_work_per_target -- --exact",
+      "display": "cargo test -p restoreplane-scheduler --test service_wake repeated_service_wake_materializes_one_occurrence_and_one_work_per_target -- --exact",
       "executable": "cargo",
       "arguments": [
-        "test", "-p", "dbbackup-scheduler", "--test", "service_wake",
+        "test", "-p", "restoreplane-scheduler", "--test", "service_wake",
         "repeated_service_wake_materializes_one_occurrence_and_one_work_per_target",
         "--", "--exact"
       ],
@@ -33,100 +33,100 @@
     },
     {
       "id": "s05.replica_truth",
-      "display": "cargo test -p dbbackup-catalog --test replica_truth",
+      "display": "cargo test -p restoreplane-catalog --test replica_truth",
       "executable": "cargo",
       "arguments": [
-        "test", "-p", "dbbackup-catalog", "--test", "replica_truth"
+        "test", "-p", "restoreplane-catalog", "--test", "replica_truth"
       ],
       "platform": "windows"
     },
     {
       "id": "s05.credential_role_separation",
-      "display": "cargo test -p dbbackup-service --test replica_repair_resolver_windows",
+      "display": "cargo test -p restoreplane-service --test replica_repair_resolver_windows",
       "executable": "cargo",
       "arguments": [
-        "test", "-p", "dbbackup-service", "--test", "replica_repair_resolver_windows"
+        "test", "-p", "restoreplane-service", "--test", "replica_repair_resolver_windows"
       ],
       "platform": "windows"
     },
     {
       "id": "s05.checkpoint_crash_rebuild",
-      "display": "cargo test -p dbbackup-runtime --test recovery_commit_crash",
+      "display": "cargo test -p restoreplane-runtime --test recovery_commit_crash",
       "executable": "cargo",
       "arguments": [
-        "test", "-p", "dbbackup-runtime", "--test", "recovery_commit_crash"
+        "test", "-p", "restoreplane-runtime", "--test", "recovery_commit_crash"
       ],
       "platform": "windows"
     },
     {
       "id": "s05.catalog_rebuild_isolation",
-      "display": "cargo test -p dbbackup-catalog --test catalog_rebuild_v2",
+      "display": "cargo test -p restoreplane-catalog --test catalog_rebuild_v2",
       "executable": "cargo",
       "arguments": [
-        "test", "-p", "dbbackup-catalog", "--test", "catalog_rebuild_v2"
+        "test", "-p", "restoreplane-catalog", "--test", "catalog_rebuild_v2"
       ],
       "platform": "windows"
     },
     {
       "id": "s05.durable_replica_repair",
-      "display": "cargo test -p dbbackup-runtime --test replica_repair_worker",
+      "display": "cargo test -p restoreplane-runtime --test replica_repair_worker",
       "executable": "cargo",
       "arguments": [
-        "test", "-p", "dbbackup-runtime", "--test", "replica_repair_worker"
+        "test", "-p", "restoreplane-runtime", "--test", "replica_repair_worker"
       ],
       "platform": "windows"
     },
     {
       "id": "s05.retention_policy",
-      "display": "cargo test -p dbbackup-pipeline --test retention_v2",
+      "display": "cargo test -p restoreplane-pipeline --test retention_v2",
       "executable": "cargo",
       "arguments": [
-        "test", "-p", "dbbackup-pipeline", "--test", "retention_v2"
+        "test", "-p", "restoreplane-pipeline", "--test", "retention_v2"
       ],
       "platform": "windows"
     },
     {
       "id": "s05.retention_settlement",
-      "display": "cargo test -p dbbackup-catalog --test retention_delete_repository",
+      "display": "cargo test -p restoreplane-catalog --test retention_delete_repository",
       "executable": "cargo",
       "arguments": [
-        "test", "-p", "dbbackup-catalog", "--test", "retention_delete_repository"
+        "test", "-p", "restoreplane-catalog", "--test", "retention_delete_repository"
       ],
       "platform": "windows"
     },
     {
       "id": "s05.retention_worker",
-      "display": "cargo test -p dbbackup-runtime --test retention_worker",
+      "display": "cargo test -p restoreplane-runtime --test retention_worker",
       "executable": "cargo",
       "arguments": [
-        "test", "-p", "dbbackup-runtime", "--test", "retention_worker"
+        "test", "-p", "restoreplane-runtime", "--test", "retention_worker"
       ],
       "platform": "windows"
     },
     {
       "id": "s05.retention_ipc",
-      "display": "cargo test -p dbbackup-service --test retention_application",
+      "display": "cargo test -p restoreplane-service --test retention_application",
       "executable": "cargo",
       "arguments": [
-        "test", "-p", "dbbackup-service", "--test", "retention_application"
+        "test", "-p", "restoreplane-service", "--test", "retention_application"
       ],
       "platform": "windows"
     },
     {
       "id": "s05.l1_reader_roundtrip",
-      "display": "cargo test -p dbbackup-verify --test l1_reader_v2",
+      "display": "cargo test -p restoreplane-verify --test l1_reader_v2",
       "executable": "cargo",
       "arguments": [
-        "test", "-p", "dbbackup-verify", "--test", "l1_reader_v2"
+        "test", "-p", "restoreplane-verify", "--test", "l1_reader_v2"
       ],
       "platform": "windows"
     },
     {
       "id": "s05.large_stream_bounded_resources",
-      "display": "cargo test -p dbbackup-pipeline --test pipeline_e2e streamed_256_mib_payload_does_not_require_a_payload_sized_input_buffer -- --exact --nocapture --test-threads=1",
+      "display": "cargo test -p restoreplane-pipeline --test pipeline_e2e streamed_256_mib_payload_does_not_require_a_payload_sized_input_buffer -- --exact --nocapture --test-threads=1",
       "executable": "cargo",
       "arguments": [
-        "test", "-p", "dbbackup-pipeline", "--test", "pipeline_e2e",
+        "test", "-p", "restoreplane-pipeline", "--test", "pipeline_e2e",
         "streamed_256_mib_payload_does_not_require_a_payload_sized_input_buffer",
         "--", "--exact", "--nocapture", "--test-threads=1"
       ],

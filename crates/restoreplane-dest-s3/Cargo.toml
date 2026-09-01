@@ -1,0 +1,46 @@
+[package]
+name = "restoreplane-dest-s3"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# S06 — S3Dest(opendal 0.58, Object Lock) + 매 run 자가테스트(H1/H2 랜섬웨어 방어).
+#
+# 이원화 결정(S06 §Background): opendal은 객체 데이터 경로(멀티파트 쓰기 + 복구 읽기)에만 쓴다. opendal 0.58은
+# 관리 API(GetBucketVersioning/GetObjectLockConfiguration/PutObjectRetention/PutLifecycle)를 노출하지
+# 않으므로, 자가테스트는 동일 writer 자격증명으로 서명한 경량 SigV4 관리 클라이언트(reqwest, rustls)로
+# 수행한다. opendal도 reqwest도 rustls를 강제해 openssl 유입을 원천 차단한다(H6).
+
+[dependencies]
+restoreplane-pipeline = { path = "../restoreplane-pipeline" }
+restoreplane-core = { path = "../restoreplane-core" }
+restoreplane-catalog = { path = "../restoreplane-catalog" }
+
+# crates.io의 0.58.0은 yanked되어 같은 공식 릴리스 태그 커밋을 직접 고정한다.
+# deny.toml은 Apache OpenDAL 저장소만 허용하고, rustls로 openssl 유입을 차단한다(H6).
+opendal = { git = "https://github.com/apache/opendal.git", rev = "13fb8bea0e29ad024540b35d4c834530b89976a1", package = "opendal", default-features = false, features = ["services-s3", "reqwest-rustls-tls"] }
+
+# 자가테스트용 SigV4 관리 클라이언트(reqwest + 수동 SigV4). openssl 배제 위해 rustls-tls 강제.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+time = { version = "0.3", features = ["std", "parsing"] }
+
+uuid = { version = "=1.11.0", features = ["v4"] }
+bytes = "1"
+blake3 = "=1.5.5"
+async-trait = "0.1"
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde_json = "1"
+tokio = { version = "=1.52.3", features = ["rt-multi-thread", "macros"] }
+zeroize = "=1.9.0"
+
+[dev-dependencies]
+tokio = { version = "=1.52.3", features = ["rt-multi-thread", "macros"] }
+tempfile = "=3.14.0"
+opendal = { git = "https://github.com/apache/opendal.git", rev = "13fb8bea0e29ad024540b35d4c834530b89976a1", package = "opendal", default-features = false, features = ["services-memory"] }

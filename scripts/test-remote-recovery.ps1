@@ -12,9 +12,9 @@ $MinioClientImage = "minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607
 $SftpImage = "atmoz/sftp@sha256:a6cb3eb29202ca7f57e73bb7e527286e66e0e822fff65609207c7e0ef2d135a3"
 
 $RunId = "{0}-{1}" -f $PID, [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-$MinioContainer = "dbbackup-minio-drill-$RunId"
-$SftpContainer = "dbbackup-sftp-drill-$RunId"
-$SftpVolume = "dbbackup-sftp-drill-$RunId"
+$MinioContainer = "restoreplane-minio-drill-$RunId"
+$SftpContainer = "restoreplane-sftp-drill-$RunId"
+$SftpVolume = "restoreplane-sftp-drill-$RunId"
 $StartedContainers = [System.Collections.Generic.List[string]]::new()
 $CreatedVolumes = [System.Collections.Generic.List[string]]::new()
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -113,7 +113,7 @@ function Get-SshHostFingerprint {
 function Invoke-CargoDrill {
     param([string]$TestName)
 
-    & cargo test -p dbbackup-cli --test remote_recovery_live $TestName -- --ignored --exact --nocapture
+    & cargo test -p restoreplane-cli --test remote_recovery_live $TestName -- --ignored --exact --nocapture
     if ($LASTEXITCODE -ne 0) {
         throw "remote recovery test failed: $TestName"
     }
@@ -146,10 +146,10 @@ function Test-S3Recovery {
     Invoke-Docker run --rm --network "container:$MinioContainer" `
         --env "MC_HOST_local=$mcHost" `
         --mount "type=bind,source=$MinioReaderPolicy,target=/reader-policy.json,readonly" `
-        $MinioClientImage admin policy create local dbbackup-reader /reader-policy.json
+        $MinioClientImage admin policy create local restoreplane-reader /reader-policy.json
     Invoke-Docker run --rm --network "container:$MinioContainer" `
         --env "MC_HOST_local=$mcHost" `
-        $MinioClientImage admin policy attach local dbbackup-reader --user $readerId
+        $MinioClientImage admin policy attach local restoreplane-reader --user $readerId
 
     $env:S3_ENDPOINT = "http://127.0.0.1:$port"
     $env:S3_REGION = "us-east-1"

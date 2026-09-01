@@ -8,11 +8,11 @@
 //! 즉 여기서 기록한 EncField를 백업 실행이 아직 복호화해 쓰지는 않는다(run 측 unwrap 배선은 별도
 //! 백엔드 작업). 이 커맨드는 "config를 올바르게(암호화된 시크릿 포함) 기록"하는 계층까지 책임진다.
 
-use dbbackup_config::schema::{
+use restoreplane_config::schema::{
     Config, Database, Destination, Job, ObjectLockConfig, ReaderIdentity, Retention, VerifyPolicy,
 };
-use dbbackup_core::{DestKind, Engine, ImmutabilityCapability, ObjectLockMode, SecretEncryptor};
-use dbbackup_secrets::{Credential, DekEncryptor, Keystore};
+use restoreplane_core::{DestKind, Engine, ImmutabilityCapability, ObjectLockMode, SecretEncryptor};
+use restoreplane_secrets::{Credential, DekEncryptor, Keystore};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
@@ -361,7 +361,7 @@ pub fn add_destination(master_password: String, dest: NewDestination) -> Result<
     let object_lock = parse_object_lock(dest.object_lock_mode.as_deref(), dest.retention_days)?;
     let checksum_algo = object_lock
         .as_ref()
-        .map(|_| dbbackup_core::ChecksumAlgo::Sha256);
+        .map(|_| restoreplane_core::ChecksumAlgo::Sha256);
 
     config.destinations.push(Destination {
         name: dest.name,
@@ -383,7 +383,7 @@ pub fn add_destination(master_password: String, dest: NewDestination) -> Result<
         path: dest.path.map(Into::into),
         reader,
     });
-    if let Err(errors) = dbbackup_config::validate(&config) {
+    if let Err(errors) = restoreplane_config::validate(&config) {
         let details = errors
             .iter()
             .map(ToString::to_string)
@@ -581,11 +581,11 @@ pub fn list_jobs() -> Result<Vec<JobSummary>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dbbackup_secrets::Keystore;
+    use restoreplane_secrets::Keystore;
 
     fn init_ks(dir: &std::path::Path) -> String {
-        let cfg = dir.join("dbbackup.toml");
-        std::env::set_var("DBBACKUP_CONFIG", &cfg);
+        let cfg = dir.join("restoreplane.toml");
+        std::env::set_var("RESTOREPLANE_CONFIG", &cfg);
         let pw = "correct horse battery".to_string();
         let (ks, _rec) =
             Keystore::init(&Zeroizing::new(pw.clone()), dir.join("dpapi.keyfile")).unwrap();
@@ -665,7 +665,7 @@ mod tests {
         )
         .is_err());
 
-        std::env::remove_var("DBBACKUP_CONFIG");
+        std::env::remove_var("RESTOREPLANE_CONFIG");
     }
 
     #[test]
@@ -749,10 +749,10 @@ mod tests {
             .unwrap();
         assert_eq!(
             s3d.checksum_algo,
-            Some(dbbackup_core::ChecksumAlgo::Sha256),
+            Some(restoreplane_core::ChecksumAlgo::Sha256),
             "Object Lock 등록은 S3 checksum을 함께 고정해야 함"
         );
-        dbbackup_config::validate(&config).expect("GUI가 저장한 config는 즉시 유효해야 함");
+        restoreplane_config::validate(&config).expect("GUI가 저장한 config는 즉시 유효해야 함");
         let ks = Keystore::load(&keystore_path(&cfg_path)).unwrap();
         let kek = ks
             .unlock_kek(&Credential::Password(Zeroizing::new(pw)))
@@ -788,7 +788,7 @@ mod tests {
         )
         .is_err());
 
-        std::env::remove_var("DBBACKUP_CONFIG");
+        std::env::remove_var("RESTOREPLANE_CONFIG");
     }
 
     #[test]
@@ -852,7 +852,7 @@ mod tests {
             "reader-secret"
         );
 
-        std::env::remove_var("DBBACKUP_CONFIG");
+        std::env::remove_var("RESTOREPLANE_CONFIG");
     }
 
     #[test]
@@ -888,7 +888,7 @@ mod tests {
 
         assert!(error.contains("reader"), "{error}");
 
-        std::env::remove_var("DBBACKUP_CONFIG");
+        std::env::remove_var("RESTOREPLANE_CONFIG");
     }
 
     #[test]
@@ -935,7 +935,7 @@ mod tests {
             "유효하지 않은 config는 저장하지 않음"
         );
 
-        std::env::remove_var("DBBACKUP_CONFIG");
+        std::env::remove_var("RESTOREPLANE_CONFIG");
     }
 
     #[test]
@@ -1000,7 +1000,7 @@ mod tests {
             "reader-key-passphrase"
         );
 
-        std::env::remove_var("DBBACKUP_CONFIG");
+        std::env::remove_var("RESTOREPLANE_CONFIG");
     }
 
     #[test]
@@ -1054,7 +1054,7 @@ mod tests {
             "reader-password"
         );
 
-        std::env::remove_var("DBBACKUP_CONFIG");
+        std::env::remove_var("RESTOREPLANE_CONFIG");
     }
 
     #[test]
@@ -1087,7 +1087,7 @@ mod tests {
 
         assert!(error.contains("reader"), "{error}");
 
-        std::env::remove_var("DBBACKUP_CONFIG");
+        std::env::remove_var("RESTOREPLANE_CONFIG");
     }
 
     #[test]
@@ -1150,7 +1150,7 @@ mod tests {
         assert_eq!(jobs[0].destinations, vec!["nas".to_string()]);
         assert!(jobs[0].enabled);
 
-        std::env::remove_var("DBBACKUP_CONFIG");
+        std::env::remove_var("RESTOREPLANE_CONFIG");
     }
 
     fn mk_job(name: &str, source: &str, dests: &[&str]) -> Result<(), String> {

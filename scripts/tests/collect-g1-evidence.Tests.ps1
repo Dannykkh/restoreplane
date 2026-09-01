@@ -11,7 +11,7 @@ $requirements =
         -Encoding UTF8 |
     ConvertFrom-Json
 $fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) (
-    "dbbackup-g1-collector-tests-" + [Guid]::NewGuid().ToString("N")
+    "restoreplane-g1-collector-tests-" + [Guid]::NewGuid().ToString("N")
 )
 
 function Write-Matrix {

@@ -6,16 +6,16 @@ support bundle은 durable `support_bundle.create` Operation Run으로 생성한�
 ## 생성
 
 ```powershell
-$cli = "$env:ProgramFiles\DbBackup\dbbackup.exe"
+$cli = "$env:ProgramFiles\RestorePlane\restoreplane.exe"
 & $cli service diagnostics
 & $cli service support-bundle
 ```
 
 명령 성공은 작업 접수를 뜻한다. service worker가 완료하면 기본 경로
-`%ProgramData%\DbBackup\support-bundles\support-bundle-<time>-<id>.tar.zst`에 생성된다.
+`%ProgramData%\RestorePlane\support-bundles\support-bundle-<time>-<id>.tar.zst`에 생성된다.
 
 장기 운영 telemetry는 support bundle과 별도로
-`%ProgramData%\DbBackup\telemetry-archives`에 보관된다. 서비스는 30일보다 오래된
+`%ProgramData%\RestorePlane\telemetry-archives`에 보관된다. 서비스는 30일보다 오래된
 Activity와 terminal notification outbox를 시간당 최대 10개, batch당 5,000행으로
 처리한다. archive에는 message, attributes, payload 원문 대신 BLAKE3 hash만 들어가며
 open/acknowledged Attention과 Attention ledger는 삭제하지 않는다.

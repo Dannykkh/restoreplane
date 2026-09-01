@@ -27,7 +27,7 @@ decrypt-only 복원, SQLite catalog와 Task Scheduler 등록 경로가 존재한
   validation을 구분하지 않는다.
 - `#[ignore]`인 live L2/L3/S3/SSH/engine 테스트는 기본 `cargo test --workspace` 성공에
   포함되지 않지만, README의 “구현 완료” 문구는 그 차이를 충분히 드러내지 않는다.
-- Tauri, CLI와 job별 Task Scheduler가 직접 `dbbackup.exe`와 native dump process를 시작한다.
+- Tauri, CLI와 job별 Task Scheduler가 직접 `restoreplane.exe`와 native dump process를 시작한다.
   `max_parallel_dumps`는 설정에서 `PipelineCfg`로 복사될 뿐 실제 dispatcher permit이 아니다.
 
 따라서 구현 시작 판정은 `CONDITIONAL GO`다. 이 섹션의 목적은 기능을 많이 추가하는 것이
@@ -129,11 +129,11 @@ stub이나 feature flag를 만들지 않는다.
 
   | 시작 주체 | 코드 위치 | 현재 동작 | G1 이후 목표 |
   |---|---|---|---|
-  | Tauri | `apps/console/src-tauri/src/run.rs::spawn_stream` | `dbbackup.exe` sidecar 직접 실행 | authenticated local IPC client |
-  | CLI manual | `crates/dbbackup-cli/src/commands/run.rs::run` | 같은 process에서 job 순차 실행 | service queue enqueue |
-  | CLI worker | `crates/dbbackup-cli/src/commands/run.rs::execute_job` | native dump와 fan-out 실행 | service-owned Process Supervisor |
-  | Task Scheduler | `crates/dbbackup-cli/src/commands/schedule.rs` | job마다 task 등록 | service start/wake |
-  | Task XML | `crates/dbbackup-scheduler/src/xml.rs::render_task_xml` | `dbbackup run --job ... --scheduled` | service wake command |
+  | Tauri | `apps/console/src-tauri/src/run.rs::spawn_stream` | `restoreplane.exe` sidecar 직접 실행 | authenticated local IPC client |
+  | CLI manual | `crates/restoreplane-cli/src/commands/run.rs::run` | 같은 process에서 job 순차 실행 | service queue enqueue |
+  | CLI worker | `crates/restoreplane-cli/src/commands/run.rs::execute_job` | native dump와 fan-out 실행 | service-owned Process Supervisor |
+  | Task Scheduler | `crates/restoreplane-cli/src/commands/schedule.rs` | job마다 task 등록 | service start/wake |
+  | Task XML | `crates/restoreplane-scheduler/src/xml.rs::render_task_xml` | `restoreplane run --job ... --scheduled` | service wake command |
   | Verify/restore | `apps/console/src-tauri/src/run.rs`, CLI command 모듈 | sidecar와 외부 tool 직접 실행 | service Work Item |
 
 - 각 행은 process owner, singleton 범위, overlap 범위, cancellation 범위, secret 전달 방식,
@@ -350,16 +350,16 @@ PowerShell 기본 기능으로 단언한다.
 
 ### Step 3. CLI와 catalog를 truthful하게 변경
 
-1. `crates/dbbackup-cli/src/commands/verify.rs`에 요청 level을 검증하는 작은 pure function을
+1. `crates/restoreplane-cli/src/commands/verify.rs`에 요청 level을 검증하는 작은 pure function을
    추가한다. level 2/3이면 config, keystore, Manifest 또는 artifact를 읽기 전에
    `VERIFY_LEVEL_NOT_EXECUTED`로 실패한다.
 2. L2/L3 library 코드는 삭제하지 않는다. section-06이 managed fixture와 실제 command 배선을
    완성할 때 같은 guard와 claims를 함께 승격한다.
-3. `crates/dbbackup-catalog/src/query.rs`에 `LatestRunRecord`와
+3. `crates/restoreplane-catalog/src/query.rs`에 `LatestRunRecord`와
    `latest_run_per_job`을 추가한다. 정렬은 `started_at DESC, rowid DESC`로 결정적이어야 한다.
 4. 같은 파일에 `ArtifactRecord`와 `artifacts_for_backup`을 추가하고 `artifacts`의 실제 row만
    반환한다.
-5. `crates/dbbackup-catalog/src/lib.rs`에서 두 query와 record type을 export한다.
+5. `crates/restoreplane-catalog/src/lib.rs`에서 두 query와 record type을 export한다.
 6. schema migration은 이 섹션에서 만들지 않는다. 기존 `runs`와 `artifacts` 컬럼만 읽는다.
 
 ### Step 4. Tauri projection과 copy 수정
@@ -552,7 +552,7 @@ docs/release/g0-cutover-recovery-matrix.md
 scripts/check-g0-truth.ps1
 scripts/collect-g0-evidence.ps1
 scripts/tests/check-g0-truth.Tests.ps1
-crates/dbbackup-catalog/tests/truth_projection.rs
+crates/restoreplane-catalog/tests/truth_projection.rs
 ```
 
 ## Files to Modify
@@ -562,9 +562,9 @@ crates/dbbackup-catalog/tests/truth_projection.rs
 .gitignore
 README.md
 SECURITY.md
-crates/dbbackup-cli/src/commands/verify.rs
-crates/dbbackup-catalog/src/query.rs
-crates/dbbackup-catalog/src/lib.rs
+crates/restoreplane-cli/src/commands/verify.rs
+crates/restoreplane-catalog/src/query.rs
+crates/restoreplane-catalog/src/lib.rs
 apps/console/src-tauri/src/commands.rs
 apps/console/src/types.ts
 apps/console/src/lib/api.ts

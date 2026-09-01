@@ -147,7 +147,7 @@ jobs:
 
   managed-evidence:
     name: G0-G4 same-source managed restore evidence
-    runs-on: [self-hosted, windows, x64, dbbackup-managed]
+    runs-on: [self-hosted, windows, x64, restoreplane-managed]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
@@ -194,7 +194,7 @@ jobs:
 
   native_tool_bundle:
     name: Validate pre-audited native database tools
-    runs-on: [self-hosted, windows, x64, dbbackup-managed]
+    runs-on: [self-hosted, windows, x64, restoreplane-managed]
     environment: production-signing
     outputs:
       audit_sha256: ${{ steps.stage.outputs.audit_sha256 }}
@@ -292,9 +292,9 @@ jobs:
           }
           "version=$version" >> $env:GITHUB_OUTPUT
       - name: Build service and CLI
-        run: cargo build --release --locked -p dbbackup-service -p dbbackup-cli
+        run: cargo build --release --locked -p restoreplane-service -p restoreplane-cli
       - name: Build provider evidence digest helper
-        run: cargo build --release --locked -p dbbackup-pipeline --bin dbbackup-blake3
+        run: cargo build --release --locked -p restoreplane-pipeline --bin restoreplane-blake3
       - name: Import production certificate
         id: certificate
         shell: powershell
@@ -306,7 +306,7 @@ jobs:
               [string]::IsNullOrWhiteSpace($env:WINDOWS_PFX_PASSWORD)) {
             throw "RELEASE_SIGNING_CREDENTIALS_MISSING"
           }
-          $pfxPath = Join-Path $env:RUNNER_TEMP "dbbackup-release.pfx"
+          $pfxPath = Join-Path $env:RUNNER_TEMP "restoreplane-release.pfx"
           [IO.File]::WriteAllBytes(
             $pfxPath,
             [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64)
@@ -341,8 +341,8 @@ jobs:
           SIGNER_THUMBPRINT: ${{ steps.certificate.outputs.thumbprint }}
         run: |
           $files = @(
-            "target\release\dbbackup-service.exe",
-            "target\release\dbbackup.exe"
+            "target\release\restoreplane-service.exe",
+            "target\release\restoreplane.exe"
           )
           foreach ($file in $files) {
             & $env:SIGNTOOL_PATH sign /sha1 $env:SIGNER_THUMBPRINT `
@@ -438,8 +438,8 @@ jobs:
           $releaseRoot = [IO.Path]::GetFullPath("dist\release")
           $packageRoot = Join-Path $releaseRoot "package"
           New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
-          Copy-Item target\release\dbbackup-service.exe $packageRoot
-          Copy-Item target\release\dbbackup.exe $packageRoot
+          Copy-Item target\release\restoreplane-service.exe $packageRoot
+          Copy-Item target\release\restoreplane.exe $packageRoot
           $nativeInputRoot = [IO.Path]::GetFullPath(
             "dist\native-tool-input\tools"
           )
@@ -455,14 +455,14 @@ jobs:
               artifacts\g2\selective-scopes.json `
             -OutputPath (Join-Path $packageRoot "provider-certifications.json") `
             -Blake3ExecutablePath `
-              target\release\dbbackup-blake3.exe | Out-Null
+              target\release\restoreplane-blake3.exe | Out-Null
           foreach ($directory in @("scripts", "installer", "config", "metadata", "console")) {
             New-Item -ItemType Directory `
               -Path (Join-Path $releaseRoot $directory) -Force | Out-Null
           }
           Copy-Item scripts\install.ps1,scripts\repair.ps1,scripts\update.ps1,`
             scripts\uninstall.ps1 -Destination (Join-Path $releaseRoot "scripts")
-          Copy-Item installer\DbBackup.Install.Common.psm1 `
+          Copy-Item installer\RestorePlane.Install.Common.psm1 `
             -Destination (Join-Path $releaseRoot "installer")
           $certificate = Get-Item `
             -LiteralPath "Cert:\CurrentUser\My\$env:SIGNER_THUMBPRINT"
@@ -471,7 +471,7 @@ jobs:
               -Filter *.ps1 -File
           ) + @(
             Get-Item -LiteralPath (
-              Join-Path $releaseRoot "installer\DbBackup.Install.Common.psm1"
+              Join-Path $releaseRoot "installer\RestorePlane.Install.Common.psm1"
             )
           )
           foreach ($deploymentFile in $deploymentFiles) {
@@ -486,7 +486,7 @@ jobs:
               throw "DEPLOYMENT_SCRIPT_SIGNATURE_INVALID"
             }
           }
-          Copy-Item config\dbbackup.example.toml `
+          Copy-Item config\restoreplane.example.toml `
             -Destination (Join-Path $releaseRoot "config")
           Copy-Item release\*.json -Destination (Join-Path $releaseRoot "metadata")
           Copy-Item target\release\bundle\* `
@@ -504,10 +504,10 @@ jobs:
           $packageManifest = Get-Content -LiteralPath $packageManifestPath `
             -Raw -Encoding UTF8 | ConvertFrom-Json
           $serviceEntries = @($packageManifest.files | Where-Object {
-              $_.path -eq "dbbackup-service.exe"
+              $_.path -eq "restoreplane-service.exe"
             })
           $cliEntries = @($packageManifest.files | Where-Object {
-              $_.path -eq "dbbackup.exe"
+              $_.path -eq "restoreplane.exe"
             })
           if ($serviceEntries.Count -ne 1 -or $cliEntries.Count -ne 1) {
             throw "RELEASE_PACKAGE_REQUIRED_BINARY_MISSING"
@@ -518,7 +518,7 @@ jobs:
           $serviceBinarySha256 = [string] $serviceEntries[0].sha256
           $cliBinarySha256 = [string] $cliEntries[0].sha256
           $artifactIdentityText = (
-            "dbbackup-exact-artifact-v1`n" +
+            "restoreplane-exact-artifact-v1`n" +
             "$packageManifestSha256`n" +
             "$serviceBinarySha256`n" +
             "$cliBinarySha256`n"
@@ -574,7 +574,7 @@ jobs:
       - name: Upload signed release
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: dbbackup-signed-candidate-${{ github.run_id }}
+          name: restoreplane-signed-candidate-${{ github.run_id }}
           path: dist/release
           if-no-files-found: error
           retention-days: 1
@@ -582,7 +582,7 @@ jobs:
   artifact-functional-qualification:
     name: Qualify exact installed signed artifact through service IPC
     needs: signed-package
-    runs-on: [self-hosted, windows, x64, dbbackup-managed-artifact, ephemeral]
+    runs-on: [self-hosted, windows, x64, restoreplane-managed-artifact, ephemeral]
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -614,18 +614,18 @@ jobs:
           $staging.Create($acl)
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: dbbackup-signed-candidate-${{ github.run_id }}
+          name: restoreplane-signed-candidate-${{ github.run_id }}
           path: artifact-candidate
       - name: Seal downloaded artifact staging
         shell: powershell
         run: |
           $owner = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-          Import-Module .\installer\DbBackup.Install.Common.psm1 -Force
-          Set-DbBackupProtectedAcl `
+          Import-Module .\installer\RestorePlane.Install.Common.psm1 -Force
+          Set-RestorePlaneProtectedAcl `
             -Path ([IO.Path]::GetFullPath("artifact-candidate")) `
             -OwnerSid $owner `
             -Recurse
-          Assert-DbBackupProtectedAcl `
+          Assert-RestorePlaneProtectedAcl `
             -Path ([IO.Path]::GetFullPath("artifact-candidate")) `
             -OwnerSid $owner `
             -Recurse
@@ -655,28 +655,28 @@ jobs:
           $ErrorActionPreference = "Stop"
           $token = $env:QUALIFICATION_RUN_TOKEN
           if ($env:RUNNER_ENVIRONMENT -ne "self-hosted" -or
-              $env:DBBACKUP_ARTIFACT_RUNNER_EPHEMERAL -ne "1" -or
+              $env:RESTOREPLANE_ARTIFACT_RUNNER_EPHEMERAL -ne "1" -or
               $token -notmatch "^[0-9]+-[0-9]+$") {
             throw "ARTIFACT_FUNCTIONAL_EPHEMERAL_RUNNER_REQUIRED"
           }
           $short = $token.Replace("-", "")
           foreach ($container in @(
-              "dbbackup-artifact-pg-$short",
-              "dbbackup-artifact-mysql-$short",
-              "dbbackup-artifact-maria-$short"
+              "restoreplane-artifact-pg-$short",
+              "restoreplane-artifact-mysql-$short",
+              "restoreplane-artifact-maria-$short"
             )) {
             & docker inspect $container 2>$null | Out-Null
             if ($LASTEXITCODE -eq 0) {
               throw "ARTIFACT_FUNCTIONAL_CONTAINER_CLEANUP_INCOMPLETE"
             }
           }
-          if ($null -ne (Get-Service -Name "DbBackupService" `
+          if ($null -ne (Get-Service -Name "RestorePlaneService" `
                 -ErrorAction SilentlyContinue)) {
             throw "ARTIFACT_FUNCTIONAL_SERVICE_CLEANUP_INCOMPLETE"
           }
           $fixtureRoot = [IO.Path]::GetFullPath((Join-Path (
               Join-Path ([IO.Path]::GetFullPath($env:RUNNER_TEMP)) `
-                "DbBackupArtifactQualification"
+                "RestorePlaneArtifactQualification"
             ) $token))
           if (Test-Path -LiteralPath $fixtureRoot) {
             throw "ARTIFACT_FUNCTIONAL_FILE_CLEANUP_INCOMPLETE"
@@ -724,18 +724,18 @@ jobs:
           $staging.Create($acl)
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: dbbackup-signed-candidate-${{ github.run_id }}
+          name: restoreplane-signed-candidate-${{ github.run_id }}
           path: release-fixture
       - name: Seal downloaded release staging
         shell: powershell
         run: |
           $owner = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-          Import-Module .\installer\DbBackup.Install.Common.psm1 -Force
-          Set-DbBackupProtectedAcl `
+          Import-Module .\installer\RestorePlane.Install.Common.psm1 -Force
+          Set-RestorePlaneProtectedAcl `
             -Path ([IO.Path]::GetFullPath("release-fixture")) `
             -OwnerSid $owner `
             -Recurse
-          Assert-DbBackupProtectedAcl `
+          Assert-RestorePlaneProtectedAcl `
             -Path ([IO.Path]::GetFullPath("release-fixture")) `
             -OwnerSid $owner `
             -Recurse
@@ -756,7 +756,7 @@ jobs:
               -Filter *.ps1 -File
           ) + @(
             Get-Item -LiteralPath (
-              Join-Path $root "installer\DbBackup.Install.Common.psm1"
+              Join-Path $root "installer\RestorePlane.Install.Common.psm1"
             )
           )
           foreach ($deploymentFile in $deploymentFiles) {
@@ -780,10 +780,10 @@ jobs:
           $manifestDocument = Get-Content -LiteralPath $manifest `
             -Raw -Encoding UTF8 | ConvertFrom-Json
           $serviceEntries = @($manifestDocument.files | Where-Object {
-              $_.path -eq "dbbackup-service.exe"
+              $_.path -eq "restoreplane-service.exe"
             })
           $cliEntries = @($manifestDocument.files | Where-Object {
-              $_.path -eq "dbbackup.exe"
+              $_.path -eq "restoreplane.exe"
             })
           if ($serviceEntries.Count -ne 1 -or $cliEntries.Count -ne 1) {
             throw "RELEASE_FIXTURE_REQUIRED_BINARY_MISSING"
@@ -792,14 +792,14 @@ jobs:
             Get-FileHash $manifest -Algorithm SHA256
           ).Hash.ToLowerInvariant()
           $serviceSha256 = (
-            Get-FileHash (Join-Path $package "dbbackup-service.exe") `
+            Get-FileHash (Join-Path $package "restoreplane-service.exe") `
               -Algorithm SHA256
           ).Hash.ToLowerInvariant()
           $cliSha256 = (
-            Get-FileHash (Join-Path $package "dbbackup.exe") -Algorithm SHA256
+            Get-FileHash (Join-Path $package "restoreplane.exe") -Algorithm SHA256
           ).Hash.ToLowerInvariant()
           $artifactIdentityText = (
-            "dbbackup-exact-artifact-v1`n" +
+            "restoreplane-exact-artifact-v1`n" +
             "$manifestSha256`n" +
             "$serviceSha256`n" +
             "$cliSha256`n"
@@ -828,8 +828,8 @@ jobs:
               $cliEntries[0].sha256 -ne $cliSha256) {
             throw "RELEASE_FIXTURE_BUILD_IDENTITY_MISMATCH"
           }
-          $install = Join-Path $env:ProgramFiles "DbBackup"
-          $data = Join-Path $env:ProgramData "DbBackup"
+          $install = Join-Path $env:ProgramFiles "RestorePlane"
+          $data = Join-Path $env:ProgramData "RestorePlane"
           & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy AllSigned `
             -File (Join-Path $root "scripts\install.ps1") `
             -PackageRoot $package `
@@ -840,7 +840,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "RELEASE_FIXTURE_INSTALL_FAILED"
           }
-          $cli = Join-Path $install "dbbackup.exe"
+          $cli = Join-Path $install "restoreplane.exe"
           $health = & $cli service status | ConvertFrom-Json
           if ($health.success -ne $true -or
               $health.result.phase -ne "production_ready" -or
@@ -899,7 +899,7 @@ jobs:
           ).Count
           & (Join-Path $root "scripts\uninstall.ps1") `
             -ExpectedSignerThumbprint $expectedSigner
-          & sc.exe query DbBackupService 2>$null | Out-Null
+          & sc.exe query RestorePlaneService 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
             throw "RELEASE_FIXTURE_UNINSTALL_SERVICE_REMAINS"
           }
@@ -956,7 +956,7 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: dbbackup-signed-candidate-${{ github.run_id }}
+          name: restoreplane-signed-candidate-${{ github.run_id }}
           path: artifacts/signed-release
       - name: Download pristine lifecycle fixture evidence
         continue-on-error: true
@@ -998,12 +998,12 @@ jobs:
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: dbbackup-signed-candidate-${{ github.run_id }}
+          name: restoreplane-signed-candidate-${{ github.run_id }}
           path: dist/release
       - name: Upload evaluated signed release
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: dbbackup-signed-windows-${{ needs.signed-package.outputs.version }}
+          name: restoreplane-signed-windows-${{ needs.signed-package.outputs.version }}
           path: dist/release
           if-no-files-found: error
           retention-days: 90

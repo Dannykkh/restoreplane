@@ -1,10 +1,10 @@
-//! 초기 설정(init) 커맨드 — 인프로세스로 dbbackup-secrets를 직접 호출한다.
+//! 초기 설정(init) 커맨드 — 인프로세스로 restoreplane-secrets를 직접 호출한다.
 //!
 //! CLI `init`과 동일한 결과(키스토어 3경로 wrap + 서명 키페어 + 복구코드 1회)를 만들되,
 //! 대화형 프롬프트 대신 GUI가 넘긴 마스터 비밀번호를 쓴다. 사이드카가 아닌 인프로세스인 이유:
 //! Keystore::init은 순수 라이브러리 호출이라 타입 안전하고 검증이 쉽다(액션 파이프라인만 사이드카).
 
-use dbbackup_secrets::Keystore;
+use restoreplane_secrets::Keystore;
 use serde::Serialize;
 use zeroize::Zeroizing;
 
@@ -76,9 +76,9 @@ mod tests {
         let _env = crate::paths::env_guard();
         let temp_dir = tempfile::tempdir().unwrap();
         let dir = temp_dir.path();
-        let cfg = dir.join("dbbackup.toml");
+        let cfg = dir.join("restoreplane.toml");
         // config_path()가 이 경로를 쓰도록 env 지정(인프로세스 커맨드 경로 검증).
-        std::env::set_var("DBBACKUP_CONFIG", &cfg);
+        std::env::set_var("RESTOREPLANE_CONFIG", &cfg);
 
         // 미설정 상태.
         assert!(!keystore_status().keystore_present);
@@ -100,9 +100,9 @@ mod tests {
         // 짧은 비번 거부(별도 임시 경로).
         let dir2 = dir.join("short");
         std::fs::create_dir_all(&dir2).unwrap();
-        std::env::set_var("DBBACKUP_CONFIG", dir2.join("dbbackup.toml"));
+        std::env::set_var("RESTOREPLANE_CONFIG", dir2.join("restoreplane.toml"));
         assert!(init_keystore("short".to_string()).is_err(), "8자 미만 거부");
 
-        std::env::remove_var("DBBACKUP_CONFIG");
+        std::env::remove_var("RESTOREPLANE_CONFIG");
     }
 }

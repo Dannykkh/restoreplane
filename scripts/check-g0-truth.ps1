@@ -332,12 +332,12 @@ function Test-RepositoryGuards {
         $inventory = Get-Content -LiteralPath $inventoryPath -Raw -Encoding UTF8
         $requiredPaths = @(
             "apps/console/src-tauri/src/run.rs::spawn_stream",
-            "crates/dbbackup-cli/src/commands/run.rs::run",
-            "crates/dbbackup-cli/src/commands/run.rs::execute_job",
-            "crates/dbbackup-cli/src/commands/schedule.rs",
-            "crates/dbbackup-scheduler/src/xml.rs::render_task_xml",
-            "crates/dbbackup-cli/src/commands/verify.rs",
-            "crates/dbbackup-cli/src/commands/restore.rs"
+            "crates/restoreplane-cli/src/commands/run.rs::run",
+            "crates/restoreplane-cli/src/commands/run.rs::execute_job",
+            "crates/restoreplane-cli/src/commands/schedule.rs",
+            "crates/restoreplane-scheduler/src/xml.rs::render_task_xml",
+            "crates/restoreplane-cli/src/commands/verify.rs",
+            "crates/restoreplane-cli/src/commands/restore.rs"
         )
         foreach ($requiredPath in $requiredPaths) {
             if (-not $inventory.Contains($requiredPath)) {
@@ -455,7 +455,7 @@ function Test-RepositoryGuards {
 
     if ($null -ne $currentClaims) {
         foreach ($engine in @("sqlserver", "sqlite")) {
-            $relative = "crates\dbbackup-source-$engine"
+            $relative = "crates\restoreplane-source-$engine"
             $claim = @(
                 $currentClaims.capabilities |
                     Where-Object { $_.id -eq "engine.$engine" }

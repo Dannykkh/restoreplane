@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dbbackupsystem.local/schemas/package-manifest-v1.json",
-  "title": "DbBackup signed package manifest",
+  "$id": "https://restoreplane.local/schemas/package-manifest-v1.json",
+  "title": "RestorePlane signed package manifest",
   "type": "object",
   "additionalProperties": false,
   "required": [

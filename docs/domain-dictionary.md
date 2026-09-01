@@ -1,4 +1,4 @@
-# Domain Dictionary — Connected DB Backup System (v4, 확정)
+# Domain Dictionary — Connected RestorePlane (v4, 확정)
 
 > 코드(변수/함수/타입), config 키, CLI 명령, UI, 문서는 이 규범 용어를 따른다.
 > v1~v3의 보안·아티팩트 용어는 보존하고 Connected Backup Platform v2의 운영 용어를

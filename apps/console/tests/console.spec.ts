@@ -46,7 +46,7 @@ test("fleet dashboard filters, creates and opens an operational scope on desktop
   await expect(page).toHaveURL(/#\/overview$/);
   await expect(selector).toHaveValue(/^[0-9a-f-]{36}$/);
   await expect(selector.getByRole("option", { name: "Treasury DR" })).toBeAttached();
-  expect(await page.evaluate(() => localStorage.getItem("dbbackup.workspaceId"))).toBe(
+  expect(await page.evaluate(() => localStorage.getItem("restoreplane.workspaceId"))).toBe(
     await selector.inputValue(),
   );
   await expect(page.locator(".topbar-context .eyebrow")).toHaveText(
@@ -300,7 +300,7 @@ test("local Destination onboarding records writer reader and delete evidence", a
   await expect(dialog).toBeVisible();
 
   await typeWithKeyboard(page, "Destination 이름", "Keyboard Local Vault");
-  await typeWithKeyboard(page, "절대 경로", "D:\\DbBackup\\keyboard-vault");
+  await typeWithKeyboard(page, "절대 경로", "D:\\RestorePlane\\keyboard-vault");
   await pressButton(page, "역할 자격 증명");
   await expect(
     page.getByRole("heading", {

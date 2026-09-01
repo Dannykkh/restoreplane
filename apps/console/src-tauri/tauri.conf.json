@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "dbbackup 콘솔",
-  "version": "0.1.0",
-  "identifier": "com.dbbackupsystem.console",
+  "productName": "RestorePlane Console",
+  "version": "0.1.0-rc.1",
+  "identifier": "com.dannykkh.restoreplane",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://127.0.0.1:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "dbbackup 콘솔",
+        "title": "RestorePlane Console",
         "width": 1240,
         "height": 840,
         "minWidth": 980,

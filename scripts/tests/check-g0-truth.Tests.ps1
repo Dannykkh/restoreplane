@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $checker = Join-Path $repoRoot "scripts\check-g0-truth.ps1"
 $fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) (
-    "dbbackup-g0-truth-tests-" + [Guid]::NewGuid().ToString("N")
+    "restoreplane-g0-truth-tests-" + [Guid]::NewGuid().ToString("N")
 )
 $failures = New-Object System.Collections.Generic.List[string]
 

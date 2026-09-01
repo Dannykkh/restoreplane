@@ -1,4 +1,4 @@
-# DB Backup System — 개발 계획서
+# RestorePlane — 개발 계획서
 
 > [!IMPORTANT]
 > 이 파일은 초기 v1 설계 이력을 포함한다. 실행 권한, 스케줄, Operational Store, Backup Scope,

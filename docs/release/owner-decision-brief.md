@@ -22,7 +22,7 @@ support bundle, 14단계 update, control-backup rehearsal, uninstall-preservatio
 |---|---|---|---|
 | D1 | production Authenticode 인증서와 custody owner | production release 중단 | 제한된 `production-signing` environment에서 PFX/HSM signing, 예상 subject/thumbprint, SignTool 및 Windows trust 검증 |
 | D2 | RFC 3161 timestamp provider와 장애 정책 | timestamp 실패 시 release 실패 | signed binary마다 유효 timestamp와 `signtool verify /pa /all /v` 통과 |
-| D3 | managed Windows release runner 승인 | tag release는 self-hosted `dbbackup-managed` runner에서 대기 | Docker, Chromium, 충분한 디스크를 갖춘 clean runner에서 `-RunManaged -RequireUpstreamEvidence` 통과 |
+| D3 | managed Windows release runner 승인 | tag release는 self-hosted `restoreplane-managed` runner에서 대기 | Docker, Chromium, 충분한 디스크를 갖춘 clean runner에서 `-RunManaged -RequireUpstreamEvidence` 통과 |
 | D4 | clean signed install/update fixture 승인 | `windows.install_update`와 Tauri bundle은 experimental 유지 | 별도 Windows VM에서 install, repair, update, support bundle, uninstall-preservation evidence pass |
 | D5 | controlled beta/GA stop metric 수치 | `pending_owner_approval`, beta 진입 중단 | queue freshness, restore drill pass rate, RPO detect time, repair backlog, notification delivery, support bundle failure rate의 승인값 |
 | D6 | SQL Server/SqlPackage 관리형 fixture | SQL Server는 experimental/candidate, Plan 게시 차단 | 승인된 SQL Server와 Microsoft SqlPackage identity/hash/signature로 BACPAC export/import 및 content oracle pass |

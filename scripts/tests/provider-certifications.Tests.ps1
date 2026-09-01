@@ -7,7 +7,7 @@ $generator = Join-Path $repoRoot "scripts\new-provider-certifications.ps1"
 $manifestGenerator = Join-Path $repoRoot "scripts\new-package-manifest.ps1"
 $schemaPath = Join-Path $repoRoot "release\provider-certifications.schema.json"
 $fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) (
-    "dbbackup-provider-cert-tests-" + [Guid]::NewGuid().ToString("N")
+    "restoreplane-provider-cert-tests-" + [Guid]::NewGuid().ToString("N")
 )
 
 function Write-Json {
@@ -247,7 +247,7 @@ try {
     $packageRoot = Join-Path $fixtureRoot "package"
     New-Item -ItemType Directory -Path (Join-Path $packageRoot "tools") -Force |
         Out-Null
-    foreach ($file in @("dbbackup-service.exe", "dbbackup.exe")) {
+    foreach ($file in @("restoreplane-service.exe", "restoreplane.exe")) {
         [IO.File]::WriteAllText(
             (Join-Path $packageRoot $file),
             "$file fixture",
@@ -268,7 +268,7 @@ try {
                     sha256 = $vendorSha
                     authenticodeRequired = $false
                     signerThumbprint = ""
-                    publisher = "DbBackup fixture"
+                    publisher = "RestorePlane fixture"
                 })
         }
     )
@@ -281,7 +281,7 @@ try {
         -BuildId $build `
         -Revision $revision `
         -SourceTreeDigest $tree `
-        -Publisher "DbBackup fixture" `
+        -Publisher "RestorePlane fixture" `
         -Channel production) | ConvertFrom-Json
     $providerEntry = @($manifest.files | Where-Object {
             $_.path -eq "provider-certifications.json"

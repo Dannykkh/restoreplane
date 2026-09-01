@@ -2,7 +2,7 @@
 
 ## Ownership boundary
 
-DbBackup registers one `DbBackupService` process so backups continue after the Console window is
+RestorePlane registers one `RestorePlaneService` process so backups continue after the Console window is
 closed and after Windows restarts. The Windows Service Control Manager owns only that process
 lifecycle. It does not own a task per Plan and it does not contain Plan configuration.
 
@@ -12,18 +12,18 @@ Recovery Points, and retention evidence. The Console changes those records throu
 local IPC. Closing the Console therefore does not stop scheduled work.
 
 Legacy `schtasks` and direct CLI execution remain migration compatibility surfaces only while no
-`DbBackupService` entry exists. If the service entry is installed, legacy `run` and `schedule`
+`RestorePlaneService` entry exists. If the service entry is installed, legacy `run` and `schedule`
 execution is blocked regardless of whether the service is running or stopped. The program-owned
 production path never creates a Task Scheduler entry per Plan and never lets the UI execute a dump
 directly.
 
 ## Runtime root boundary
 
-`InstallRoot` is the directory that contains `dbbackup-service.exe`, `dbbackup.exe`, and bundled
+`InstallRoot` is the directory that contains `restoreplane-service.exe`, `restoreplane.exe`, and bundled
 native tools. `DataRoot` contains the Operational Store, service identity and secrets, spool,
 control backups, update journals, support bundles, and telemetry archives. The service derives
 `InstallRoot` from its own executable and receives one absolute `DataRoot` through
-`--data-root <path>`. A no-argument fallback to `%ProgramData%\DbBackup` remains for legacy service
+`--data-root <path>`. A no-argument fallback to `%ProgramData%\RestorePlane` remains for legacy service
 definitions; signed install, repair, and update always persist the explicit argument.
 
 The two roots must be distinct and neither may contain the other. This keeps binary replacement or

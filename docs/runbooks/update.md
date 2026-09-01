@@ -1,6 +1,6 @@
 # Signed service update runbook
 
-DbBackup update는 실행 중 binary를 바로 덮어쓰지 않는다. claim을 닫고 drain한 뒤
+RestorePlane update는 실행 중 binary를 바로 덮어쓰지 않는다. claim을 닫고 drain한 뒤
 Operational Store online backup을 rehearsal하고, 새 package를 두 번 검증한 후 교체한다.
 minimum reader commit과 최종 restart가 끝나기 전에는 새 claim을 열지 않는다.
 
@@ -10,7 +10,7 @@ minimum reader commit과 최종 restart가 끝나기 전에는 새 claim을 열�
 - 유효한 production package와 out-of-band signer thumbprint가 있다.
 - out-of-band로 확인한 package manifest SHA-256이 있다.
 - out-of-band로 확인한 native tool audit SHA-256이 있다.
-- `%ProgramData%\DbBackup\updates`와 control backup volume에 여유 공간이 있다.
+- `%ProgramData%\RestorePlane\updates`와 control backup volume에 여유 공간이 있다.
 - 동일 release revision/tree에 연결된 G0~G5 evidence를 확인했다.
 - safety invariant가 0이 아니면 update보다 incident 대응을 먼저 한다.
 
@@ -18,7 +18,7 @@ minimum reader commit과 최종 restart가 끝나기 전에는 새 claim을 열�
 서명된 release announcement 또는 owner-approved deployment configuration에서 가져온다.
 
 ```powershell
-$cli = "$env:ProgramFiles\DbBackup\dbbackup.exe"
+$cli = "$env:ProgramFiles\RestorePlane\restoreplane.exe"
 & $cli service status
 & $cli service diagnostics
 ```
@@ -43,7 +43,7 @@ including rollback and forward-fix recovery, rechecks provenance together with
 the exact package and ACL gate.
 
 ```powershell
-$releaseRoot = 'C:\staging\DbBackup-release'
+$releaseRoot = 'C:\staging\RestorePlane-release'
 $packageRoot = Join-Path $releaseRoot 'package'
 $manifestPath = Join-Path $packageRoot 'package-manifest.json'
 $expectedSigner = '<out-of-band signer thumbprint>'
@@ -54,7 +54,7 @@ $expectedNativeToolAudit = '<out-of-band native tool audit SHA-256>'
 $deploymentFiles = @(
     Get-ChildItem (Join-Path $releaseRoot 'scripts') -Filter *.ps1 -File
 ) + @(
-    Get-Item (Join-Path $releaseRoot 'installer\DbBackup.Install.Common.psm1')
+    Get-Item (Join-Path $releaseRoot 'installer\RestorePlane.Install.Common.psm1')
 )
 foreach ($deploymentFile in $deploymentFiles) {
     $signature = Get-AuthenticodeSignature -LiteralPath $deploymentFile.FullName
@@ -92,7 +92,7 @@ foreach ($deploymentFile in $deploymentFiles) {
 13. `commit_minimum_reader`
 14. `resume_claims`
 
-journal은 `%ProgramData%\DbBackup\updates\update-<id>.json`에 있고, rollback binary는 같은
+journal은 `%ProgramData%\RestorePlane\updates\update-<id>.json`에 있고, rollback binary는 같은
 디렉터리의 `rollback-<id>` 아래에 이전 `package-manifest.json`과 함께 보존된다.
 rollback package는 이전 manifest의 exact file set/hash/signature로 검증된 뒤에만 사용한다.
 target과 rollback manifest는 각각 최초 검증 시 고정한 SHA-256과 설치 직전·시작 직전 다시
@@ -144,7 +144,7 @@ minimum-reader row, cutover marker를 수동 편집하거나 삭제하지 않는
 ## Fault rehearsal
 
 비운영 fixture에서만 `-InjectFailure <stage>`를 사용한다. 각 stage와 recovery disposition은
-`crates/dbbackup-service/tests/update_lifecycle.rs`와
+`crates/restoreplane-service/tests/update_lifecycle.rs`와
 `scripts/tests/install-lifecycle.Tests.ps1`의 전체 행렬로 검증한다. 운영 서버에서 fault
 injection을 사용하지 않는다.
 

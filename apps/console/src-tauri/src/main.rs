@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    dbbackup_console_lib::run()
+    restoreplane_console_lib::run()
 }

@@ -207,7 +207,7 @@ function Open-SqlConnection {
     $builder["Encrypt"] = $true
     $builder["TrustServerCertificate"] = $false
     $builder["Connect Timeout"] = 30
-    $builder["Application Name"] = "DbBackup G4 certification"
+    $builder["Application Name"] = "RestorePlane G4 certification"
     $connection = [System.Data.SqlClient.SqlConnection]::new($builder.ConnectionString)
     $connection.Open()
     return $connection
@@ -245,7 +245,7 @@ function Get-SqlFixtureOracle {
         $command.CommandText = @"
 SELECT fixture_id, fixture_key, CONVERT(varchar(max), payload, 2),
        COALESCE(note, N'<NULL>')
-FROM dbo.dbbackup_wave1_fixture
+FROM dbo.restoreplane_wave1_fixture
 ORDER BY fixture_id;
 "@
         $reader = $command.ExecuteReader()
@@ -305,8 +305,8 @@ function Test-LiveSqlServerRoundTrip {
     }
 
     $suffix = "{0:x}-{1:x}" -f $PID, [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-    $sourceDatabase = "dbbackup_g4_source_$suffix"
-    $restoreDatabase = "dbbackup_g4_restore_$suffix"
+    $sourceDatabase = "restoreplane_g4_source_$suffix"
+    $restoreDatabase = "restoreplane_g4_restore_$suffix"
     $bacpacPath = Join-Path $resolvedOutput "$sourceDatabase.bacpac"
     if (Test-Path -LiteralPath $bacpacPath) {
         throw "G4 BACPAC output already exists"
@@ -319,13 +319,13 @@ function Test-LiveSqlServerRoundTrip {
         )
         $sourceCreated = $true
         Invoke-SqlNonQuery -Server $Server -Database $sourceDatabase -Sql @"
-CREATE TABLE dbo.dbbackup_wave1_fixture (
+CREATE TABLE dbo.restoreplane_wave1_fixture (
     fixture_id int NOT NULL PRIMARY KEY,
     fixture_key nvarchar(128) NOT NULL,
     payload varbinary(max) NOT NULL,
     note nvarchar(400) NULL
 );
-INSERT dbo.dbbackup_wave1_fixture(fixture_id, fixture_key, payload, note)
+INSERT dbo.restoreplane_wave1_fixture(fixture_id, fixture_key, payload, note)
 VALUES
     (1, N'한글-quote-''-line', 0x000102FEFF, N'BACPAC roundtrip'),
     (2, N'empty-note', 0x, N''),
@@ -460,13 +460,13 @@ try {
         (Invoke-EvidenceCommand `
             -Id "sqlite-provider-conformance" `
             -Executable "cargo" `
-            -Arguments @("test", "-p", "dbbackup-source-sqlite", "--test", "conformance"))
+            -Arguments @("test", "-p", "restoreplane-source-sqlite", "--test", "conformance"))
     )
     $checkRows.Add(
         (Invoke-EvidenceCommand `
             -Id "sqlserver-candidate-contract" `
             -Executable "cargo" `
-            -Arguments @("test", "-p", "dbbackup-source-sqlserver", "--test", "candidate_contract"))
+            -Arguments @("test", "-p", "restoreplane-source-sqlserver", "--test", "candidate_contract"))
     )
     $checkRows.Add(
         (Invoke-EvidenceCommand `
@@ -475,7 +475,7 @@ try {
             -Arguments @(
                 "test",
                 "-p",
-                "dbbackup-service",
+                "restoreplane-service",
                 "--test",
                 "connection_operation_worker",
                 "native_sqlite"
@@ -488,7 +488,7 @@ try {
             -Arguments @(
                 "test",
                 "-p",
-                "dbbackup-catalog",
+                "restoreplane-catalog",
                 "--test",
                 "certification_repository",
                 "engine_matrix"

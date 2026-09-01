@@ -1,4 +1,4 @@
-//! dbbackup 콘솔 — Tauri v2 백엔드 엔트리.
+//! restoreplane 콘솔 — Tauri v2 백엔드 엔트리.
 mod ipc_client;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

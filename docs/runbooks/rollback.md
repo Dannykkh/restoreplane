@@ -8,7 +8,7 @@ service build로 forward-fix한다.
 
 - elevated PowerShell을 설치 owner 계정으로 실행한다.
 - recovery bundle, freeze receipt, G1 evidence가 protected
-  `%ProgramData%\DbBackup\<cutoverVerifier.evidenceDirectory>` 안에 보존되어 있다.
+  `%ProgramData%\RestorePlane\<cutoverVerifier.evidenceDirectory>` 안에 보존되어 있다.
 - `cutoverMarker`, `rollbackId`, `rolledBackAtMs`를 작업 기록에 저장한다. 재시도 때 새 값을 만들지
   않는다.
 
@@ -17,7 +17,7 @@ service build로 forward-fix한다.
 1. 현재 marker와 recovery disposition을 보존한다.
 
    ```powershell
-   $status = dbbackup service status | ConvertFrom-Json
+   $status = restoreplane service status | ConvertFrom-Json
    $cutoverMarker = $status.result.cutoverMarker
    if ($status.result.recoveryDisposition -ne 'rollback_eligible') {
        throw "Clean rollback is not permitted; use forward-fix."
@@ -27,15 +27,15 @@ service build로 forward-fix한다.
 2. 서비스를 정지하고 실제 `Stopped` 상태를 확인한다.
 
    ```powershell
-   Stop-Service -Name DbBackupService
-   (Get-Service -Name DbBackupService).Status
+   Stop-Service -Name RestorePlaneService
+   (Get-Service -Name RestorePlaneService).Status
    ```
 
 3. 설치된 service account SID를 확인한다. LocalSystem이면 `S-1-5-18`이다. 다른 계정이면 SCM의
    `StartName`을 SID로 변환한다.
 
    ```powershell
-   $startName = (Get-CimInstance Win32_Service -Filter "Name='DbBackupService'").StartName
+   $startName = (Get-CimInstance Win32_Service -Filter "Name='RestorePlaneService'").StartName
    $serviceSid = if ($startName -eq 'LocalSystem') {
        'S-1-5-18'
    } else {
@@ -55,7 +55,7 @@ service build로 forward-fix한다.
 5. marker를 동일하게 두 번 제공해 offline recovery를 실행한다.
 
    ```powershell
-   dbbackup service recover-cutover `
+   restoreplane service recover-cutover `
        --service-sid $serviceSid `
        --cutover-marker $cutoverMarker `
        --confirm-cutover-marker $cutoverMarker `
@@ -94,7 +94,7 @@ service claims는 비활성이다. 수동 SQL 변경이나 별도 `schtasks /ENA
 | stop service, staged verify, replace | previous signed binary 복구 | schema migration 전 |
 | migrate schema, start, reconcile, minimum-reader commit, resume | claims를 닫고 forward-fix | 구 reader가 새 schema/write를 해석하지 못할 수 있음 |
 
-`%ProgramData%\DbBackup\updates\update-pending.json`이 남아 있으면 service는
+`%ProgramData%\RestorePlane\updates\update-pending.json`이 남아 있으면 service는
 diagnostics/draining 상태로 시작해야 한다. marker를 수동 삭제해 claims를 여는 대신 update
 journal과 control backup을 보존하고 compatible build를 사용한다.
 

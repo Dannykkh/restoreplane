@@ -90,7 +90,7 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
-    window.localStorage.setItem("dbbackup.theme", theme);
+    window.localStorage.setItem("restoreplane.theme", theme);
   }, [theme]);
 
   return (
@@ -104,7 +104,7 @@ export function App() {
             DB
           </span>
           <div>
-            <strong>DB Backup</strong>
+            <strong>RestorePlane</strong>
             <span>CONTROL PLANE</span>
           </div>
         </a>
@@ -365,7 +365,7 @@ function RuntimeBanner({
 }
 
 function initialTheme(): Theme {
-  const saved = window.localStorage.getItem("dbbackup.theme");
+  const saved = window.localStorage.getItem("restoreplane.theme");
   if (saved === "light" || saved === "dark") return saved;
   return window.matchMedia?.("(prefers-color-scheme: light)").matches
     ? "light"

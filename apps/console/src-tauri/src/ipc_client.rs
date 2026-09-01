@@ -1,5 +1,5 @@
-use dbbackup_application::ApplicationCommand;
-use dbbackup_ipc_client::{CommandOutcome, IpcClient};
+use restoreplane_application::ApplicationCommand;
+use restoreplane_ipc_client::{CommandOutcome, IpcClient};
 use serde_json::Value;
 
 #[tauri::command]

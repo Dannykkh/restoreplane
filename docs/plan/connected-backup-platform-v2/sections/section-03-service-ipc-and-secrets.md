@@ -3,7 +3,7 @@
 ## Background
 
 현재 Tauri와 CLI는 configuration library를 직접 호출하고 backup/verify/restore에서는
-`dbbackup.exe` sidecar나 native tool을 시작한다. 앱 종료, 복수 GUI, Task Scheduler overlap,
+`restoreplane.exe` sidecar나 native tool을 시작한다. 앱 종료, 복수 GUI, Task Scheduler overlap,
 service upgrade 상황에서 execution authority가 분산된다.
 
 이 섹션은 Windows service singleton과 application boundary를 만들지만 production 작업을
@@ -14,7 +14,7 @@ service upgrade 상황에서 execution authority가 분산된다.
 
 ### Service boundary
 
-- `SVC-01` SCM이 관리하는 `dbbackup-service` instance 하나만 singleton lock을 소유한다.
+- `SVC-01` SCM이 관리하는 `restoreplane-service` instance 하나만 singleton lock을 소유한다.
 - `SVC-02` service shell은 start/stop/preshutdown, health, schema/cutover 상태, IPC를 제공한다.
 - `SVC-03` G1 전 execute capability는 `rehearsal_only`; backup/restore claim과 native process
   시작을 거부한다.
@@ -119,13 +119,13 @@ rollback 또는 forward-fix 중 하나만 선택한다.
 
 ### 1. Application crate
 
-`dbbackup-application`에 command/result DTO와 use case trait를 둔다. Connection, Destination,
+`restoreplane-application`에 command/result DTO와 use case trait를 둔다. Connection, Destination,
 Plan, Snapshot, Work Item, Restore, Settings 명령은 domain/repository를 호출한다. Tauri DTO,
 rusqlite row, native process type을 공개 계약으로 내보내지 않는다.
 
 ### 2. Service host
 
-`dbbackup-service`는 SCM entry, singleton authority lock, structured shutdown token, writer actor,
+`restoreplane-service`는 SCM entry, singleton authority lock, structured shutdown token, writer actor,
 IPC server를 조립한다. start 시 schema checksum/cutover/minimum reader를 먼저 검사하고 mismatch면
 read-only diagnostics만 노출한다. stop은 accept 중단→새 claim 중단→client drain→writer
 checkpoint 순서다. G1 전 runtime executor는 feature flag가 아니라 gate result로 명시적 거부한다.
@@ -244,14 +244,14 @@ Win32 handle RAII, codec/application/auth 분리, common Tauri/CLI client, redac
 ## Files to Create/Modify
 
 ```text
-crates/dbbackup-application/src/{lib,commands,results,use_cases}.rs
-crates/dbbackup-service/src/{main,scm,host,shutdown}.rs
-crates/dbbackup-service/src/ipc/{codec,server,auth,confirmation}.rs
-crates/dbbackup-service/src/secrets/{mod,dpapi,acl}.rs
-crates/dbbackup-service/tests/{ipc_security,service_singleton,secret_canary,cutover}.rs
-crates/dbbackup-cli/src/client.rs
+crates/restoreplane-application/src/{lib,commands,results,use_cases}.rs
+crates/restoreplane-service/src/{main,scm,host,shutdown}.rs
+crates/restoreplane-service/src/ipc/{codec,server,auth,confirmation}.rs
+crates/restoreplane-service/src/secrets/{mod,dpapi,acl}.rs
+crates/restoreplane-service/tests/{ipc_security,service_singleton,secret_canary,cutover}.rs
+crates/restoreplane-cli/src/client.rs
 apps/console/src-tauri/src/{client,commands}.rs
-crates/dbbackup-scheduler/src/xml.rs
+crates/restoreplane-scheduler/src/xml.rs
 installer/service scripts
 Cargo.toml
 Cargo.lock

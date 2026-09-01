@@ -55,14 +55,14 @@ notification, migration, control/support 작업은 `OperationRun -> WorkItem`으
 - `DOM-07` Attempt는 at-least-once이고 claim마다 증가하는 Fencing Token을 가진다.
 - `DOM-08` Snapshot은 complete Recovery Point의 UI/search projection이다. Recovery Point
   completeness, Replica durability, Protection Compliance, restore eligibility는 독립 축이다.
-- `DOM-09` 허용 상태 전이는 `dbbackup-domain`의 pure transition table에서 정의하고 DB
+- `DOM-09` 허용 상태 전이는 `restoreplane-domain`의 pure transition table에서 정의하고 DB
   repository도 같은 전이를 검사한다.
 
 ### SQLite Operational Store
 
 - `STORE-01` 정본 DDL은 `docs/plan/connected-backup-platform-v2/schema-v2.sql`의 53개
   `STRICT` table과 trigger/index다. 구현 migration은 그 의미를 축소하지 않는다.
-- `STORE-02` `dbbackup-service`의 Transaction Owner만 read-write connection 하나를 가진다.
+- `STORE-02` `restoreplane-service`의 Transaction Owner만 read-write connection 하나를 가진다.
   UI/CLI는 SQL에 접근하지 않고 service IPC를 사용한다.
 - `STORE-03` 모든 connection은 `foreign_keys=ON`, `busy_timeout=5000`; writer는 WAL과
   `synchronous=FULL`을 사용한다.
@@ -165,7 +165,7 @@ notification, migration, control/support 작업은 `OperationRun -> WorkItem`으
 
 ## Implementation Details
 
-### 1. `dbbackup-domain`
+### 1. `restoreplane-domain`
 
 1. 새 crate에 ID newtype, enum, entity, immutable execution spec을 만든다.
 2. `PlanRevision` publish validation과 occurrence identity builder를 pure function으로 만든다.
@@ -175,7 +175,7 @@ notification, migration, control/support 작업은 `OperationRun -> WorkItem`으
 
 ### 2. Migration runner
 
-1. `dbbackup-catalog`에 embedded numbered migration과 checksum journal을 추가한다.
+1. `restoreplane-catalog`에 embedded numbered migration과 checksum journal을 추가한다.
 2. 이미 적용된 version의 checksum이 다르면 write mode 시작을 거부한다.
 3. `PRAGMA user_version`은 빠른 guard이고 `schema_migrations`가 상세 권위 journal이다.
 4. destructive migration은 new table→copy→row/FK 검증→rename→old archive 순서다.
@@ -339,15 +339,15 @@ row mapping, transaction helper, error translation, ID generation, import normal
 ## Files to Create/Modify
 
 ```text
-crates/dbbackup-domain/Cargo.toml
-crates/dbbackup-domain/src/{lib,ids,entities,state,errors}.rs
-crates/dbbackup-catalog/src/{lib,connection,writer}.rs
-crates/dbbackup-catalog/src/migrations/{mod,v2}.rs
-crates/dbbackup-catalog/src/repositories/{configuration,runtime,activity,certification,notification,catalog,migration}.rs
-crates/dbbackup-catalog/tests/{schema_v2,domain_invariants,repository_cas,catalog_rebuild,online_backup}.rs
-crates/dbbackup-config/src/{migrate,schema}.rs
-crates/dbbackup-config/tests/v1_to_v2_golden.rs
-crates/dbbackup-cli/src/commands/{config_migrate,control_store}.rs
+crates/restoreplane-domain/Cargo.toml
+crates/restoreplane-domain/src/{lib,ids,entities,state,errors}.rs
+crates/restoreplane-catalog/src/{lib,connection,writer}.rs
+crates/restoreplane-catalog/src/migrations/{mod,v2}.rs
+crates/restoreplane-catalog/src/repositories/{configuration,runtime,activity,certification,notification,catalog,migration}.rs
+crates/restoreplane-catalog/tests/{schema_v2,domain_invariants,repository_cas,catalog_rebuild,online_backup}.rs
+crates/restoreplane-config/src/{migrate,schema}.rs
+crates/restoreplane-config/tests/v1_to_v2_golden.rs
+crates/restoreplane-cli/src/commands/{config_migrate,control_store}.rs
 Cargo.toml
 Cargo.lock
 ```

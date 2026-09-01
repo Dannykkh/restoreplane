@@ -120,7 +120,7 @@ type MutationCommand =
 export type ServiceCommand = ReadCommand | MutationCommand;
 
 export const DEFAULT_WORKSPACE_ID = "00000000-0000-4000-8000-000000000001";
-const WORKSPACE_STORAGE_KEY = "dbbackup.workspaceId";
+const WORKSPACE_STORAGE_KEY = "restoreplane.workspaceId";
 const WORKSPACE_SCOPED_COMMANDS = new Set<ServiceCommand>([
   "connection.list",
   "target.list",

@@ -34,7 +34,7 @@ New-Item -ItemType Directory -Path $resolvedOutput -Force | Out-Null
 $mutexCreated = $false
 $g2Mutex = [Threading.Mutex]::new(
     $false,
-    "Local\dbbackup-g2-existing-engine-gate",
+    "Local\restoreplane-g2-existing-engine-gate",
     [ref] $mutexCreated
 )
 try {
@@ -242,7 +242,7 @@ function Wait-MySqlFamily {
     for ($attempt = 1; $attempt -le 120; $attempt++) {
         if (Test-DockerCommand -Arguments @(
                 "exec", $Container, $Client,
-                "--defaults-extra-file=/tmp/dbbackup-client.cnf",
+                "--defaults-extra-file=/tmp/restoreplane-client.cnf",
                 "--batch", "--skip-column-names",
                 $Database, "--execute", "SELECT 1"
             )) {
@@ -266,10 +266,10 @@ function Initialize-MySqlClientConfig {
     )
 
     $shellCommand = (
-        "umask 077; echo [client] > /tmp/dbbackup-client.cnf; " +
-        "echo user=root >> /tmp/dbbackup-client.cnf; " +
-        "printf password= >> /tmp/dbbackup-client.cnf; printenv $PasswordEnvironment " +
-        ">> /tmp/dbbackup-client.cnf"
+        "umask 077; echo [client] > /tmp/restoreplane-client.cnf; " +
+        "echo user=root >> /tmp/restoreplane-client.cnf; " +
+        "printf password= >> /tmp/restoreplane-client.cnf; printenv $PasswordEnvironment " +
+        ">> /tmp/restoreplane-client.cnf"
     )
     Invoke-DockerQuiet -Arguments @(
         "exec", $Container, "sh", "-c", $shellCommand
@@ -580,7 +580,7 @@ function Assert-EngineEvidence {
         throw "$($Contract.engine) backup evidence is empty"
     }
     $serialized = $Evidence | ConvertTo-Json -Depth 32
-    if ($serialized.Contains("dbbackup_g2_ephemeral")) {
+    if ($serialized.Contains("restoreplane_g2_ephemeral")) {
         throw "$($Contract.engine) evidence contains fixture credentials"
     }
 }
@@ -601,8 +601,8 @@ function Invoke-PostgresqlRoundTrip {
     )
 
     $containers = [System.Collections.Generic.List[string]]::new()
-    $sourceContainer = "dbbackup-g2-pg-source-$RunId"
-    $targetContainer = "dbbackup-g2-pg-target-$RunId"
+    $sourceContainer = "restoreplane-g2-pg-source-$RunId"
+    $targetContainer = "restoreplane-g2-pg-target-$RunId"
     $engineOutput = Join-Path $resolvedOutput "postgresql"
     New-Item -ItemType Directory -Path $engineOutput -Force | Out-Null
     try {
@@ -611,7 +611,7 @@ function Invoke-PostgresqlRoundTrip {
         Invoke-DockerQuiet -Arguments @(
             "run", "--detach", "--rm", "--name", $sourceContainer,
             "--env", "POSTGRES_USER=source_admin",
-            "--env", "POSTGRES_PASSWORD=dbbackup_g2_ephemeral",
+            "--env", "POSTGRES_PASSWORD=restoreplane_g2_ephemeral",
             "--env", "POSTGRES_DB=source_db",
             $Contract.image
         )
@@ -708,7 +708,7 @@ SELECT 'extension=' || count(*) FROM pg_extension WHERE extname = 'pgcrypto';
         Invoke-DockerQuiet -Arguments @(
             "run", "--detach", "--rm", "--name", $targetContainer,
             "--env", "POSTGRES_USER=target_admin",
-            "--env", "POSTGRES_PASSWORD=dbbackup_g2_ephemeral",
+            "--env", "POSTGRES_PASSWORD=restoreplane_g2_ephemeral",
             "--env", "POSTGRES_DB=target_admin",
             $Contract.image
         )
@@ -795,7 +795,7 @@ function Invoke-MySqlQuery {
 
     $arguments = @(
         "exec", $Container, $Client,
-        "--defaults-extra-file=/tmp/dbbackup-client.cnf",
+        "--defaults-extra-file=/tmp/restoreplane-client.cnf",
         "--batch", "--skip-column-names"
     )
     if (-not [string]::IsNullOrWhiteSpace($Database)) {
@@ -846,9 +846,9 @@ function Invoke-MySqlFamilyRoundTrip {
     $isMaria = $engineName -eq "mariadb"
     $client = if ($isMaria) { "mariadb" } else { "mysql" }
     $dumpTool = if ($isMaria) { "mariadb-dump" } else { "mysqldump" }
-    $fixturePassword = "dbbackup_g2_ephemeral"
-    $sourceContainer = "dbbackup-g2-$engineName-source-$RunId"
-    $targetContainer = "dbbackup-g2-$engineName-target-$RunId"
+    $fixturePassword = "restoreplane_g2_ephemeral"
+    $sourceContainer = "restoreplane-g2-$engineName-source-$RunId"
+    $targetContainer = "restoreplane-g2-$engineName-target-$RunId"
     $containers = [System.Collections.Generic.List[string]]::new()
     $engineOutput = Join-Path $resolvedOutput $engineName
     New-Item -ItemType Directory -Path $engineOutput -Force | Out-Null
@@ -944,7 +944,7 @@ WHERE TABLE_SCHEMA = 'non_tx_probe' AND TABLE_NAME = 'legacy_rows';
         Write-Host "G2 ${engineName}: backup and native restore parser"
         $dumpArguments = @(
             "exec", $sourceContainer, $dumpTool,
-            "--defaults-extra-file=/tmp/dbbackup-client.cnf",
+            "--defaults-extra-file=/tmp/restoreplane-client.cnf",
             "--single-transaction", "--routines", "--triggers", "--events",
             "--default-character-set=utf8mb4",
             "--result-file=/tmp/database.sql",
@@ -1087,13 +1087,13 @@ $contractChecks = @(
     [PSCustomObject] @{
         id = "provider-contract"
         arguments = @(
-            "test", "-p", "dbbackup-core", "--test", "provider_certification"
+            "test", "-p", "restoreplane-core", "--test", "provider_certification"
         )
     },
     [PSCustomObject] @{
         id = "catalog-certification-safety"
         arguments = @(
-            "test", "-p", "dbbackup-catalog",
+            "test", "-p", "restoreplane-catalog",
             "--test", "certification_repository",
             "--test", "verification_repository",
             "--test", "ipc_confirmation_repository"
@@ -1102,7 +1102,7 @@ $contractChecks = @(
     [PSCustomObject] @{
         id = "restore-verification-safety"
         arguments = @(
-            "test", "-p", "dbbackup-verify",
+            "test", "-p", "restoreplane-verify",
             "--test", "restore_signature_gate",
             "--test", "verify_levels_gated"
         )
@@ -1110,7 +1110,7 @@ $contractChecks = @(
     [PSCustomObject] @{
         id = "durable-verification-notification"
         arguments = @(
-            "test", "-p", "dbbackup-runtime",
+            "test", "-p", "restoreplane-runtime",
             "--test", "verification_worker",
             "--test", "notification_worker"
         )
@@ -1149,7 +1149,7 @@ foreach ($contract in $selectedContracts) {
     }
     catch {
         $failureCount++
-        $message = $_.Exception.Message.Replace("dbbackup_g2_ephemeral", "<redacted>")
+        $message = $_.Exception.Message.Replace("restoreplane_g2_ephemeral", "<redacted>")
         [Console]::Error.WriteLine("G2 $($contract.engine) failed: $message")
         $failure = [PSCustomObject] @{
             schemaVersion = 1

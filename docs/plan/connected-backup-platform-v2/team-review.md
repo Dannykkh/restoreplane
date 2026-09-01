@@ -20,7 +20,7 @@ Wave 0에서 실행 권한, 상태 진실, 중복 방지, 프로세스 수명주
 ## Critical Findings
 
 1. **단일 execution authority**
-   - [Architecture/Red Team/Domain Technical] Tauri와 독립된 `dbbackup-service` Windows
+   - [Architecture/Red Team/Domain Technical] Tauri와 독립된 `restoreplane-service` Windows
      singleton을 유일한 실행권자로 둔다. UI, CLI, Task Scheduler는 enqueue/wake만 한다.
 
 2. **권위 소스 분리**

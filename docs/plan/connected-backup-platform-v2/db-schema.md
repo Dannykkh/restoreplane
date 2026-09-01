@@ -9,7 +9,7 @@
 
 - **DB**: SQLite 3.45+ via `rusqlite = 0.31` with the `bundled` feature
 - **운영 모드**: WAL, `foreign_keys=ON`, `synchronous=FULL`, `busy_timeout=5000`
-- **쓰기 소유권**: `dbbackup-service`의 단일 Transaction Owner만 read-write connection을 연다.
+- **쓰기 소유권**: `restoreplane-service`의 단일 Transaction Owner만 read-write connection을 연다.
 - **읽기**: UI와 진단 경로는 read-only connection pool을 사용한다.
 - **선택 이유**:
   - 현재 제품은 Windows-first 단일 노드이며 별도 DB 서버 운영이 제품 가치보다 큰 부담이다.
@@ -518,7 +518,7 @@ Work Item이어야 한다.
 | required destination, token immutability, generic Work Item, overwrite/L3, 3축 Snapshot smoke test | 통과 |
 | production DB 변경 | 없음 |
 
-구현 시 이 검증을 `dbbackup-catalog` migration test로 영구 편입하고 다음 fixture를 추가한다.
+구현 시 이 검증을 `restoreplane-catalog` migration test로 영구 편입하고 다음 fixture를 추가한다.
 
 - published Plan Revision과 membership 수정 거부
 - Target/Destination 없는 revision publish 거부

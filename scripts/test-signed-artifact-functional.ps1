@@ -246,7 +246,7 @@ function Start-DatabaseFixture {
     )
     $arguments = @(
         "run", "--detach", "--name", $Definition.container,
-        "--label", "dbbackup.artifact-functional=$RunToken",
+        "--label", "restoreplane.artifact-functional=$RunToken",
         "--publish", "127.0.0.1::$($Definition.containerPort)"
     )
     if ($Definition.engine -eq "postgresql") {
@@ -564,7 +564,7 @@ function Invoke-EngineQualification {
         throw "ARTIFACT_FUNCTIONAL_REQUIRED_READER_INVALID"
     }
 
-    $restoreTargetName = "dbbackup_restore_$($Fixture.engine)_$($RunToken.Replace('-', '_'))"
+    $restoreTargetName = "restoreplane_restore_$($Fixture.engine)_$($RunToken.Replace('-', '_'))"
     $preflight = Invoke-InstalledIpc -Command "restore.preflight" -Payload @{
         workspaceId = $WorkspaceId
         snapshotId = [string] $snapshot.id
@@ -696,18 +696,18 @@ function Invoke-EngineQualification {
     }
 }
 
-function Remove-DbBackupFixture {
+function Remove-RestorePlaneFixture {
     [CmdletBinding()]
     param()
     $ok = $true
     try {
-        $service = Get-Service -Name "DbBackupService" -ErrorAction SilentlyContinue
+        $service = Get-Service -Name "RestorePlaneService" -ErrorAction SilentlyContinue
         if ($null -ne $service) {
             & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy AllSigned `
                 -File (Join-Path $script:ResolvedReleaseRoot "scripts\uninstall.ps1") `
                 -InstallRoot $script:InstallRoot `
                 -DataRoot $script:DataRoot `
-                -ServiceName "DbBackupService" `
+                -ServiceName "RestorePlaneService" `
                 -ExpectedSignerThumbprint $script:NormalizedSigner | Out-Null
             if ($LASTEXITCODE -ne 0) {
                 throw "ARTIFACT_FUNCTIONAL_UNINSTALL_FAILED"
@@ -715,7 +715,7 @@ function Remove-DbBackupFixture {
             $deadline = [DateTimeOffset]::UtcNow.AddSeconds(30)
             do {
                 Start-Sleep -Milliseconds 250
-                $service = Get-Service -Name "DbBackupService" -ErrorAction SilentlyContinue
+                $service = Get-Service -Name "RestorePlaneService" -ErrorAction SilentlyContinue
             } while ($null -ne $service -and [DateTimeOffset]::UtcNow -lt $deadline)
             if ($null -ne $service) {
                 $ok = $false
@@ -773,7 +773,7 @@ foreach ($required in @(
     }
 }
 if ($env:RUNNER_ENVIRONMENT -ne "self-hosted" -or
-    $env:DBBACKUP_ARTIFACT_RUNNER_EPHEMERAL -ne "1" -or
+    $env:RESTOREPLANE_ARTIFACT_RUNNER_EPHEMERAL -ne "1" -or
     $RunToken -notmatch "^[0-9]+-[0-9]+$") {
     throw "ARTIFACT_FUNCTIONAL_EPHEMERAL_RUNNER_REQUIRED"
 }
@@ -852,8 +852,8 @@ foreach ($entry in @($manifest.files)) {
     $entryByPath[$relative] = $entry
 }
 foreach ($requiredPath in @(
-        "dbbackup-service.exe",
-        "dbbackup.exe",
+        "restoreplane-service.exe",
+        "restoreplane.exe",
         "provider-certifications.json",
         "tools/native-tools-audit.json"
     )) {
@@ -861,8 +861,8 @@ foreach ($requiredPath in @(
         throw "ARTIFACT_FUNCTIONAL_PACKAGE_FILE_MISSING"
     }
 }
-$serviceEntry = $entryByPath["dbbackup-service.exe"]
-$cliEntry = $entryByPath["dbbackup.exe"]
+$serviceEntry = $entryByPath["restoreplane-service.exe"]
+$cliEntry = $entryByPath["restoreplane.exe"]
 $providerEntry = $entryByPath["provider-certifications.json"]
 $auditEntry = $entryByPath["tools/native-tools-audit.json"]
 if ($serviceEntry.authenticodeRequired -ne $true -or
@@ -876,10 +876,10 @@ if ($serviceEntry.authenticodeRequired -ne $true -or
     throw "ARTIFACT_FUNCTIONAL_PACKAGE_TRUST_ROLE_INVALID"
 }
 $manifestSha256 = Get-FileSha256 -Path $manifestPath
-$serviceSha256 = [string] $entryByPath["dbbackup-service.exe"].sha256
-$cliSha256 = [string] $entryByPath["dbbackup.exe"].sha256
+$serviceSha256 = [string] $entryByPath["restoreplane-service.exe"].sha256
+$cliSha256 = [string] $entryByPath["restoreplane.exe"].sha256
 $artifactId = Get-TextSha256 -Value (
-    "dbbackup-exact-artifact-v1`n" +
+    "restoreplane-exact-artifact-v1`n" +
     "$manifestSha256`n$serviceSha256`n$cliSha256`n"
 )
 if ($artifactId -cne $ExpectedArtifactId -or
@@ -889,7 +889,7 @@ if ($artifactId -cne $ExpectedArtifactId -or
     $signing.cliBinarySha256 -cne $cliSha256) {
     throw "ARTIFACT_FUNCTIONAL_ARTIFACT_ID_MISMATCH"
 }
-foreach ($binary in @("dbbackup-service.exe", "dbbackup.exe")) {
+foreach ($binary in @("restoreplane-service.exe", "restoreplane.exe")) {
     $signature = Get-AuthenticodeSignature -LiteralPath (Join-Path $packageRoot $binary)
     if ($signature.Status.ToString() -ne "Valid" -or
         $null -eq $signature.SignerCertificate -or
@@ -901,7 +901,7 @@ foreach ($binary in @("dbbackup-service.exe", "dbbackup.exe")) {
 $deploymentFiles = @(
     (Join-Path $script:ResolvedReleaseRoot "scripts\install.ps1"),
     (Join-Path $script:ResolvedReleaseRoot "scripts\uninstall.ps1"),
-    (Join-Path $script:ResolvedReleaseRoot "installer\DbBackup.Install.Common.psm1")
+    (Join-Path $script:ResolvedReleaseRoot "installer\RestorePlane.Install.Common.psm1")
 )
 foreach ($deploymentFile in $deploymentFiles) {
     Assert-RegularLeaf `
@@ -918,13 +918,13 @@ foreach ($deploymentFile in $deploymentFiles) {
 
 $script:EphemeralBase = [IO.Path]::GetFullPath((Join-Path (
             [IO.Path]::GetFullPath($env:RUNNER_TEMP)
-        ) "DbBackupArtifactQualification"))
+        ) "RestorePlaneArtifactQualification"))
 $script:FixtureRoot = Join-Path $script:EphemeralBase $RunToken
 $script:InstallRoot = Join-Path $script:FixtureRoot "install"
 $script:DataRoot = Join-Path $script:FixtureRoot "data"
-$script:InstalledCli = Join-Path $script:InstallRoot "dbbackup.exe"
+$script:InstalledCli = Join-Path $script:InstallRoot "restoreplane.exe"
 $script:CreatedContainers = [Collections.Generic.List[string]]::new()
-if ($null -ne (Get-Service -Name "DbBackupService" -ErrorAction SilentlyContinue) -or
+if ($null -ne (Get-Service -Name "RestorePlaneService" -ErrorAction SilentlyContinue) -or
     (Test-Path -LiteralPath $script:FixtureRoot)) {
     throw "ARTIFACT_FUNCTIONAL_RUNNER_NOT_PRISTINE"
 }
@@ -936,21 +936,21 @@ $fixtures = @(
         engine = "postgresql"
         image = "postgres@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a"
         containerPort = 5432
-        container = "dbbackup-artifact-pg-$shortToken"
+        container = "restoreplane-artifact-pg-$shortToken"
         hostPort = 0
     },
     [PSCustomObject] @{
         engine = "mysql"
         image = "mysql@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb"
         containerPort = 3306
-        container = "dbbackup-artifact-mysql-$shortToken"
+        container = "restoreplane-artifact-mysql-$shortToken"
         hostPort = 0
     },
     [PSCustomObject] @{
         engine = "mariadb"
         image = "mariadb@sha256:a794d9eb009e20de605858a11f32f63b4075cbd197c650436f0e3b457e4caed7"
         containerPort = 3306
-        container = "dbbackup-artifact-maria-$shortToken"
+        container = "restoreplane-artifact-maria-$shortToken"
         hostPort = 0
     }
 )
@@ -965,7 +965,7 @@ try {
         -ManifestPath $manifestPath `
         -InstallRoot $script:InstallRoot `
         -DataRoot $script:DataRoot `
-        -ServiceName "DbBackupService" `
+        -ServiceName "RestorePlaneService" `
         -ExpectedPackageManifestSha256 $signing.packageManifestSha256 `
         -ExpectedSignerThumbprint $script:NormalizedSigner `
         -ExpectedNativeToolAuditSha256 $signing.nativeToolAuditSha256 | Out-Null
@@ -973,7 +973,7 @@ try {
         throw "ARTIFACT_FUNCTIONAL_INSTALL_FAILED"
     }
     $installedServiceSha256 = Get-FileSha256 -Path (
-        Join-Path $script:InstallRoot "dbbackup-service.exe"
+        Join-Path $script:InstallRoot "restoreplane-service.exe"
     )
     $installedCliSha256 = Get-FileSha256 -Path $script:InstalledCli
     if ($installedServiceSha256 -cne $serviceSha256 -or
@@ -1015,7 +1015,7 @@ try {
     $qualificationCompleted = $true
 }
 finally {
-    $cleanupSucceeded = Remove-DbBackupFixture
+    $cleanupSucceeded = Remove-RestorePlaneFixture
 }
 
 if (-not $qualificationCompleted -or -not $cleanupSucceeded) {

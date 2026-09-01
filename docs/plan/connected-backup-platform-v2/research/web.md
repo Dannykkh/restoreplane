@@ -24,7 +24,7 @@
 
 #### 단일 중앙 dispatcher
 
-잡마다 독립적인 다중 스레드 Tokio runtime과 `dbbackup.exe`를 동시에 띄우는 구조 대신, 하나의 dispatcher가 예약 트리거와 수동 요청을 영속 큐에 넣고 제한된 worker가 실행한다.
+잡마다 독립적인 다중 스레드 Tokio runtime과 `restoreplane.exe`를 동시에 띄우는 구조 대신, 하나의 dispatcher가 예약 트리거와 수동 요청을 영속 큐에 넣고 제한된 worker가 실행한다.
 
 ```text
 Scheduler / UI / CLI

@@ -9,7 +9,7 @@
 여러 종류의 데이터베이스를 연결하고 예약 백업하며, 특정 스냅샷의 실제 복원 가능성까지
 증명하는 Windows-first 백업 관리자다.
 
-현재 `dbbackupsystem`을 버리지 않는다. Rust 기반 dump/restore, 암호화, 서명 매니페스트,
+현재 `restoreplane`을 버리지 않는다. Rust 기반 dump/restore, 암호화, 서명 매니페스트,
 다중 목적지, 불변성, 원격 reader, catalog rebuild를 실행 코어로 유지하고 그 위에 연결,
 탐색, 계획, 활동, 스냅샷, 복원 중심의 제품 모델을 구축한다.
 
@@ -57,7 +57,7 @@ Databasement 수준의 공통 운영 흐름과 실행 제어를 완성한 뒤 �
 flowchart LR
     UI[Tauri Control UI] --> IPC[Local authenticated IPC]
     CLI[CLI] --> IPC
-    IPC --> SVC[dbbackup-service singleton]
+    IPC --> SVC[restoreplane-service singleton]
     SCHED[Windows Scheduler] -->|start/wake only| SVC
     SVC --> APP[Application Services]
     APP --> DB[(Operational Store / SQLite)]
@@ -77,8 +77,8 @@ flowchart LR
 경계 원칙:
 
 - UI는 native tool을 직접 실행하지 않는다.
-- UI가 닫혀도 `dbbackup-service`는 최소권한 계정으로 계속 실행된다.
-- `dbbackup-service` 안의 dispatcher만 backup/restore 시작 권한을 가진다.
+- UI가 닫혀도 `restoreplane-service`는 최소권한 계정으로 계속 실행된다.
+- `restoreplane-service` 안의 dispatcher만 backup/restore 시작 권한을 가진다.
 - CLI와 Windows Scheduler는 직접 실행하지 않고 command 제출 또는 service wake만 한다.
 - Engine Adapter는 연결·탐색·백업·검증·복원 capability를 명시한다.
 - Destination Adapter는 저장, 읽기, 삭제, 불변성 capability를 명시한다.
@@ -216,7 +216,7 @@ flowchart TD
 
 ### FR-SVC: Service and Local IPC
 
-- `FR-SVC-01` `dbbackup-service`만 production Work Item을 claim하고 native process를 시작한다.
+- `FR-SVC-01` `restoreplane-service`만 production Work Item을 claim하고 native process를 시작한다.
 - `FR-SVC-02` service shell을 먼저 설치하되 durable queue, fencing, Process Supervisor,
   Reconciliation gate 전에는 production execute command를 활성화하지 않는다.
 - `FR-SVC-03` named pipe는 service SID, 설치 owner SID, 승인된 administrator만 허용한다.

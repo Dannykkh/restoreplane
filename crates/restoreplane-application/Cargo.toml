@@ -1,0 +1,14 @@
+[package]
+name = "restoreplane-application"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+blake3 = "=1.5.5"
+chrono = { version = "=0.4.45", default-features = false, features = ["std"] }
+serde = { workspace = true }
+serde_json = "1"
+thiserror = { workspace = true }

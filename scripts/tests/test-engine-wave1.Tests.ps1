@@ -5,7 +5,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $scriptPath = Join-Path $repoRoot "scripts\test-engine-wave1.ps1"
 $fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) (
-    "dbbackup-g4-contract-tests-" + [Guid]::NewGuid().ToString("N")
+    "restoreplane-g4-contract-tests-" + [Guid]::NewGuid().ToString("N")
 )
 
 try {

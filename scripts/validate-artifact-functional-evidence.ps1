@@ -146,7 +146,7 @@ if ($evidence.packageManifestSha256 -cne $ExpectedPackageManifestSha256 -or
     throw "ARTIFACT_FUNCTIONAL_PACKAGE_DIGEST_MISMATCH"
 }
 $expectedArtifactId = Get-TextSha256 -Value (
-    "dbbackup-exact-artifact-v1`n" +
+    "restoreplane-exact-artifact-v1`n" +
     "$ExpectedPackageManifestSha256`n" +
     "$ExpectedServiceBinarySha256`n" +
     "$ExpectedCliBinarySha256`n"

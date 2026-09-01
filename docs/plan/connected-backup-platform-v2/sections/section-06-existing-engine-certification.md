@@ -216,12 +216,12 @@ option builder, process result classification, fixture oracle, certification pub
 ## Files to Create/Modify
 
 ```text
-crates/dbbackup-core/src/provider.rs
-crates/dbbackup-source-pg/src/{probe,discover,backup,restore,validate}.rs
-crates/dbbackup-source-mysql/src/{probe,discover,backup,restore,validate}.rs
-crates/dbbackup-verify/src/{policy,l1,l2,l3}.rs
-crates/dbbackup-application/src/use_cases/{connection,verification,restore}.rs
-crates/dbbackup-runtime/src/notification.rs
-crates/dbbackup-*/tests/provider_conformance/
+crates/restoreplane-core/src/provider.rs
+crates/restoreplane-source-pg/src/{probe,discover,backup,restore,validate}.rs
+crates/restoreplane-source-mysql/src/{probe,discover,backup,restore,validate}.rs
+crates/restoreplane-verify/src/{policy,l1,l2,l3}.rs
+crates/restoreplane-application/src/use_cases/{connection,verification,restore}.rs
+crates/restoreplane-runtime/src/notification.rs
+crates/restoreplane-*/tests/provider_conformance/
 scripts/test-existing-engines.ps1
 ```

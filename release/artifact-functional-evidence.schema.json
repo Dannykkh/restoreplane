@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dbbackupsystem.local/schemas/artifact-functional-evidence-v1.json",
-  "title": "DbBackup exact signed artifact functional qualification evidence",
+  "$id": "https://restoreplane.local/schemas/artifact-functional-evidence-v1.json",
+  "title": "RestorePlane exact signed artifact functional qualification evidence",
   "type": "object",
   "additionalProperties": false,
   "required": [

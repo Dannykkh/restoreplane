@@ -2,7 +2,9 @@
 /target
 /target-*/
 /.tmp/
-dbbackup.toml
+restoreplane.toml
+# Preserve pre-rename local developer config without committing credentials.
+apps/console/src-tauri/dbbackup.toml
 prune.toml
 *.dek
 *.recovery-code

@@ -1,4 +1,4 @@
-//! 백업 실행/검증 사이드카 — 완성된 dbbackup.exe를 자식 프로세스로 띄우고 stdout/stderr를
+//! 백업 실행/검증 사이드카 — 완성된 restoreplane.exe를 자식 프로세스로 띄우고 stdout/stderr를
 //! 줄 단위로 프론트에 이벤트("run:log"/"run:done")로 흘린다.
 //!
 //! 왜 사이드카인가: run/verify는 덤프 도구 호출·스트리밍 암호화·팬아웃 등 완성된 파이프라인을
@@ -17,17 +17,17 @@ use tauri::{AppHandle, Emitter};
 
 use crate::paths::config_path;
 
-/// 동봉 배포에서 dbbackup.exe는 콘솔 실행파일과 같은 디렉토리에 있다(dev: target/<profile>).
-fn dbbackup_bin() -> PathBuf {
+/// 동봉 배포에서 restoreplane.exe는 콘솔 실행파일과 같은 디렉토리에 있다(dev: target/<profile>).
+fn restoreplane_bin() -> PathBuf {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            let cand = dir.join("dbbackup.exe");
+            let cand = dir.join("restoreplane.exe");
             if cand.exists() {
                 return cand;
             }
         }
     }
-    PathBuf::from("dbbackup.exe") // PATH 폴백
+    PathBuf::from("restoreplane.exe") // PATH 폴백
 }
 
 #[derive(Clone, Serialize)]
@@ -42,10 +42,10 @@ struct RunDone {
     ok: bool,
 }
 
-/// dbbackup 서브커맨드를 자식 프로세스로 띄우고 stdout/stderr를 run:log 이벤트로 스트리밍한다.
+/// restoreplane 서브커맨드를 자식 프로세스로 띄우고 stdout/stderr를 run:log 이벤트로 스트리밍한다.
 /// 커맨드는 즉시 반환하고(비블로킹), 종료 시 run:done을 방출한다. run/verify/restore 공용.
 fn spawn_stream(app: AppHandle, args: Vec<String>) -> Result<(), String> {
-    let bin = dbbackup_bin();
+    let bin = restoreplane_bin();
     let cfg = config_path();
 
     let mut cmd = Command::new(&bin);
@@ -55,7 +55,7 @@ fn spawn_stream(app: AppHandle, args: Vec<String>) -> Result<(), String> {
 
     let mut child = cmd
         .spawn()
-        .map_err(|e| format!("dbbackup 실행 실패({}): {e}", bin.display()))?;
+        .map_err(|e| format!("restoreplane 실행 실패({}): {e}", bin.display()))?;
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -147,7 +147,7 @@ fn restore_args(
 }
 
 /// 백업 복원. 현재 공개 경로는 서명 게이트 뒤 평문 덤프를 만드는 decrypt-only만 허용한다.
-/// with_recovery_code면 DBBACKUP_RECOVERY_CODE 무인 경로를 쓴다(복원 측 CLI 규약).
+/// with_recovery_code면 RESTOREPLANE_RECOVERY_CODE 무인 경로를 쓴다(복원 측 CLI 규약).
 #[tauri::command]
 pub fn restore_backup(
     app: AppHandle,

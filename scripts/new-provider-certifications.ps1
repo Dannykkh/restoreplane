@@ -11,7 +11,7 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 Import-Module (
-    Join-Path (Split-Path -Parent $PSScriptRoot) "installer\DbBackup.Install.Common.psm1"
+    Join-Path (Split-Path -Parent $PSScriptRoot) "installer\RestorePlane.Install.Common.psm1"
 ) -Force
 
 $expectedEngines = @("postgresql", "mysql", "mariadb")
@@ -308,5 +308,5 @@ $document = [ordered] @{
     certifications = @($certifications)
 }
 $resolvedOutput = [IO.Path]::GetFullPath($OutputPath)
-Write-DbBackupJsonAtomic -Path $resolvedOutput -Value $document
+Write-RestorePlaneJsonAtomic -Path $resolvedOutput -Value $document
 $document | ConvertTo-Json -Depth 32

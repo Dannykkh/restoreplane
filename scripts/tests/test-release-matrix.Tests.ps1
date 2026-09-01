@@ -176,7 +176,7 @@ else {
 }
 
 $temporary = Join-Path ([IO.Path]::GetTempPath()) (
-    "dbbackup-g5-contract-" + [Guid]::NewGuid().ToString("N")
+    "restoreplane-g5-contract-" + [Guid]::NewGuid().ToString("N")
 )
 New-Item -ItemType Directory -Path $temporary -Force | Out-Null
 try {
@@ -204,7 +204,7 @@ finally {
 }
 
 $bindingRoot = Join-Path ([IO.Path]::GetTempPath()) (
-    "dbbackup-g5-build-binding-" + [Guid]::NewGuid().ToString("N")
+    "restoreplane-g5-build-binding-" + [Guid]::NewGuid().ToString("N")
 )
 New-Item -ItemType Directory -Path $bindingRoot -Force | Out-Null
 try {
@@ -235,7 +235,7 @@ try {
         }
     )
     & git -C $bindingRoot init --quiet
-    & git -C $bindingRoot config user.name "DbBackup fixture"
+    & git -C $bindingRoot config user.name "RestorePlane fixture"
     & git -C $bindingRoot config user.email "fixture@invalid.example"
     & git -C $bindingRoot add release
     & git -C $bindingRoot commit --quiet -m fixture
@@ -267,8 +267,8 @@ try {
         $signedRoot = Join-Path $bindingRoot "artifacts\signed"
         $packageRoot = Join-Path $signedRoot "package"
         New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
-        $servicePath = Join-Path $packageRoot "dbbackup-service.exe"
-        $cliPath = Join-Path $packageRoot "dbbackup.exe"
+        $servicePath = Join-Path $packageRoot "restoreplane-service.exe"
+        $cliPath = Join-Path $packageRoot "restoreplane.exe"
         [IO.File]::WriteAllText(
             $servicePath,
             "service fixture",
@@ -320,22 +320,22 @@ try {
             sourceTreeDigest = $qualification.sourceTreeDigest
             files = @(
                 [ordered] @{
-                    path = "dbbackup.exe"
+                    path = "restoreplane.exe"
                     sha256 = $cliSha256
                     sizeBytes = [long] (Get-Item -LiteralPath $cliPath).Length
                     authenticodeRequired = $true
                     signerRole = "release"
                     signerThumbprint = ""
-                    publisher = "DbBackup fixture"
+                    publisher = "RestorePlane fixture"
                 },
                 [ordered] @{
-                    path = "dbbackup-service.exe"
+                    path = "restoreplane-service.exe"
                     sha256 = $serviceSha256
                     sizeBytes = [long] (Get-Item -LiteralPath $servicePath).Length
                     authenticodeRequired = $true
                     signerRole = "release"
                     signerThumbprint = ""
-                    publisher = "DbBackup fixture"
+                    publisher = "RestorePlane fixture"
                 },
                 [ordered] @{
                     path = "provider-certifications.json"
@@ -344,7 +344,7 @@ try {
                     authenticodeRequired = $false
                     signerRole = "hash_only"
                     signerThumbprint = ""
-                    publisher = "DbBackup fixture"
+                    publisher = "RestorePlane fixture"
                 },
                 [ordered] @{
                     path = "tools/native-tools-audit.json"
@@ -353,7 +353,7 @@ try {
                     authenticodeRequired = $false
                     signerRole = "hash_only"
                     signerThumbprint = ""
-                    publisher = "DbBackup fixture"
+                    publisher = "RestorePlane fixture"
                 },
                 [ordered] @{
                     path = "tools/postgresql/pg_dump.exe"
@@ -362,7 +362,7 @@ try {
                     authenticodeRequired = $true
                     signerRole = "vendor"
                     signerThumbprint = "d" * 40
-                    publisher = "DbBackup fixture vendor"
+                    publisher = "RestorePlane fixture vendor"
                 }
             )
             nativeTools = [ordered] @{
@@ -374,7 +374,7 @@ try {
         Write-Json -Path $manifestPath -Value $manifest
         $manifestSha256 = Get-FileSha256 -Path $manifestPath
         $artifactId = Get-TextSha256 -Value (
-            "dbbackup-exact-artifact-v1`n" +
+            "restoreplane-exact-artifact-v1`n" +
             "$manifestSha256`n$serviceSha256`n$cliSha256`n"
         )
         $signing = [ordered] @{
@@ -385,7 +385,7 @@ try {
             buildId = $qualification.buildId
             artifactId = $artifactId
             signerThumbprint = $signer
-            signerSubject = "CN=DbBackup fixture"
+            signerSubject = "CN=RestorePlane fixture"
             nativeToolAuditSha256 = $auditSha256
             timestampUrl = "https://timestamp.invalid"
             packageManifestSha256 = $manifestSha256

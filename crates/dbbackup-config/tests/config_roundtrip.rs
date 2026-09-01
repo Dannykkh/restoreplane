@@ -67,3 +67,42 @@ fn load_strips_utf8_bom() {
     let config = Config::load(&path).expect("BOM-prefixed config must load");
     assert_eq!(config.meta.schema_version, 1);
 }
+
+#[test]
+fn destination_accepts_a_separate_reader_identity() {
+    let raw = r#"
+[meta]
+schema_version = 1
+
+[policy]
+spool_dir = "spool"
+
+[[destination]]
+name = "s3-primary"
+kind = "s3"
+endpoint = "https://s3.example.test"
+region = "ap-northeast-2"
+bucket = "backups"
+access_key_id = "enc:1:d3JpdGVy"
+secret_access_key = "enc:1:d3JpdGVy"
+
+[destination.reader]
+access_key_id = "enc:1:cmVhZGVy"
+secret_access_key = "enc:1:cmVhZGVy"
+"#;
+
+    let parsed =
+        toml::from_str::<Config>(raw).expect("reader identity must be accepted separately");
+    let reader = parsed.destinations[0]
+        .reader
+        .as_ref()
+        .expect("reader identity must be retained");
+    assert!(reader.access_key_id.is_some());
+    assert!(reader.secret_access_key.is_some());
+    let serialized = toml::to_string_pretty(&parsed).expect("config must serialize");
+
+    assert!(
+        serialized.contains("[destination.reader]"),
+        "reader identity must survive a config roundtrip"
+    );
+}

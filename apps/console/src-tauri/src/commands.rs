@@ -4,9 +4,13 @@
 //! DashboardData(프론트 types.ts와 camelCase로 형태 일치)를 만든다. 액션(init/run/restore 등)은
 //! 후속 증분에서 dbbackup.exe 사이드카로 배선한다.
 
-use dbbackup_catalog::{latest_backup_per_job, open_reader_conn, BackupRecord};
-use dbbackup_config::schema::{Config, Destination, Job};
-use dbbackup_core::{DestKind, ObjectLockMode};
+use std::collections::HashMap;
+
+use dbbackup_catalog::{
+    artifacts_for_backup, latest_backup_per_job, latest_run_per_job, open_reader_conn,
+    ArtifactRecord, BackupRecord, LatestRunRecord,
+};
+use dbbackup_config::schema::Config;
 use dbbackup_secrets::Keystore;
 use serde::Serialize;
 
@@ -50,6 +54,8 @@ pub struct JobSummaryView {
     required_immutability: String,
     destinations: Vec<String>,
     last_backup: Option<BackupView>,
+    last_attempt_status: Option<String>,
+    last_attempt_started_at: Option<String>,
     health: String,
 }
 
@@ -64,40 +70,17 @@ pub struct DashboardData {
     overall: String,
 }
 
-/// 목적지 불변성 등급을 config 정의에서 유도한다(catalog artifacts.immutability는 현재 NULL).
-fn immutability_of(dest: &Destination) -> &'static str {
-    match dest.kind {
-        DestKind::Local => "none",
-        DestKind::Ssh => "server_append_only",
-        DestKind::S3 => match dest.object_lock.as_ref().map(|c| c.mode) {
-            Some(ObjectLockMode::Governance) => "object_lock_governance",
-            Some(ObjectLockMode::Compliance) => "object_lock_compliance",
-            _ => "none",
-        },
+fn to_artifact_view(record: &ArtifactRecord) -> DestArtifactView {
+    DestArtifactView {
+        dest_name: record.dest_name.clone(),
+        dest_kind: record.dest_kind.clone(),
+        immutability: record
+            .immutability
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string()),
+        retention_until: record.retention_until.clone(),
+        status: record.status.clone(),
     }
-}
-
-fn artifacts_for_job(job: &Job, config: &Config, backup_status: &str) -> Vec<DestArtifactView> {
-    job.destinations
-        .iter()
-        .filter_map(|name| config.destinations.iter().find(|d| &d.name == name))
-        .map(|d| DestArtifactView {
-            dest_name: d.name.clone(),
-            dest_kind: match d.kind {
-                DestKind::Local => "local",
-                DestKind::Ssh => "ssh",
-                DestKind::S3 => "s3",
-            }
-            .to_string(),
-            immutability: immutability_of(d).to_string(),
-            retention_until: None,
-            status: if backup_status == "success" {
-                "uploaded".to_string()
-            } else {
-                backup_status.to_string()
-            },
-        })
-        .collect()
 }
 
 fn engine_str(e: dbbackup_core::Engine) -> &'static str {
@@ -105,11 +88,19 @@ fn engine_str(e: dbbackup_core::Engine) -> &'static str {
         dbbackup_core::Engine::Postgresql => "postgresql",
         dbbackup_core::Engine::Mysql => "mysql",
         dbbackup_core::Engine::Mariadb => "mariadb",
+        dbbackup_core::Engine::Sqlserver => "sqlserver",
+        dbbackup_core::Engine::Sqlite => "sqlite",
     }
 }
 
-/// 잡 건강도: 실패/미백업=danger·warn, 미서명·미검증=warn, 서명+검증통과=ok.
-fn health_of(rec: Option<&BackupRecord>) -> &'static str {
+/// 잡 건강도: 최신 실행 실패/부분 성공을 과거 성공 backup보다 먼저 평가한다.
+fn health_of(rec: Option<&BackupRecord>, latest_attempt: Option<&LatestRunRecord>) -> &'static str {
+    match latest_attempt.map(|attempt| attempt.status.as_str()) {
+        Some("failed" | "partial") => return "danger",
+        Some("running" | "coalesced") => return "warn",
+        Some("success") | None => {}
+        Some(_) => return "warn",
+    }
     match rec {
         None => "warn",
         Some(r) if r.status == "failed" => "danger",
@@ -172,11 +163,25 @@ pub fn dashboard() -> Result<DashboardData, String> {
 
     // catalog는 조회 캐시(신뢰 불가). 없으면 잡 정의만으로 대시보드를 구성한다.
     let db_path = config.policy.spool_dir.join("catalog.db");
-    let records: Vec<BackupRecord> = if db_path.exists() {
+    let (records, attempts, artifacts_by_backup): (
+        Vec<BackupRecord>,
+        Vec<LatestRunRecord>,
+        HashMap<String, Vec<ArtifactRecord>>,
+    ) = if db_path.exists() {
         let conn = open_reader_conn(&db_path).map_err(|e| format!("catalog 열기 실패: {e}"))?;
-        latest_backup_per_job(&conn).map_err(|e| format!("catalog 조회 실패: {e}"))?
+        let records =
+            latest_backup_per_job(&conn).map_err(|e| format!("catalog 조회 실패: {e}"))?;
+        let attempts =
+            latest_run_per_job(&conn).map_err(|e| format!("실행 이력 조회 실패: {e}"))?;
+        let mut artifacts_by_backup = HashMap::new();
+        for record in &records {
+            let artifacts = artifacts_for_backup(&conn, &record.id)
+                .map_err(|e| format!("artifact 조회 실패: {e}"))?;
+            artifacts_by_backup.insert(record.id.clone(), artifacts);
+        }
+        (records, attempts, artifacts_by_backup)
     } else {
-        vec![]
+        (vec![], vec![], HashMap::new())
     };
 
     let db_engine = |alias: &str| {
@@ -193,8 +198,12 @@ pub fn dashboard() -> Result<DashboardData, String> {
         .iter()
         .map(|job| {
             let rec = records.iter().find(|r| r.job == job.name);
+            let attempt = attempts.iter().find(|r| r.job == job.name);
             let last_backup = rec.map(|r| {
-                let arts = artifacts_for_job(job, &config, &r.status);
+                let arts = artifacts_by_backup
+                    .get(&r.id)
+                    .map(|records| records.iter().map(to_artifact_view).collect())
+                    .unwrap_or_default();
                 to_backup_view(r, arts)
             });
             JobSummaryView {
@@ -209,7 +218,9 @@ pub fn dashboard() -> Result<DashboardData, String> {
                 required_immutability: format!("{:?}", job.required_immutability).to_lowercase(),
                 destinations: job.destinations.clone(),
                 last_backup,
-                health: health_of(rec).to_string(),
+                last_attempt_status: attempt.map(|value| value.status.clone()),
+                last_attempt_started_at: attempt.map(|value| value.started_at.clone()),
+                health: health_of(rec, attempt).to_string(),
             }
         })
         .collect();
@@ -226,4 +237,62 @@ pub fn dashboard() -> Result<DashboardData, String> {
         recent,
         overall,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dbbackup_catalog::{ArtifactRecord, LatestRunRecord};
+
+    fn successful_backup() -> BackupRecord {
+        BackupRecord {
+            id: "backup-ok".into(),
+            job: "nightly".into(),
+            source: "primary".into(),
+            engine: "postgresql".into(),
+            started_at: "2026-07-28T03:00:00Z".into(),
+            finished_at: Some("2026-07-28T03:05:00Z".into()),
+            status: "success".into(),
+            plaintext_bytes: Some(1_000),
+            cipher_bytes: Some(300),
+            manifest_signed: true,
+            last_verify_level: Some(1),
+            last_verify_result: Some("pass".into()),
+        }
+    }
+
+    #[test]
+    fn latest_failed_attempt_overrides_older_successful_backup_health() {
+        let backup = successful_backup();
+        let attempt = LatestRunRecord {
+            id: "run-failed".into(),
+            job: "nightly".into(),
+            started_at: "2026-07-29T03:00:00Z".into(),
+            status: "failed".into(),
+        };
+
+        assert_eq!(health_of(Some(&backup), Some(&attempt)), "danger");
+    }
+
+    #[test]
+    fn artifact_view_preserves_unknown_evidence_instead_of_using_config_claims() {
+        let artifact = ArtifactRecord {
+            backup_id: "backup-ok".into(),
+            dest_name: "s3-primary".into(),
+            dest_kind: "s3".into(),
+            object_key: "nightly/backup-ok.enc".into(),
+            object_checksum: Some("sha256:abc".into()),
+            immutability: None,
+            retention_until: None,
+            status: "committed".into(),
+            uploaded_at: Some("2026-07-29T03:05:00Z".into()),
+        };
+
+        let view = to_artifact_view(&artifact);
+
+        assert_eq!(view.dest_name, "s3-primary");
+        assert_eq!(view.immutability, "unknown");
+        assert_eq!(view.retention_until, None);
+        assert_eq!(view.status, "committed");
+    }
 }

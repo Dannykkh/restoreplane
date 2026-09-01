@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dbbackupsystem.local/schemas/native-tool-audit-v1.json",
+  "title": "DbBackup audited native tool bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "auditId",
+    "approvedAt",
+    "bundles",
+    "files"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "auditId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "approvedAt": { "type": "string", "format": "date-time" },
+    "bundles": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "root",
+          "major",
+          "requiredExecutables",
+          "dependencies",
+          "licenses"
+        ],
+        "properties": {
+          "id": {
+            "enum": ["postgresql-18", "mysql-8", "mariadb-11"]
+          },
+          "root": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "major": { "type": "integer", "minimum": 1, "maximum": 99 },
+          "requiredExecutables": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 16,
+            "items": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "uniqueItems": true
+          },
+          "dependencies": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 512,
+            "items": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "uniqueItems": true
+          },
+          "licenses": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 32,
+            "items": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "sha256",
+          "role",
+          "authenticodeRequired",
+          "signerThumbprint",
+          "publisher"
+        ],
+        "properties": {
+          "path": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "role": {
+            "enum": ["executable", "dependency", "license", "resource"]
+          },
+          "authenticodeRequired": { "type": "boolean" },
+          "signerThumbprint": {
+            "type": "string",
+            "pattern": "^(?:|[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$"
+          },
+          "publisher": { "type": "string", "minLength": 1, "maxLength": 256 }
+        }
+      }
+    }
+  }
+}

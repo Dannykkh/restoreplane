@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dbbackupsystem.local/schemas/release-fixture-evidence-v1.json",
+  "title": "DbBackup pristine signed lifecycle fixture evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "trustContext",
+    "sourceRevision",
+    "sourceTreeDigest",
+    "buildId",
+    "signerThumbprint",
+    "deploymentScriptAuthenticode",
+    "cleanInstall",
+    "repair",
+    "update",
+    "supportBundle",
+    "uninstallPreservation",
+    "packageManifestSha256",
+    "serviceBinarySha256",
+    "cliBinarySha256"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "status": {
+      "const": "pass"
+    },
+    "trustContext": {
+      "const": "same_artifact_lifecycle_fixture_not_production_trust"
+    },
+    "sourceRevision": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "sourceTreeDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "buildId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "signerThumbprint": {
+      "type": "string",
+      "pattern": "^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$"
+    },
+    "deploymentScriptAuthenticode": {
+      "const": "pass"
+    },
+    "cleanInstall": {
+      "const": "pass"
+    },
+    "repair": {
+      "const": "pass"
+    },
+    "update": {
+      "const": "pass"
+    },
+    "supportBundle": {
+      "const": "pass"
+    },
+    "uninstallPreservation": {
+      "const": "pass"
+    },
+    "packageManifestSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "serviceBinarySha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "cliBinarySha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

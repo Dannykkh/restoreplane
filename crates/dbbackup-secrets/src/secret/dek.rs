@@ -29,7 +29,7 @@ impl Dek {
         &self.0
     }
 
-    pub(crate) fn from_bytes(b: [u8; 32]) -> Self {
+    pub fn from_bytes(b: [u8; 32]) -> Self {
         Dek(Zeroizing::new(b))
     }
 

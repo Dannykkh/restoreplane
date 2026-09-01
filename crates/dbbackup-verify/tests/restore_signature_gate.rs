@@ -17,6 +17,7 @@ fn write_valid(sk: &SigningKey, dir: &Path) -> String {
     let commit = SpoolCommit {
         spool_path: spool_path.clone(),
         plaintext_blake3: [3; 32],
+        ciphertext_blake3: [4; 32],
         plaintext_bytes: 10,
         ciphertext_bytes: 20,
         stderr_tail: String::new(),
@@ -26,20 +27,22 @@ fn write_valid(sk: &SigningKey, dir: &Path) -> String {
     mpath.file_name().unwrap().to_string_lossy().into_owned()
 }
 
-#[test]
-fn valid_signed_manifest_is_accepted() {
+#[tokio::test]
+async fn valid_signed_manifest_is_accepted() {
     let (sk, vk) = generate_signing_keypair();
     let verifier = PinnedKeyVerifier::new(vk);
     let dir = tempfile::tempdir().unwrap();
     let key = write_valid(&sk, dir.path());
     let source = LocalManifestSource::new(dir.path());
 
-    let inputs = load_trusted_inputs(&source, &verifier, &key).expect("유효 서명은 통과");
+    let inputs = load_trusted_inputs(&source, &verifier, &key)
+        .await
+        .expect("유효 서명은 통과");
     assert_eq!(inputs.db_manifest.job, "job-a");
 }
 
-#[test]
-fn unsigned_manifest_is_rejected_before_decrypt() {
+#[tokio::test]
+async fn unsigned_manifest_is_rejected_before_decrypt() {
     let (_sk, vk) = generate_signing_keypair();
     let verifier = PinnedKeyVerifier::new(vk);
     let dir = tempfile::tempdir().unwrap();
@@ -50,6 +53,7 @@ fn unsigned_manifest_is_rejected_before_decrypt() {
     let commit = SpoolCommit {
         spool_path: std::path::PathBuf::from("x.spool"),
         plaintext_blake3: [1; 32],
+        ciphertext_blake3: [2; 32],
         plaintext_bytes: 1,
         ciphertext_bytes: 2,
         stderr_tail: String::new(),
@@ -62,12 +66,12 @@ fn unsigned_manifest_is_rejected_before_decrypt() {
     .unwrap();
 
     let source = LocalManifestSource::new(dir.path());
-    let res = load_trusted_inputs(&source, &verifier, "x.spool.manifest.json");
+    let res = load_trusted_inputs(&source, &verifier, "x.spool.manifest.json").await;
     assert!(res.is_err(), "미서명 매니페스트는 즉시 거부돼야 함(C3)");
 }
 
-#[test]
-fn tampered_manifest_is_rejected() {
+#[tokio::test]
+async fn tampered_manifest_is_rejected() {
     let (sk, vk) = generate_signing_keypair();
     let verifier = PinnedKeyVerifier::new(vk);
     let dir = tempfile::tempdir().unwrap();
@@ -81,6 +85,6 @@ fn tampered_manifest_is_rejected() {
     std::fs::write(&path, serde_json::to_vec(&signed).unwrap()).unwrap();
 
     let source = LocalManifestSource::new(dir.path());
-    let res = load_trusted_inputs(&source, &verifier, &key);
+    let res = load_trusted_inputs(&source, &verifier, &key).await;
     assert!(res.is_err(), "변조된 매니페스트는 거부돼야 함(C3)");
 }

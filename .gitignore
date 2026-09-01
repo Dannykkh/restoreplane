@@ -1,5 +1,7 @@
 # .gitignore — 리포 정책: 도구 코드만 공개, config/wrap/복구코드/catalog/keyfile/스풀은 로컬
 /target
+/target-*/
+/.tmp/
 dbbackup.toml
 prune.toml
 *.dek
@@ -28,7 +30,23 @@ apps/console/node_modules/
 apps/console/dist/
 apps/console/src-tauri/gen/
 apps/console/src-tauri/target/
+apps/console/test-results/
+apps/console/playwright-report/
 .playwright-mcp/
 # 디자인 검증용 스크린샷(로컬 전용)
 /dashboard-*.png
+# Generated gate evidence and local browser captures are not source identity inputs.
+/artifacts/
+/*.png
+# Raw agent review transcripts and prompts are local generation inputs.
+docs/**/*.stdout.log
+docs/**/*.stderr.log
+docs/**/reviews/*prompt.txt
+docs/**/team-reviews/*prompt.txt
+# cargo-cyclonedx writes one generated BOM beside each workspace Cargo.toml.
+**/bom.json
+**/*.cdx.json
 
+
+# TermSnap (자동 생성 — 코드맵/메모리/대화/핸드오프)
+.orchestrator/

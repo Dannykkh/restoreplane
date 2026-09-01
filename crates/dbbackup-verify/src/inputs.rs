@@ -55,23 +55,26 @@ impl RestoreInputs {
 
 /// 복원/검증 시작점. manifest_key(사용자 지정 또는 카탈로그 힌트)만 입력으로 받고, 실제 신뢰 판단은
 /// 목적지에서 새로 읽은 바이트에 대해서만 수행한다. 미서명/위조는 여기서 즉시 Err(DEK unwrap 이전, C3).
-pub fn load_trusted_inputs(
+pub async fn load_trusted_inputs(
     source: &dyn ManifestSource,
     verifier: &dyn ManifestVerifier,
     db_manifest_key: &str,
 ) -> Result<RestoreInputs, RestoreInputError> {
     // (1) DB 매니페스트: 서명 검증 통과해야만 반환됨(미서명/위조는 여기서 Err).
-    let db_manifest = load_and_verify_manifest_for_restore(source, verifier, db_manifest_key)?;
+    let db_manifest =
+        load_and_verify_manifest_for_restore(source, verifier, db_manifest_key).await?;
 
     // (2) WrapSet: 매니페스트 동봉본(서명 보호)을 우선한다. 없으면 사이드카
     //     <spool_object>.wrapset.json로 폴백(하위호환). 둘 다 없으면 None(호출부가 DEK 직접 공급).
-    let wrap_set = db_manifest.wrap_set.clone().or_else(|| {
+    let wrap_set = if db_manifest.wrap_set.is_some() {
+        db_manifest.wrap_set.clone()
+    } else {
         let wrapset_key = format!("{}.wrapset.json", db_manifest.spool_object);
-        match source.read_bytes(&wrapset_key) {
+        match source.read_bytes(&wrapset_key).await {
             Ok(bytes) => serde_json::from_slice::<WrapSet>(&bytes).ok(),
             Err(_) => None,
         }
-    });
+    };
 
     let mut inputs = RestoreInputs::from_manifest(db_manifest);
     inputs.wrap_set = wrap_set;

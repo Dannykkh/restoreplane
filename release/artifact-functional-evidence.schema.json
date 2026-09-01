@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dbbackupsystem.local/schemas/artifact-functional-evidence-v1.json",
+  "title": "DbBackup exact signed artifact functional qualification evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "trustContext",
+    "sourceRevision",
+    "sourceTreeDigest",
+    "buildId",
+    "artifactId",
+    "packageManifestSha256",
+    "serviceBinarySha256",
+    "cliBinarySha256",
+    "installedServiceBinarySha256",
+    "installedCliBinarySha256",
+    "executionAuthority",
+    "installedCliIpc",
+    "fixtureIsolation",
+    "cleanup",
+    "engines"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "status": { "const": "pass" },
+    "trustContext": {
+      "const": "exact_signed_artifact_managed_functional_qualification"
+    },
+    "sourceRevision": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "sourceTreeDigest": { "$ref": "#/$defs/sha256" },
+    "buildId": { "$ref": "#/$defs/sha256" },
+    "artifactId": { "$ref": "#/$defs/sha256" },
+    "packageManifestSha256": { "$ref": "#/$defs/sha256" },
+    "serviceBinarySha256": { "$ref": "#/$defs/sha256" },
+    "cliBinarySha256": { "$ref": "#/$defs/sha256" },
+    "installedServiceBinarySha256": { "$ref": "#/$defs/sha256" },
+    "installedCliBinarySha256": { "$ref": "#/$defs/sha256" },
+    "executionAuthority": { "const": "service" },
+    "installedCliIpc": { "$ref": "#/$defs/pass" },
+    "fixtureIsolation": { "const": "managed_ephemeral" },
+    "cleanup": { "$ref": "#/$defs/pass" },
+    "engines": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/engineEvidence" },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "engine": { "const": "postgresql" } },
+            "required": ["engine"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "engine": { "const": "mysql" } },
+            "required": ["engine"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "engine": { "const": "mariadb" } },
+            "required": ["engine"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "pass": { "const": "pass" },
+    "engineEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine", "scope", "backup", "restore", "verification"],
+      "properties": {
+        "engine": { "enum": ["postgresql", "mysql", "mariadb"] },
+        "scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "scopeIdentity",
+            "includedObjectIds",
+            "excludedObjectId"
+          ],
+          "properties": {
+            "mode": { "const": "explicit_tables" },
+            "scopeIdentity": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "includedObjectIds": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              }
+            },
+            "excludedObjectId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        },
+        "backup": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "workItemId",
+            "recoveryPointId",
+            "signedManifest",
+            "requiredReader",
+            "programOwnedWorker"
+          ],
+          "properties": {
+            "status": { "$ref": "#/$defs/pass" },
+            "workItemId": { "$ref": "#/$defs/uuid" },
+            "recoveryPointId": { "$ref": "#/$defs/uuid" },
+            "signedManifest": { "$ref": "#/$defs/pass" },
+            "requiredReader": { "$ref": "#/$defs/pass" },
+            "programOwnedWorker": { "$ref": "#/$defs/pass" }
+          }
+        },
+        "restore": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "mode",
+            "restoreRunId",
+            "contentOracle",
+            "selectedContentSha256",
+            "restoredContentSha256",
+            "excludedObjectAbsent",
+            "programOwnedWorker"
+          ],
+          "properties": {
+            "status": { "$ref": "#/$defs/pass" },
+            "mode": { "const": "create_new" },
+            "restoreRunId": { "$ref": "#/$defs/uuid" },
+            "contentOracle": { "$ref": "#/$defs/pass" },
+            "selectedContentSha256": { "$ref": "#/$defs/sha256" },
+            "restoredContentSha256": { "$ref": "#/$defs/sha256" },
+            "excludedObjectAbsent": { "$ref": "#/$defs/pass" },
+            "programOwnedWorker": { "$ref": "#/$defs/pass" }
+          }
+        },
+        "verification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "level", "verificationRunId", "programOwnedWorker"],
+          "properties": {
+            "status": { "$ref": "#/$defs/pass" },
+            "level": { "const": 1 },
+            "verificationRunId": { "$ref": "#/$defs/uuid" },
+            "programOwnedWorker": { "$ref": "#/$defs/pass" }
+          }
+        }
+      }
+    }
+  }
+}

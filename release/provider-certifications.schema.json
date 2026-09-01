@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dbbackupsystem.local/schemas/provider-certifications-v1.json",
+  "title": "DbBackup managed provider certifications",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceRevision",
+    "sourceTreeDigest",
+    "buildId",
+    "generatedAtMs",
+    "certifications"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "sourceRevision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40,64}$"
+    },
+    "sourceTreeDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "buildId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "generatedAtMs": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "certifications": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/certification" }
+    }
+  },
+  "$defs": {
+    "relativeEvidenceLocator": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^package://provider-certifications\\.json#/certifications/[0-2](?:/capabilities/(?:probe|discovery|tool_preflight|backup|verify_l1|verify_l2|restore_create_new|validation|restore_l3))?$"
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "supportStatus",
+        "evidenceLocator"
+      ],
+      "properties": {
+        "capability": {
+          "enum": [
+            "probe",
+            "discovery",
+            "tool_preflight",
+            "backup",
+            "verify_l1",
+            "verify_l2",
+            "restore_create_new",
+            "validation",
+            "restore_l3"
+          ]
+        },
+        "supportStatus": {
+          "enum": ["passed", "limited"]
+        },
+        "limitationText": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "evidenceLocator": {
+          "$ref": "#/$defs/relativeEvidenceLocator"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "supportStatus": { "const": "limited" } },
+            "required": ["supportStatus"]
+          },
+          "then": { "required": ["limitationText"] }
+        }
+      ]
+    },
+    "certification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "engine",
+        "serverVersionRange",
+        "toolName",
+        "toolVersionRange",
+        "operatingSystem",
+        "architecture",
+        "dumpFormat",
+        "consistencyGrade",
+        "evidenceLocator",
+        "evidenceChecksumBlake3",
+        "certifiedAtMs",
+        "expiresAtMs",
+        "scopeModes",
+        "capabilities"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"
+        },
+        "engine": {
+          "enum": ["postgresql", "mysql", "mariadb"]
+        },
+        "serverVersionRange": {
+          "enum": [">=18,<19", ">=8,<9", ">=11,<12"]
+        },
+        "toolName": {
+          "enum": ["pg_dump", "mysqldump", "mariadb-dump"]
+        },
+        "toolVersionRange": {
+          "enum": [">=18,<19", ">=8,<9", ">=11,<12"]
+        },
+        "operatingSystem": { "const": "windows" },
+        "architecture": { "const": "x86_64" },
+        "dumpFormat": {
+          "enum": ["custom", "sql"]
+        },
+        "consistencyGrade": {
+          "type": "string",
+          "pattern": "^[a-z0-9_+-]{1,64}$"
+        },
+        "evidenceLocator": {
+          "$ref": "#/$defs/relativeEvidenceLocator"
+        },
+        "evidenceChecksumBlake3": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "certifiedAtMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "expiresAtMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "scopeModes": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["whole_database", "explicit_tables"]
+          },
+          "allOf": [
+            { "contains": { "const": "whole_database" }, "minContains": 1, "maxContains": 1 },
+            { "contains": { "const": "explicit_tables" }, "minContains": 1, "maxContains": 1 }
+          ]
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/capability" },
+          "allOf": [
+            { "contains": { "properties": { "capability": { "const": "probe" } }, "required": ["capability"] }, "minContains": 1, "maxContains": 1 },
+            { "contains": { "properties": { "capability": { "const": "discovery" } }, "required": ["capability"] }, "minContains": 1, "maxContains": 1 },
+            { "contains": { "properties": { "capability": { "const": "tool_preflight" } }, "required": ["capability"] }, "minContains": 1, "maxContains": 1 },
+            { "contains": { "properties": { "capability": { "const": "backup" } }, "required": ["capability"] }, "minContains": 1, "maxContains": 1 },
+            { "contains": { "properties": { "capability": { "const": "verify_l1" } }, "required": ["capability"] }, "minContains": 1, "maxContains": 1 },
+            { "contains": { "properties": { "capability": { "const": "verify_l2" } }, "required": ["capability"] }, "minContains": 1, "maxContains": 1 },
+            { "contains": { "properties": { "capability": { "const": "restore_create_new" } }, "required": ["capability"] }, "minContains": 1, "maxContains": 1 },
+            { "contains": { "properties": { "capability": { "const": "validation" } }, "required": ["capability"] }, "minContains": 1, "maxContains": 1 },
+            { "contains": { "properties": { "capability": { "const": "restore_l3" } }, "required": ["capability"] }, "minContains": 1, "maxContains": 1 }
+          ]
+        }
+      }
+    }
+  }
+}

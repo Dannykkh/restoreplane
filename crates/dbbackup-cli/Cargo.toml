@@ -2,6 +2,9 @@
 name = "dbbackup-cli"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
 
 [[bin]]
 name = "dbbackup"
@@ -19,8 +22,12 @@ dbbackup-secrets = { path = "../dbbackup-secrets" }
 dbbackup-catalog = { path = "../dbbackup-catalog" }
 dbbackup-verify = { path = "../dbbackup-verify" }
 dbbackup-scheduler = { path = "../dbbackup-scheduler" }
+dbbackup-ipc-client = { path = "../dbbackup-ipc-client" }
+dbbackup-application = { path = "../dbbackup-application" }
+dbbackup-service = { path = "../dbbackup-service" }
 clap.workspace = true
 anyhow.workspace = true
+async-trait = "0.1"
 serde_json = "1"
 rpassword.workspace = true
 tracing.workspace = true
@@ -29,6 +36,11 @@ tokio = { version = "=1.52.3", features = ["rt-multi-thread", "macros"] }
 time = { version = "0.3", features = ["std"] }
 zeroize = { version = "=1.9.0" }
 ed25519-dalek = { version = "=2.2.0" }
+uuid = { version = "=1.11.0", features = ["v4"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-service = "=0.8.1"
 
 [dev-dependencies]
 tempfile = "=3.14.0"
+dbbackup-domain = { path = "../dbbackup-domain" }

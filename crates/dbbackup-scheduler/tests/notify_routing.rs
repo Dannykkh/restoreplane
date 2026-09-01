@@ -2,10 +2,12 @@
 use dbbackup_config::schema::Notify as NotifyConfig;
 use dbbackup_core::{EncField, NotifyChannel};
 use dbbackup_scheduler::notify::{
-    email_placeholder_warning, CompositeSink, NotificationSink, RunEvent, RunOutcome,
+    email_placeholder_warning, CompositeSink, NotificationSink, RunEvent, RunOutcome, WebhookSink,
 };
+use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use time::OffsetDateTime;
 
 fn event() -> RunEvent {
@@ -65,6 +67,29 @@ fn email_routes_to_placeholder() {
     let warn = email_placeholder_warning("j");
     assert!(warn.contains("email"));
     assert!(warn.contains("구현되지 않음"));
+}
+
+#[tokio::test]
+async fn webhook_request_has_a_bounded_total_timeout() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    std::thread::spawn(move || {
+        let (_stream, _) = listener.accept().unwrap();
+        std::thread::sleep(Duration::from_secs(2));
+    });
+
+    let sink = WebhookSink::with_timeouts(
+        format!("http://{address}"),
+        Duration::from_millis(50),
+        Duration::from_millis(75),
+    )
+    .unwrap();
+    let started = Instant::now();
+
+    let result = sink.notify(&event()).await;
+
+    assert!(result.is_err());
+    assert!(started.elapsed() < Duration::from_secs(1));
 }
 
 // --- 채널 격리(T18): 한 sink가 항상 실패해도 다른 sink는 여전히 호출된다. ---

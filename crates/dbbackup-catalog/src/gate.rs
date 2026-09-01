@@ -78,13 +78,14 @@ pub fn verify_bytes(bytes: &[u8], verifier: &dyn ManifestVerifier) -> Result<Man
 }
 
 /// 복원/검증 직전 호출(S09 소비). 카탈로그 값이 아니라 목적지에서 새로 읽은 바이트만 신뢰한다(H5).
-pub fn load_and_verify_manifest_for_restore(
+pub async fn load_and_verify_manifest_for_restore(
     source: &dyn ManifestSource,
     verifier: &dyn ManifestVerifier,
     manifest_key: &str,
 ) -> Result<Manifest, GateError> {
     let bytes = source
         .read_bytes(manifest_key)
+        .await
         .map_err(|e| GateError::Io(e.to_string()))?;
     verify_bytes(&bytes, verifier)
 }

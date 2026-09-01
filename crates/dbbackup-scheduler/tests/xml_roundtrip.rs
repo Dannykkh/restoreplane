@@ -7,6 +7,7 @@ fn params(job: &str, schedule: ScheduleSpec) -> TaskXmlParams {
     TaskXmlParams {
         job_name: job.to_string(),
         exe_path: r"C:\Program Files\dbbackup\dbbackup.exe".to_string(),
+        config_path: r"C:\ProgramData\dbbackup\dbbackup.toml".to_string(),
         working_dir: r"C:\ProgramData\dbbackup".to_string(),
         service_account: r".\svc-dbbackup".to_string(),
         logon_type: LogonType::S4U,
@@ -76,6 +77,18 @@ fn daily_xml_contains_required_flags() {
     assert!(xml.contains("<ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>"));
     // S4U 기본 경로는 XML에 비밀번호가 없다.
     assert!(!xml.to_lowercase().contains("password>"));
+}
+
+#[test]
+fn scheduled_action_preserves_the_registered_config_path() {
+    let xml = render_task_xml(&params(
+        "nightly",
+        ScheduleSpec::Daily { hour: 3, minute: 0 },
+    ));
+
+    assert!(xml.contains(
+        r#"<Arguments>--config &quot;C:\ProgramData\dbbackup\dbbackup.toml&quot; run --job &quot;nightly&quot; --scheduled</Arguments>"#
+    ));
 }
 
 #[test]

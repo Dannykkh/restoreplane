@@ -12,19 +12,27 @@
 //! 편차: aws-sigv4 크레이트(빌더 API churn) 대신 hmac-sha256 수동 SigV4. path-style 주소만 사용
 //! (호환 provider 정합). XML 파싱은 경량 substring(호환 provider 필드 차이에 관대, R13).
 
+use std::time::Duration;
+
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
+use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
+use zeroize::Zeroizing;
 
 use crate::{ImmutabilityKind, S3Cfg, S3Error};
 
 type HmacSha256 = Hmac<Sha256>;
 
+const S3_HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+const S3_HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
+const MAX_S3_HTTP_RESPONSE_BODY_BYTES: usize = 64 * 1024;
+
 /// 자가테스트 관리 클라이언트(writer 자격증명으로 SigV4 서명).
 pub struct S3Admin {
     client: reqwest::Client,
-    access_key_id: String,
-    secret_access_key: String,
+    access_key_id: Zeroizing<String>,
+    secret_access_key: Zeroizing<String>,
     region: String,
     bucket: String,
     endpoint: String, // path-style 기준 base URL(스킴+호스트[:포트]). 비면 AWS 기본.
@@ -52,21 +60,52 @@ enum HttpErr {
     Transport(String),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ObjectLockStatus {
+    Unlocked,
+    LegalHold,
+    RetainedUntil(i64),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ObjectLockProbeError {
+    pub message: String,
+    pub retryable: bool,
+}
+
 impl S3Admin {
     pub fn new(cfg: &S3Cfg) -> Self {
-        let endpoint = if cfg.endpoint.is_empty() {
-            format!("https://s3.{}.amazonaws.com", cfg.region)
+        Self::from_credentials(
+            &cfg.endpoint,
+            &cfg.region,
+            &cfg.bucket,
+            &cfg.access_key_id,
+            &cfg.secret_access_key,
+            cfg.min_dwell_days,
+        )
+    }
+
+    pub(crate) fn from_credentials(
+        endpoint: &str,
+        region: &str,
+        bucket: &str,
+        access_key_id: &str,
+        secret_access_key: &str,
+        min_dwell_days: u32,
+    ) -> Self {
+        let endpoint = if endpoint.is_empty() {
+            format!("https://s3.{region}.amazonaws.com")
         } else {
-            cfg.endpoint.trim_end_matches('/').to_string()
+            endpoint.trim_end_matches('/').to_string()
         };
         S3Admin {
-            client: reqwest::Client::new(),
-            access_key_id: cfg.access_key_id.clone(),
-            secret_access_key: cfg.secret_access_key.clone(),
-            region: cfg.region.clone(),
-            bucket: cfg.bucket.clone(),
+            client: bounded_s3_http_client(),
+            access_key_id: Zeroizing::new(access_key_id.to_owned()),
+            secret_access_key: Zeroizing::new(secret_access_key.to_owned()),
+            region: region.to_owned(),
+            bucket: bucket.to_owned(),
             endpoint,
-            min_dwell_days: cfg.min_dwell_days,
+            min_dwell_days,
         }
     }
 
@@ -212,6 +251,51 @@ impl S3Admin {
         }
     }
 
+    pub(crate) async fn inspect_object_lock(
+        &self,
+        object_key: &str,
+        version: &str,
+    ) -> Result<ObjectLockStatus, ObjectLockProbeError> {
+        let path = format!("/{object_key}");
+        let encoded_version = uri_encode(version, true);
+        let legal_hold_query = format!("legal-hold=&versionId={encoded_version}");
+        match self
+            .send_signed(Method::Get, &path, &legal_hold_query, b"")
+            .await
+        {
+            Ok((_, body)) if body.contains("<Status>ON</Status>") => {
+                return Ok(ObjectLockStatus::LegalHold);
+            }
+            Ok(_) | Err(HttpErr::Status(404)) => {}
+            Err(error) => return Err(object_probe_error("GetObjectLegalHold", error)),
+        }
+
+        let retention_query = format!("retention=&versionId={encoded_version}");
+        match self
+            .send_signed(Method::Get, &path, &retention_query, b"")
+            .await
+        {
+            Ok((_, body)) => {
+                let Some(retain_until_ms) =
+                    parse_retain_until_ms(&body).map_err(|message| ObjectLockProbeError {
+                        message,
+                        retryable: false,
+                    })?
+                else {
+                    return Ok(ObjectLockStatus::Unlocked);
+                };
+                let now_ms = OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000;
+                if i128::from(retain_until_ms) > now_ms {
+                    Ok(ObjectLockStatus::RetainedUntil(retain_until_ms))
+                } else {
+                    Ok(ObjectLockStatus::Unlocked)
+                }
+            }
+            Err(HttpErr::Status(404)) => Ok(ObjectLockStatus::Unlocked),
+            Err(error) => Err(object_probe_error("GetObjectRetention", error)),
+        }
+    }
+
     /// SigV4(AWS4-HMAC-SHA256) path-style 서명 요청 전송. (status, body)를 반환.
     async fn send_signed(
         &self,
@@ -268,7 +352,7 @@ impl S3Admin {
 
         let authorization = format!(
             "AWS4-HMAC-SHA256 Credential={}/{scope}, SignedHeaders={signed_headers}, Signature={signature}",
-            self.access_key_id
+            self.access_key_id.as_str()
         );
 
         let url = if query.is_empty() {
@@ -286,12 +370,25 @@ impl S3Admin {
             .header("authorization", authorization)
             .body(body.to_vec());
 
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| HttpErr::Transport(e.to_string()))?;
+        let mut resp = req.send().await.map_err(http_transport_error)?;
         let status = resp.status().as_u16();
-        let text = resp.text().await.unwrap_or_default();
+        if resp
+            .content_length()
+            .is_some_and(|length| length > MAX_S3_HTTP_RESPONSE_BODY_BYTES as u64)
+        {
+            return Err(HttpErr::Transport(
+                "S3_HTTP_RESPONSE_BODY_TOO_LARGE".to_owned(),
+            ));
+        }
+        let mut response_body = Vec::with_capacity(
+            resp.content_length()
+                .unwrap_or(0)
+                .min(MAX_S3_HTTP_RESPONSE_BODY_BYTES as u64) as usize,
+        );
+        while let Some(chunk) = resp.chunk().await.map_err(http_transport_error)? {
+            append_bounded_response_chunk(&mut response_body, &chunk)?;
+        }
+        let text = String::from_utf8_lossy(&response_body).into_owned();
         if (200..300).contains(&status) {
             Ok((status, text))
         } else {
@@ -303,13 +400,79 @@ impl S3Admin {
 
     fn signing_key(&self, datestamp: &str) -> Vec<u8> {
         let k_date = hmac(
-            format!("AWS4{}", self.secret_access_key).as_bytes(),
+            format!("AWS4{}", self.secret_access_key.as_str()).as_bytes(),
             datestamp.as_bytes(),
         );
         let k_region = hmac(&k_date, self.region.as_bytes());
         let k_service = hmac(&k_region, b"s3");
         hmac(&k_service, b"aws4_request")
     }
+}
+
+fn bounded_s3_http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(S3_HTTP_CONNECT_TIMEOUT)
+        .timeout(S3_HTTP_REQUEST_TIMEOUT)
+        .build()
+        .expect("static bounded S3 HTTP client configuration")
+}
+
+fn http_transport_error(error: reqwest::Error) -> HttpErr {
+    let message = if error.is_timeout() && error.is_connect() {
+        "S3_HTTP_CONNECT_TIMEOUT".to_owned()
+    } else if error.is_timeout() {
+        "S3_HTTP_REQUEST_TIMEOUT".to_owned()
+    } else {
+        error.to_string()
+    };
+    HttpErr::Transport(message)
+}
+
+fn append_bounded_response_chunk(body: &mut Vec<u8>, chunk: &[u8]) -> Result<(), HttpErr> {
+    let next_len = body
+        .len()
+        .checked_add(chunk.len())
+        .ok_or_else(|| HttpErr::Transport("S3_HTTP_RESPONSE_BODY_TOO_LARGE".to_owned()))?;
+    if next_len > MAX_S3_HTTP_RESPONSE_BODY_BYTES {
+        return Err(HttpErr::Transport(
+            "S3_HTTP_RESPONSE_BODY_TOO_LARGE".to_owned(),
+        ));
+    }
+    body.extend_from_slice(chunk);
+    Ok(())
+}
+
+fn object_probe_error(operation: &str, error: HttpErr) -> ObjectLockProbeError {
+    match error {
+        HttpErr::Transport(message) => ObjectLockProbeError {
+            message: format!("{operation} transport failed: {message}"),
+            retryable: true,
+        },
+        HttpErr::Status(status) => ObjectLockProbeError {
+            message: format!("{operation} returned HTTP {status}"),
+            retryable: status == 408 || status == 429 || (500..=599).contains(&status),
+        },
+    }
+}
+
+fn parse_retain_until_ms(body: &str) -> Result<Option<i64>, String> {
+    let Some(value) = extract_xml_value(body, "RetainUntilDate") else {
+        return Ok(None);
+    };
+    let parsed = OffsetDateTime::parse(value, &Rfc3339)
+        .map_err(|error| format!("invalid GetObjectRetention date: {error}"))?;
+    let millis = parsed.unix_timestamp_nanos() / 1_000_000;
+    i64::try_from(millis)
+        .map(Some)
+        .map_err(|_| "GetObjectRetention date is outside the supported range".to_owned())
+}
+
+fn extract_xml_value<'a>(body: &'a str, field: &str) -> Option<&'a str> {
+    let start_tag = format!("<{field}>");
+    let end_tag = format!("</{field}>");
+    let start = body.find(&start_tag)? + start_tag.len();
+    let end = body[start..].find(&end_tag)? + start;
+    Some(body[start..end].trim())
 }
 
 #[derive(Clone, Copy)]
@@ -415,5 +578,25 @@ mod tests {
         };
         let admin = S3Admin::new(&cfg);
         assert_eq!(admin.signing_key("20260716"), admin.signing_key("20260716"));
+    }
+
+    #[test]
+    fn retention_admin_http_has_finite_connect_and_request_bounds() {
+        assert!(S3_HTTP_CONNECT_TIMEOUT > Duration::ZERO);
+        assert!(S3_HTTP_REQUEST_TIMEOUT > S3_HTTP_CONNECT_TIMEOUT);
+    }
+
+    #[test]
+    fn response_body_accumulator_rejects_a_chunk_before_exceeding_its_allocation_bound() {
+        let mut body = vec![b'a'; MAX_S3_HTTP_RESPONSE_BODY_BYTES];
+
+        let error = append_bounded_response_chunk(&mut body, b"b")
+            .expect_err("response above the retention probe cap");
+
+        assert!(matches!(
+            error,
+            HttpErr::Transport(message) if message == "S3_HTTP_RESPONSE_BODY_TOO_LARGE"
+        ));
+        assert_eq!(body.len(), MAX_S3_HTTP_RESPONSE_BODY_BYTES);
     }
 }

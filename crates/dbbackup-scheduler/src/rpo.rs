@@ -14,6 +14,7 @@ pub struct RpoNotice {
 
 fn target_interval_of(spec: &ScheduleSpec) -> Duration {
     match spec {
+        ScheduleSpec::Hourly { .. } => Duration::hours(1),
         ScheduleSpec::Daily { .. } => Duration::days(1),
         ScheduleSpec::Weekly { .. } => Duration::days(7),
     }

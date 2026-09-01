@@ -1,0 +1,64 @@
+flowchart TD
+    A["User runs: init"]
+    B["Prompt: Enter master password"]
+    C["Validate password strength"]
+    C_fail["Reject: weak password"]
+    C_ok["Continue"]
+
+    D["Generate random salt"]
+    E["Derive KEK via Argon2id<br/>m=64MiB, t=3, p=1"]
+    F["Generate random 32B DEK"]
+
+    G["Wrap DEK: Path 1 - Password<br/>chacha20poly1305 with KEK"]
+    H["Wrap DEK: Path 2 - Recovery Code<br/>Generate high-entropy code"]
+    I["Wrap DEK: Path 3 - DPAPI<br/>Machine-scope KEK storage"]
+
+    J["Display recovery code<br/>User confirms receipt<br/>code saved to clipboard"]
+    K["Require user confirm<br/>offline backup"]
+    K_fail["Abort: code not confirmed"]
+    K_ok["Continue"]
+
+    L["Generate offline ed25519<br/>signing key pair"]
+    M["Encrypt config secrets<br/>using DEK"]
+    N["Save wrapped DEK paths<br/>+ encrypted config to file"]
+
+    O["Test roundtrip:<br/>encrypt secret → decrypt → verify"]
+    O_fail["Fail: crypto error"]
+    O_ok["Success"]
+
+    P["Register DPAPI KEK<br/>to OS keystore"]
+    Q["Display completion summary"]
+    R["Success: keys initialized"]
+
+    C -->|Valid| C_ok
+    C -->|Weak| C_fail
+    C_fail --> B
+
+    C_ok --> D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+    H --> I
+    I --> J
+    J --> K
+    K -->|Not confirmed| K_fail
+    K -->|Confirmed| K_ok
+
+    K_ok --> L
+    L --> M
+    M --> N
+    N --> O
+    O -->|Failed| O_fail
+    O_fail --> B
+    O -->|Passed| O_ok
+
+    O_ok --> P
+    P --> Q
+    Q --> R
+
+    style A fill:#e1f5ff
+    style R fill:#c8e6c9
+    style C_fail fill:#ffcdd2
+    style K_fail fill:#ffcdd2
+    style O_fail fill:#ffcdd2

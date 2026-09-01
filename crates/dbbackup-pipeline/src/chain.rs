@@ -151,7 +151,8 @@ impl Drop for FinishGuard {
 // 쓰기 방향: 평문 → HashingWriter(tee) → zstd → StreamEncrypt → BufWriter<File>(스풀)
 // ---------------------------------------------------------------------
 type Spool = BufWriter<std::fs::File>;
-type EncW = StreamEncryptWriter<Spool>;
+type CipherW = HashingWriter<Spool>;
+type EncW = StreamEncryptWriter<CipherW>;
 type ZstdW = zstd::stream::write::Encoder<'static, EncW>;
 type ChainW = HashingWriter<ZstdW>;
 
@@ -165,7 +166,7 @@ impl EncryptChain {
         // 조립은 스트림 복사 이전이라 `?` 허용(아직 커밋 구간 아님).
         let file = std::fs::File::create(spool_path)?;
         let spool: Spool = BufWriter::new(file);
-        let enc_w: EncW = StreamEncryptWriter::new(spool, dek);
+        let enc_w: EncW = StreamEncryptWriter::new(HashingWriter::new(spool), dek);
         let zstd_w: ZstdW = zstd::stream::write::Encoder::new(enc_w, zstd_level)?;
         Ok(Self {
             tee: Some(HashingWriter::new(zstd_w)),
@@ -179,21 +180,30 @@ impl EncryptChain {
     }
 
     /// finish inner→outer + flush + fsync. R3/R4 준수 — 실패는 전부 Err로 수렴시켜
-    /// 호출부가 스풀을 삭제하게 한다. 반환: (평문 blake3, 평문 바이트, 암호문 바이트).
-    pub fn commit(mut self) -> anyhow::Result<([u8; 32], u64, u64)> {
+    /// 호출부가 스풀을 삭제하게 한다. 반환: (평문 blake3, 암호문 blake3, 평문 바이트, 암호문 바이트).
+    pub fn commit(mut self) -> anyhow::Result<([u8; 32], [u8; 32], u64, u64)> {
         let tee = self.tee.take().expect("chain committed twice");
-        let (hash, plain_bytes, zstd_w) = tee.finalize(); // 평문 해시 확정
-                                                          // ---- inner→outer, 명시적 finish (P0-2) ----
+        let (plaintext_hash, plain_bytes, zstd_w) = tee.finalize(); // 평문 해시 확정
+                                                                    // ---- inner→outer, 명시적 finish (P0-2) ----
         let enc_w = zstd_w.finish()?; // (1) zstd 프레임 마감
-        let spool = enc_w.finish()?; // (2) STREAM 마지막 태그 기록
+        let ciphertext_tee = enc_w.finish()?; // (2) STREAM 마지막 태그 기록
+        let (ciphertext_hash, ciphertext_bytes, spool) = ciphertext_tee.finalize();
         let mut file = spool
             .into_inner()
             .map_err(|e| anyhow::anyhow!("스풀 flush 실패: {e}"))?;
         file.flush()?;
         file.sync_all()?; // (3) fsync
-        let ciphertext_bytes = file.metadata()?.len();
+        anyhow::ensure!(
+            file.metadata()?.len() == ciphertext_bytes,
+            "ciphertext byte counter does not match committed spool length"
+        );
         self.guard.mark(); // 여기까지 오면 커밋 성공
-        Ok((hash, plain_bytes, ciphertext_bytes))
+        Ok((
+            plaintext_hash,
+            ciphertext_hash,
+            plain_bytes,
+            ciphertext_bytes,
+        ))
     }
 
     /// 복사 실패 시: finish 무의미하므로 guard만 mark하고 drop(파일 삭제는 상위 정리 경로).

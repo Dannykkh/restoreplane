@@ -1,48 +1,70 @@
 // S08 — catalog rebuild --from <dest> 배선.
-// 목적지(로컬 경로)에 동봉된 서명 매니페스트만으로 SQLite 카탈로그를 재구성한다(P0-6).
-// 서명 공개키는 config에 아직 핀되기 전(슬라이스 1)이라 매니페스트 동봉키로 TOFU 검증한다.
-use std::path::{Path, PathBuf};
+// Local/S3/SSH 목적지에 동봉된 서명 매니페스트만으로 SQLite 카탈로그를 재구성한다(P0-6).
+// 키스토어에 핀된 공개키를 사용하며, 원격 읽기는 writer와 분리된 reader 신원만 허용한다.
+use std::path::Path;
 
-use dbbackup_catalog::{
-    catalog_rebuild, CatalogWriterHandle, EmbeddedKeyVerifier, LocalManifestSource, RebuildArgs,
-};
+use dbbackup_catalog::{catalog_rebuild, CatalogWriterHandle, PinnedKeyVerifier, RebuildArgs};
+use dbbackup_secrets::{DekEncryptor, Keystore};
 
 use crate::cli::CatalogAction;
+use crate::commands::{
+    keystore_util,
+    manifest_source::{build_manifest_source, select_manifest_source},
+    run::FIELD_WRAP_GEN,
+};
 
 pub fn run(config_path: &Path, action: CatalogAction) -> anyhow::Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    rt.block_on(run_async(config_path, action))
+}
+
+async fn run_async(config_path: &Path, action: CatalogAction) -> anyhow::Result<()> {
     let config = dbbackup_config::Config::load(config_path)?;
+    dbbackup_config::validate(&config).map_err(|errs| anyhow::anyhow!("{errs:?}"))?;
     match action {
         CatalogAction::Rebuild(args) => {
-            // --from은 슬라이스 1에서 로컬 목적지 루트 경로로 해석한다(S3/SSH는 후속 슬라이스).
-            let from_root = PathBuf::from(&args.from_destination);
-            if !from_root.exists() {
+            let source_spec = select_manifest_source(&config, &args.from_destination)?;
+
+            let ks_path = keystore_util::keystore_path(config_path);
+            if !Keystore::exists(&ks_path) {
                 anyhow::bail!(
-                    "목적지 경로 '{}'가 존재하지 않습니다(슬라이스 1 rebuild는 로컬 경로만 지원)",
-                    from_root.display()
+                    "키스토어가 없습니다({}) — 먼저 `dbbackup init`.",
+                    ks_path.display()
                 );
             }
+            let keystore = Keystore::load(&ks_path)?;
+            let verifier = PinnedKeyVerifier::new(keystore.verifying_key()?);
+
+            // 로컬 rebuild는 공개키만 필요하다. 원격일 때만 KEK를 열어 reader 시크릿을 복호화한다.
+            let field_enc = if source_spec.requires_secret_decryption() {
+                let cred = keystore_util::resolve_unlock_credential(false, true)?;
+                let kek = keystore
+                    .unlock_kek(&cred)
+                    .map_err(|e| anyhow::anyhow!("KEK unlock 실패(자격증명 확인): {e}"))?;
+                Some(DekEncryptor::new(kek, FIELD_WRAP_GEN))
+            } else {
+                None
+            };
+            let source = build_manifest_source(&source_spec, field_enc.as_ref())?;
 
             let spool_dir = &config.policy.spool_dir;
             std::fs::create_dir_all(spool_dir)?;
             let db_path = spool_dir.join("catalog.db");
 
-            tracing::warn!(
-                "서명 공개키가 config에 핀되기 전이라 매니페스트 동봉키로 TOFU 검증합니다(슬라이스 1)."
-            );
-
-            let source = LocalManifestSource::new(&from_root);
-            let verifier = EmbeddedKeyVerifier;
             let writer = CatalogWriterHandle::spawn(db_path.clone())?;
             let report = catalog_rebuild(
-                &source,
+                source.as_ref(),
                 &verifier,
                 &writer,
                 RebuildArgs {
-                    dest_name: args.from_destination.clone(),
-                    dest_kind: "local".to_string(),
+                    dest_name: source_spec.name().to_string(),
+                    dest_kind: source_spec.kind().to_string(),
                     ..Default::default()
                 },
-            )?;
+            )
+            .await?;
 
             println!(
                 "카탈로그 재구성 완료({}): 반영 {}건, 거부(미서명/변조) {}건",

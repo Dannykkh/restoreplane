@@ -14,6 +14,8 @@ pub mod asserts;
 pub mod cadence;
 pub mod decrypt;
 pub mod inputs;
+pub mod l1_v2;
+pub mod policy;
 pub mod record;
 pub mod restorer;
 pub mod sandbox;
@@ -24,6 +26,13 @@ pub mod verify;
 pub use cadence::{levels_due, CadenceInput, WEEKLY_SECONDS};
 pub use decrypt::{decrypt_and_decompress_bytes, materialize_dump, PlaintextDump};
 pub use inputs::{load_trusted_inputs, RestoreInputError, RestoreInputs};
+pub use l1_v2::{
+    verify_l1_from_reader_v2, L1PartEvidenceV2, L1V2Error, L1VerificationReportV2,
+    L1VerifyLimitsV2, PartDekProviderV2, SingleDekProviderV2,
+};
+pub use policy::{
+    RequestedVerificationLevel, VerificationPolicy, VerificationPolicyError, VerificationSchedule,
+};
 pub use record::record_verification;
 pub use restorer::{RestoreOutcome, RestoreTarget, Restorer};
 pub use sandbox::{ImagePolicy, Sandbox, SandboxSpec};

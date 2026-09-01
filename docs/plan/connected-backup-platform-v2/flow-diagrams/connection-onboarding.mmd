@@ -1,0 +1,19 @@
+flowchart TD
+    start([연결 추가 시작]) --> enterProfile[서버 프로필과 인증 방식 입력]
+    enterProfile --> saveSecret[Secret Store에 자격 증명 저장]
+    saveSecret --> createConnection[Operational Store에 Connection과 Secret Ref 저장]
+    createConnection --> runProbe[비파괴 연결 Probe 실행]
+    runProbe --> probeOk{Probe 성공?}
+    probeOk -- 아니요 --> recordFailure[Probe Result와 Attention State 기록]
+    recordFailure --> showAction[원인과 재시도 동작 표시]
+    showAction --> endFailed([연결은 비활성 상태로 보존])
+    probeOk -- 예 --> discoverTargets[데이터베이스와 기능 Capability 탐색]
+    discoverTargets --> discoveryChanged{기존 탐색 결과와 차이?}
+    discoveryChanged -- 예 --> recordDrift[Discovery Drift 기록]
+    discoveryChanged -- 아니요 --> keepProjection[기존 Target projection 유지]
+    recordDrift --> chooseTargets[보호할 Target 선택]
+    keepProjection --> chooseTargets
+    chooseTargets --> profileReady([Connection 사용 가능])
+
+    %% IPC: connection.create, connection.probe, connection.discover
+    %% Domain: Connection, SecretRef, ProbeResult, Target, DiscoveryDrift

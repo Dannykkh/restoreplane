@@ -1,0 +1,22 @@
+flowchart TD
+    tick([Scheduler tick]) --> loadDue[활성 Plan Revision의 due 계산]
+    loadDue --> upsertOccurrence[Plan Occurrence 멱등 생성]
+    upsertOccurrence --> occurrenceExists{이미 terminal 또는 queued?}
+    occurrenceExists -- 예 --> noDuplicate([중복 enqueue 없이 종료])
+    occurrenceExists -- 아니요 --> createWork[Target별 Backup Work Item 생성]
+    createWork --> reserveResources{전역·호스트·CPU·목적지·Spool 허용?}
+    reserveResources -- 아니요 --> deferWork[원인과 next eligible time 기록]
+    deferWork --> queueWait([queued 상태 유지])
+    reserveResources -- 예 --> claimAttempt[Lease와 Fencing Token으로 Attempt claim]
+    claimAttempt --> launchProcess[Process Supervisor가 native tool 실행]
+    launchProcess --> heartbeat[Lease heartbeat와 진행률 기록]
+    heartbeat --> processExit{프로세스 종료 결과}
+    processExit -- 성공 --> stageArtifacts[Artifact Part와 Manifest 후보 staging]
+    stageArtifacts --> commitFlow([Recovery Point commit 흐름])
+    processExit -- 재시도 가능 --> releaseAndRetry[permit 해제 후 backoff 재시도]
+    releaseAndRetry --> createWork
+    processExit -- terminal --> recordTerminal[실패 Activity와 Attention State 기록]
+    recordTerminal --> failed([실패 종료])
+
+    %% Runtime: dispatcher.claim, resource admission, supervisor.spawn, heartbeat
+    %% Invariant: Attempt는 중복될 수 있으나 Occurrence의 complete Recovery Point는 최대 하나

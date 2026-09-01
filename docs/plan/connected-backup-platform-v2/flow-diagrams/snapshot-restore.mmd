@@ -1,0 +1,25 @@
+flowchart TD
+    selectSnapshot([Snapshot 선택]) --> loadEligibility[Recovery Point와 Replica eligibility 조회]
+    loadEligibility --> eligible{complete이며 적격 Replica가 있는가?}
+    eligible -- 아니요 --> blockRestore[복원 차단과 repair 안내]
+    blockRestore --> stopped([복원 시작 안 함])
+    eligible -- 예 --> chooseMode[검증·새 DB·overwrite 모드 선택]
+    chooseMode --> overwrite{기존 자원을 덮어쓰는가?}
+    overwrite -- 예 --> issueToken[대상과 만료가 묶인 confirmation token 발급]
+    overwrite -- 아니요 --> runPreflight[Restore Preflight 실행]
+    issueToken --> confirmIdentity{입력한 대상 identity와 token이 일치?}
+    confirmIdentity -- 아니요 --> stopped
+    confirmIdentity -- 예 --> runPreflight
+    runPreflight --> preflightOk{도구·공간·권한·연결·호환성 통과?}
+    preflightOk -- 아니요 --> recordPreflight[실패 보고서와 해결 동작 기록]
+    recordPreflight --> stopped
+    preflightOk -- 예 --> createRestore[Restore Work Item 생성]
+    createRestore --> executeRestore[Process Supervisor가 격리된 복원 실행]
+    executeRestore --> verifyResult[구조·데이터·engine-specific 검증]
+    verifyResult --> verified{검증 통과?}
+    verified -- 아니요 --> markAttention[복원 실패 또는 검증 실패 Attention 기록]
+    verified -- 예 --> success([Restore Run 성공과 감사 Activity])
+    markAttention --> failed([복원 결과 보존, 성공으로 표시하지 않음])
+
+    %% IPC: snapshot.get, restore.preflight, confirmation.issue, restore.start
+    %% Safety: overwrite는 SID, target identity, action, expiry에 바인딩

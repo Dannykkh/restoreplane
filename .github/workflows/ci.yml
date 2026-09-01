@@ -8,17 +8,25 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
+  RUST_MSRV: "1.91.0"
+  RUST_TOOLCHAIN: "1.97.0"
 
 jobs:
   test:
     name: fmt / clippy / test (windows)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
+          toolchain: ${{ env.RUST_MSRV }}
+      - name: MSRV check
+        run: cargo +${{ env.RUST_MSRV }} check --workspace --all-targets --locked
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
       - name: fmt
         run: cargo fmt --all --check
       - name: clippy
@@ -26,31 +34,107 @@ jobs:
       - name: test
         run: cargo test --workspace
         # 인프라 게이트(#[ignore])는 CI에서 실행하지 않는다: L2 pg_restore / L3 Docker / 라이브 S3·SSH.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/console/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci --prefix apps/console
+      - name: Frontend tests
+        run: npm test --prefix apps/console
+      - name: Frontend production build
+        run: npm run build --prefix apps/console
+      - name: Windows install lifecycle contracts
+        shell: powershell
+        run: .\scripts\tests\install-lifecycle.Tests.ps1
+      - name: Selective scope pipeline contracts
+        shell: powershell
+        run: .\scripts\tests\test-selective-scopes.Tests.ps1
+      - name: G5 release matrix contracts
+        shell: powershell
+        run: .\scripts\tests\test-release-matrix.Tests.ps1
+      - name: Release policy contracts
+        shell: powershell
+        run: .\scripts\tests\check-release-policy.Tests.ps1
+      - name: G0 collector contract tests
+        shell: powershell
+        run: .\scripts\tests\collect-g0-evidence.Tests.ps1
+      - name: G0 truth contract tests
+        shell: powershell
+        run: .\scripts\tests\check-g0-truth.Tests.ps1
+      - name: Collect G0 evidence
+        if: always()
+        shell: powershell
+        run: .\scripts\collect-g0-evidence.ps1
+      - name: Check G0 truth and evidence
+        if: always()
+        shell: powershell
+        run: .\scripts\check-g0-truth.ps1 -EvidencePath artifacts/g0/evidence.json
+      - name: Upload G0 evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: g0-evidence-${{ github.run_id }}
+          path: artifacts/g0
+          if-no-files-found: warn
+          retention-days: 14
+      - name: S03 collector contract tests
+        shell: powershell
+        run: .\scripts\tests\collect-s03-evidence.Tests.ps1
+      - name: Collect S03 evidence
+        if: always()
+        shell: powershell
+        run: .\scripts\collect-s03-evidence.ps1
+      - name: Upload S03 evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: s03-evidence-${{ github.run_id }}
+          path: artifacts/s03
+          if-no-files-found: warn
+          retention-days: 14
+      - name: S05 collector contract tests
+        shell: powershell
+        run: .\scripts\tests\collect-s05-evidence.Tests.ps1
+      - name: Collect S05 evidence
+        if: always()
+        shell: powershell
+        run: .\scripts\collect-s05-evidence.ps1
+      - name: Upload S05 evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: s05-evidence-${{ github.run_id }}
+          path: artifacts/s05
+          if-no-files-found: warn
+          retention-days: 14
 
   supply-chain:
     name: cargo-deny / cargo-audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
       - name: cargo-deny
-        uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          command: check
+        run: |
+          cargo install cargo-deny --version 0.20.2 --locked
+          cargo deny check
       - name: cargo-audit
         run: |
-          cargo install cargo-audit --locked
-          # ignore 근거는 audit.toml 참조(수정본 없음 + 우리 경로 비해당).
-          cargo audit --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2026-0097
+          cargo install cargo-audit --version 0.22.2 --locked
+          # 예외 근거는 audit.toml 참조(수정본 없음 + 우리 경로 비해당).
+          cargo audit
 
   secret-scan:
     name: gitleaks (누출 시크릿 차단)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

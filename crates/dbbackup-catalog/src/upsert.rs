@@ -18,6 +18,8 @@ fn engine_str(e: &Engine) -> &'static str {
         Engine::Postgresql => "postgresql",
         Engine::Mysql => "mysql",
         Engine::Mariadb => "mariadb",
+        Engine::Sqlserver => "sqlserver",
+        Engine::Sqlite => "sqlite",
     }
 }
 

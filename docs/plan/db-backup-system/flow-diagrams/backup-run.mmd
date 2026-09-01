@@ -1,0 +1,113 @@
+flowchart TD
+    A["User runs: backup --db X"]
+
+    B["Phase 1: Plan"]
+    B1["List databases + globals"]
+    B2["Engine scan MySQL:<br/>detect MyISAM"]
+    B3["Generate DumpPlan<br/>1..N parts + globals"]
+
+    C["Phase 2: Version Check"]
+    C1["Query server version"]
+    C2["Check: client_version >= server_major"]
+    C2_fail["HARD FAIL: version mismatch"]
+    C2_ok["Continue"]
+
+    D["Phase 3: Execute Dump"]
+    D1["Spawn pg_dump/mysqldump<br/>Stream or Directory artifact"]
+    D2a["Stream: pg_dump -Fc -f -"]
+    D2b["Directory: mydumper → tar"]
+
+    E["Phase 4: Crypto Pipeline"]
+    E1["Dump stdout → blake3 tee<br/>plaintext hash, record bytes"]
+    E2["blake3 tee → zstd Encoder<br/>level=3"]
+    E3["zstd → age StreamWriter<br/>per-backup DEK"]
+    E4["age → local spool file<br/>atomic write"]
+
+    F["Phase 5: Commit Protocol"]
+    F1["Check child exit code"]
+    F1_fail["Exit code nonzero<br/>or fatal stderr pattern"]
+    F1_ok["Exit code OK"]
+
+    F2["Finish inner→outer:<br/>zstd.finish() → age.finish()"]
+    F3["Flush spool file"]
+    F4["No early-return:<br/>atomicity gate"]
+
+    G["Phase 6: Manifest + Sign"]
+    G1["Generate manifest JSON:<br/>all domain fields"]
+    G2["Sign manifest<br/>offline ed25519 privkey"]
+    G3["Append signature block"]
+
+    H["Phase 7: Parallel Upload"]
+    H1["JoinSet fanout to<br/>S3, SSH, Local"]
+    H2a["S3: multipart upload<br/>Object Lock Governance<br/>checksum_algorithm"]
+    H2b["SSH: russh SFTP<br/>host-key pinned"]
+    H2c["Local: spool is dest"]
+    H3["Per-destination retry loop"]
+
+    I["Upload Results"]
+    I1["All succeeded"]
+    I2["Partial success<br/>retry incomplete"]
+    I3["All failed"]
+
+    J["Phase 8: Catalog"]
+    J1["Record to SQLite catalog:<br/>backups, artifacts rows"]
+    J2["Manifest as truth source"]
+
+    K["Phase 9: Auto Verify"]
+    K1["L1 Verify: plaintext hash"]
+    K2["L2 Verify: pg_restore --list"]
+    K3["Skip L3 verify:<br/>defer to scheduled verify"]
+
+    L["Success: backup complete"]
+    L_partial["Partial: retry pending"]
+    L_fail["Fail: report exit code"]
+
+    A --> B
+    B --> B1 --> B2 --> B3
+    B3 --> C
+    C --> C1 --> C2
+    C2 -->|Mismatch| C2_fail
+    C2 -->|OK| C2_ok
+    C2_ok --> D
+
+    D --> D1
+    D1 --> D2a
+    D1 --> D2b
+    D2a --> E1
+    D2b --> E1
+
+    E1 --> E2 --> E3 --> E4
+    E4 --> F1
+    F1 -->|Nonzero| F1_fail
+    F1 -->|OK| F1_ok
+    F1_ok --> F2 --> F3 --> F4
+    F4 --> G1 --> G2 --> G3
+    G3 --> H1
+    H1 --> H2a
+    H1 --> H2b
+    H1 --> H2c
+    H2a --> H3
+    H2b --> H3
+    H2c --> H3
+    H3 --> I
+
+    I -->|All OK| I1
+    I -->|Partial| I2
+    I -->|All fail| I3
+
+    I1 --> J1 --> J2
+    I2 --> J1
+
+    J2 --> K1 --> K2 --> K3
+    K3 --> L
+    I2 --> L_partial
+    C2_fail --> L_fail
+    F1_fail --> L_fail
+    I3 --> L_fail
+
+    style A fill:#e1f5ff
+    style L fill:#c8e6c9
+    style L_partial fill:#fff9c4
+    style L_fail fill:#ffcdd2
+    style C2_fail fill:#ffcdd2
+    style F1_fail fill:#ffcdd2

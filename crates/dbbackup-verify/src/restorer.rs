@@ -30,9 +30,9 @@ pub struct Restorer<'a> {
 }
 
 impl<'a> Restorer<'a> {
-    /// 목적지에서 매니페스트가 가리키는 암호문 오브젝트를 읽는다(슬라이스 1: 로컬 파일).
+    /// 목적지에서 매니페스트가 가리키는 암호문 오브젝트를 읽는다.
     pub async fn read_cipher(&self, m: &Manifest) -> anyhow::Result<Vec<u8>> {
-        self.source.read_bytes(&m.spool_object)
+        self.source.read_bytes(&m.spool_object).await
     }
 
     /// 암호문 → 복호 평문 → PlaintextDump.

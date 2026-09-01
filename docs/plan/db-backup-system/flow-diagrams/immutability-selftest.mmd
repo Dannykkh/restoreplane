@@ -1,0 +1,86 @@
+flowchart TD
+    A["Start backup run"]
+    B["Load append-only<br/>credentials from config"]
+
+    C["Create probe key name:<br/>_immutability_probe_TIMESTAMP"]
+    D["Create probe test object<br/>in destination"]
+
+    E["Test 1: DeleteObject"]
+    E1["Attempt: delete probe key<br/>with current credentials"]
+    E2["Expect: Access Denied"]
+    E_pass["PASS: Deny confirmed"]
+    E_fail["FAIL: delete succeeded<br/>Over-privileged!"]
+
+    F["Test 2: PutLifecycle"]
+    F1["Attempt: set lifecycle rule<br/>with current credentials"]
+    F2["Expect: Access Denied"]
+    F_pass["PASS: Deny confirmed"]
+    F_fail["FAIL: lifecycle succeeded<br/>Over-privileged!"]
+
+    G["Test 3: Versioning Check"]
+    G1["Query bucket config"]
+    G2["Assert: Versioning enabled"]
+    G2_pass["PASS: versioning ON"]
+    G2_fail["FAIL: versioning disabled<br/>Bucket not locked!"]
+
+    H["Test 4: Retention Check"]
+    H1["Query default retention<br/>or governance config"]
+    H2["Assert: retention configured"]
+    H2_pass["PASS: retention set"]
+    H2_fail["WARN: no default retention<br/>manual retention required"]
+
+    I["Cleanup probe key"]
+
+    J["All tests passed"]
+    K["Issues detected"]
+
+    L["Log: immutability OK<br/>Proceed with backup"]
+    M["Log WARN: over-privileged<br/>or config issue"]
+    N["Refuse run or loud alert"]
+
+    A --> B --> C --> D
+
+    D --> E
+    E --> E1
+    E1 --> E2
+    E2 -->|Access Denied| E_pass
+    E2 -->|Success| E_fail
+
+    E_pass --> F
+    E_fail --> K
+
+    F --> F1
+    F1 --> F2
+    F2 -->|Access Denied| F_pass
+    F2 -->|Success| F_fail
+
+    F_pass --> G
+    F_fail --> K
+
+    G --> G1 --> G2
+    G2 -->|Enabled| G2_pass
+    G2 -->|Disabled| G2_fail
+
+    G2_pass --> H
+    G2_fail --> K
+
+    H --> H1 --> H2
+    H2 -->|Configured| H2_pass
+    H2 -->|Not set| H2_fail
+
+    H2_pass --> I
+    H2_fail --> I
+
+    I --> J
+    K --> M
+
+    J --> L
+    M --> N
+
+    style A fill:#e1f5ff
+    style L fill:#c8e6c9
+    style N fill:#ffcdd2
+    style E_fail fill:#fff3e0
+    style F_fail fill:#fff3e0
+    style G2_fail fill:#fff3e0
+    style H2_fail fill:#fff3e0

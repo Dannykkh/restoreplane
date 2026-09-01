@@ -19,16 +19,20 @@
 //! - russh-sftp는 stream-agnostic: `SftpSession::new(channel.into_stream())`.
 
 pub mod connect;
+pub mod delete;
 pub mod dest;
 pub mod handler;
 pub mod hostkey;
+pub mod source;
 pub mod tunnel;
 
 #[cfg(test)]
 mod dest_caps_tests;
 
 pub use connect::{ssh_connect, SshAuth};
+pub use delete::{SshDeleteCfg, SshDeleteConfigError, SshDeleteOperatorV2};
 pub use dest::SshDest;
 pub use handler::PinnedClientHandler;
 pub use hostkey::{fingerprints_match, HostKeyError, HostKeyPolicy};
+pub use source::{manifest_relative_key, SshManifestSource, SshReaderCfg};
 pub use tunnel::{open_tunnel, TunnelHandle};

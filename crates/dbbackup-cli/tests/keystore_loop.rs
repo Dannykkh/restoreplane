@@ -93,7 +93,7 @@ async fn verify_l1(
 ) -> anyhow::Result<VerifyResult> {
     let source = LocalManifestSource::new(spool_dir);
     let verifier = PinnedKeyVerifier::new(keystore.verifying_key().unwrap());
-    let inputs = load_trusted_inputs(&source, &verifier, key)?; // 서명 게이트
+    let inputs = load_trusted_inputs(&source, &verifier, key).await?; // 서명 게이트
     let wrap_set = inputs.wrap_set.as_ref().expect("매니페스트에 WrapSet 동봉");
     let kek = keystore.unlock_kek(cred)?;
     let dek = keystore.unwrap_dek(&kek, wrap_set)?;
@@ -187,7 +187,7 @@ async fn tampered_manifest_rejected_before_decrypt() {
 
     let source = LocalManifestSource::new(&spool_dir);
     let verifier = PinnedKeyVerifier::new(keystore.verifying_key().unwrap());
-    let res = load_trusted_inputs(&source, &verifier, &key);
+    let res = load_trusted_inputs(&source, &verifier, &key).await;
     assert!(
         res.is_err(),
         "변조 매니페스트는 게이트에서 거부(복호 이전, C3)"
@@ -207,7 +207,9 @@ async fn restore_decrypt_only_reproduces_bytes() {
 
     let source = LocalManifestSource::new(&spool_dir);
     let verifier = PinnedKeyVerifier::new(keystore.verifying_key().unwrap());
-    let inputs = load_trusted_inputs(&source, &verifier, &key).expect("게이트 통과");
+    let inputs = load_trusted_inputs(&source, &verifier, &key)
+        .await
+        .expect("게이트 통과");
 
     let kek = keystore
         .unlock_kek(&Credential::Password(Zeroizing::new(TEST_PW.to_string())))

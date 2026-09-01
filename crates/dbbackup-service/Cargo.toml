@@ -1,0 +1,56 @@
+[package]
+name = "dbbackup-service"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = "0.1"
+blake3 = "=1.5.5"
+base64 = { workspace = true }
+dbbackup-application = { path = "../dbbackup-application" }
+dbbackup-catalog = { path = "../dbbackup-catalog" }
+dbbackup-core = { path = "../dbbackup-core" }
+dbbackup-dest-s3 = { path = "../dbbackup-dest-s3" }
+dbbackup-dest-ssh = { path = "../dbbackup-dest-ssh" }
+dbbackup-domain = { path = "../dbbackup-domain" }
+dbbackup-pipeline = { path = "../dbbackup-pipeline" }
+dbbackup-runtime = { path = "../dbbackup-runtime" }
+dbbackup-scheduler = { path = "../dbbackup-scheduler" }
+dbbackup-secrets = { path = "../dbbackup-secrets" }
+dbbackup-source-mysql = { path = "../dbbackup-source-mysql" }
+dbbackup-source-pg = { path = "../dbbackup-source-pg" }
+dbbackup-source-sqlite = { path = "../dbbackup-source-sqlite" }
+ed25519-dalek = "=2.2.0"
+fs2 = "=0.4.3"
+sha2 = "=0.10.8"
+serde = { workspace = true }
+serde_json = "1"
+rand = "=0.8.5"
+subtle = "=2.6.1"
+tar = "=0.4.45"
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { version = "=1.11.0", features = ["v4"] }
+zeroize = { version = "=1.9.0", features = ["derive"] }
+zstd = "=0.13.3"
+tokio = { version = "=1.52.3", features = ["io-util", "net", "rt-multi-thread", "macros", "sync", "time"] }
+
+[dev-dependencies]
+dbbackup-config = { path = "../dbbackup-config" }
+tempfile = "=3.14.0"
+
+[target.'cfg(windows)'.dependencies]
+windows-service = "=0.8.1"
+windows = { version = "=0.58.0", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_Security_Cryptography",
+  "Win32_System_Pipes",
+  "Win32_System_SystemServices",
+  "Win32_System_Threading",
+] }

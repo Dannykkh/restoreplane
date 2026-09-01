@@ -19,7 +19,9 @@ use std::sync::Arc;
 
 use dbbackup_catalog::{upsert_backup_from_manifest, CatalogWriterHandle};
 use dbbackup_config::Config;
-use dbbackup_core::{ChecksumAlgo, DestKind, Engine, ImmutabilityCapability, ObjectLockMode};
+use dbbackup_core::{
+    ChecksumAlgo, DestKind, Engine, ImmutabilityCapability, NotifyChannel, ObjectLockMode,
+};
 use dbbackup_dest_s3::{S3Cfg, S3Dest, S3Provider};
 use dbbackup_dest_ssh::{HostKeyPolicy, SshAuth, SshDest};
 use dbbackup_pipeline::{
@@ -27,9 +29,16 @@ use dbbackup_pipeline::{
     BackupSource, Destination, DumpPlanPart, ImmutabilityKind, LocalDest, Manifest, PipelineCfg,
     RequiredImmutability,
 };
+use dbbackup_scheduler::{
+    parse_cron_subset, run_scheduled_job, CompositeSink, JobResult, JobRunner, SchedulerContext,
+    EXIT_SUCCESS,
+};
 use dbbackup_secrets::{Dek, DekEncryptor, Keystore};
 use dbbackup_source_mysql::{
-    binary::MysqldumpBinaryMatrix, dump::MySqlConnCfg, meta::MysqlCliMetaConn, MySqlSource,
+    binary::{ClientKind, MysqldumpBinaryMatrix},
+    dump::MySqlConnCfg,
+    meta::MysqlCliMetaConn,
+    MySqlSource,
 };
 use dbbackup_source_pg::{version::BundledToolMatrix, PgConnCfg, PostgresSource};
 use ed25519_dalek::SigningKey;
@@ -42,7 +51,14 @@ use crate::commands::keystore_util;
 /// 달라지면 rotate-key 대상 식별이 어긋난다(core::EncField P2-1).
 pub const FIELD_WRAP_GEN: u32 = 1;
 
-pub fn run(config_path: &Path, args: RunArgs) -> anyhow::Result<()> {
+pub fn run(config_path: &Path, args: RunArgs) -> anyhow::Result<i32> {
+    if !args.dry_run {
+        crate::commands::direct_execution_guard::enforce()?;
+    }
+    run_after_execution_authority_check(config_path, args)
+}
+
+fn run_after_execution_authority_check(config_path: &Path, args: RunArgs) -> anyhow::Result<i32> {
     let config = Config::load(config_path)?;
     dbbackup_config::validate(&config).map_err(|errs| anyhow::anyhow!("{errs:?}"))?;
 
@@ -51,6 +67,7 @@ pub fn run(config_path: &Path, args: RunArgs) -> anyhow::Result<()> {
         .iter()
         .filter(|j| j.enabled)
         .filter(|j| args.db.as_deref().is_none_or(|db| j.source == db))
+        .filter(|j| args.job.as_deref().is_none_or(|name| j.name == name))
         .cloned()
         .collect();
 
@@ -58,14 +75,25 @@ pub fn run(config_path: &Path, args: RunArgs) -> anyhow::Result<()> {
         anyhow::bail!("no matching enabled jobs for --db={:?}", args.db);
     }
 
+    // 모든 cron을 실행 준비 전에 검증한다. 다중 job 중 뒤쪽 cron 오류 때문에 앞쪽 백업만
+    // 실행된 뒤 중단되는 부분 실행을 방지한다.
+    let jobs = jobs
+        .into_iter()
+        .map(|job| {
+            let schedule = parse_cron_subset(&job.schedule)
+                .map_err(|e| anyhow::anyhow!("job '{}'의 schedule 파싱 실패: {e}", job.name))?;
+            Ok((job, schedule))
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+
     if args.dry_run {
-        for job in &jobs {
+        for (job, _) in &jobs {
             println!(
                 "[dry-run] would run job '{}': {} -> {:?}",
                 job.name, job.source, job.destinations
             );
         }
-        return Ok(());
+        return Ok(EXIT_SUCCESS);
     }
 
     // 키스토어 로드 + KEK unlock(무인: env 비번 또는 DPAPI) + 지속 서명키 복구.
@@ -88,28 +116,59 @@ pub fn run(config_path: &Path, args: RunArgs) -> anyhow::Result<()> {
     // config 필드 복호 어댑터 — KEK로 직접 파생한다(GUI가 등록 시 쓴 것과 동일한 세대).
     let field_enc = DekEncryptor::new(kek.clone(), FIELD_WRAP_GEN);
 
-    // 카탈로그 싱글 라이터 — GUI 대시보드가 읽는 것과 같은 경로(spool_dir/catalog.db).
+    // 카탈로그 싱글 라이터 — GUI 대시보드와 scheduler overlap guard가 공유하는 경로.
     std::fs::create_dir_all(&config.policy.spool_dir)?;
-    let catalog = CatalogWriterHandle::spawn(config.policy.spool_dir.join("catalog.db"))?;
+    let catalog_db_path = config.policy.spool_dir.join("catalog.db");
+    let catalog = CatalogWriterHandle::spawn(catalog_db_path.clone())?;
+
+    let notify = build_notification_sink(&config, &field_enc);
 
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
     rt.block_on(async move {
-        for job in &jobs {
-            execute_job(
-                &config,
+        let scheduler = SchedulerContext {
+            catalog_writer: catalog,
+            catalog_db_path,
+            notify,
+        };
+
+        let mut exit_code = EXIT_SUCCESS;
+        for (job, schedule) in &jobs {
+            let runner = CliJobRunner {
+                config: &config,
                 job,
-                &keystore,
-                &kek,
-                &signing_key,
-                &field_enc,
-                &catalog,
-            )
-            .await?;
+                keystore: &keystore,
+                kek: &kek,
+                signing_key: &signing_key,
+                field_enc: &field_enc,
+                catalog: &scheduler.catalog_writer,
+            };
+            let job_exit_code = run_scheduled_job(&job.name, schedule, &scheduler, &runner).await;
+            exit_code = exit_code.max(job_exit_code);
         }
-        Ok::<_, anyhow::Error>(())
+        Ok::<_, anyhow::Error>(exit_code)
     })
+}
+
+fn build_notification_sink(config: &Config, field_enc: &DekEncryptor) -> CompositeSink {
+    let webhook_url_plaintext = match config.notify.as_ref() {
+        Some(notify) if notify.channel == NotifyChannel::Webhook => notify
+            .webhook_url
+            .as_ref()
+            .and_then(|field| match field_enc.unwrap_field(field) {
+                Ok(url) => Some(url.to_string()),
+                Err(e) => {
+                    tracing::warn!(
+                        error = %dbbackup_scheduler::scrub(&e.to_string()),
+                        "선택적 webhook URL 복호 실패 — webhook만 비활성화하고 기본 알림으로 계속"
+                    );
+                    None
+                }
+            }),
+        _ => None,
+    };
+    CompositeSink::default_plus_config(config.notify.as_ref(), webhook_url_plaintext)
 }
 
 /// 카탈로그 artifacts.dest_kind 문자열(스키마 어휘와 동일해야 rebuild 결과와 겹쳐 쓸 수 있다).
@@ -143,6 +202,38 @@ fn resolve_secret(
     })
 }
 
+struct CliJobRunner<'a> {
+    config: &'a Config,
+    job: &'a dbbackup_config::schema::Job,
+    keystore: &'a Keystore,
+    kek: &'a Dek,
+    signing_key: &'a SigningKey,
+    field_enc: &'a DekEncryptor,
+    catalog: &'a CatalogWriterHandle,
+}
+
+#[async_trait::async_trait]
+impl JobRunner for CliJobRunner<'_> {
+    async fn run(&self, job: &str) -> anyhow::Result<JobResult> {
+        if job != self.job.name {
+            anyhow::bail!(
+                "scheduler가 요청한 job '{job}'과 runner job '{}'이 다릅니다",
+                self.job.name
+            );
+        }
+        execute_job(
+            self.config,
+            self.job,
+            self.keystore,
+            self.kek,
+            self.signing_key,
+            self.field_enc,
+            self.catalog,
+        )
+        .await
+    }
+}
+
 async fn execute_job(
     config: &Config,
     job: &dbbackup_config::schema::Job,
@@ -151,7 +242,7 @@ async fn execute_job(
     signing_key: &SigningKey,
     field_enc: &DekEncryptor,
     catalog: &CatalogWriterHandle,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<JobResult> {
     // 1) 소스 DB 해석.
     let db = config
         .databases
@@ -239,6 +330,7 @@ async fn execute_job(
                 user: db.user.clone(),
                 password,
                 admin_database: "postgres".to_string(),
+                tls_mode: "preferred".to_string(),
             };
             let matrix = BundledToolMatrix::from_base_dir(Path::new("tools/pg"));
             Box::new(PostgresSource {
@@ -264,14 +356,23 @@ async fn execute_job(
                 user: db.user.clone(),
                 password: password.clone(),
                 database: db.dbname.clone(),
+                tls_mode: "preferred".to_owned(),
             };
             // 메타 조회 seam: `mysql` CLI(PATH). sqlx 미도입 편차 — meta.rs 주석 참조.
             let meta = MysqlCliMetaConn {
                 client: std::path::PathBuf::from("mysql"),
+                expected_sha256: None,
+                trusted_dependencies: Vec::new(),
                 host: db.host.clone(),
                 port: db.port,
                 user: db.user.clone(),
                 password,
+                client_kind: if db.engine == Engine::Mariadb {
+                    ClientKind::MariaDb
+                } else {
+                    ClientKind::OracleMySql
+                },
+                tls_mode: "preferred".to_owned(),
             };
             let matrix = MysqldumpBinaryMatrix::from_base_dir(Path::new("tools/mysql"));
             Box::new(MySqlSource::new(
@@ -283,6 +384,12 @@ async fn execute_job(
                 true, // capture_binlog: 앵커 공백은 영구 재현 불가(R8)
             ))
         }
+        Engine::Sqlserver | Engine::Sqlite => {
+            anyhow::bail!(
+                "ENGINE_REQUIRES_SERVICE_CONNECTION_PROFILE: SQL Server/SQLite Wave 1은 \
+                 legacy host/user/password config가 아니라 v2 service Connection을 사용해야 합니다"
+            )
+        }
     };
 
     // 5) plan → 각 파트를 봉투 경로로 흘려보낸다(per-backup DEK → KEK-wrap → 서명 매니페스트).
@@ -293,6 +400,9 @@ async fn execute_job(
         parts.push(g);
     }
     parts.extend(plan.db_parts);
+
+    let mut primary_backup_id = None;
+    let mut failed_destinations = std::collections::BTreeSet::new();
 
     for part in &parts {
         let dek = Dek::generate();
@@ -314,8 +424,16 @@ async fn execute_job(
 
         let outcomes = fan_out(&commit, dests.clone(), &cfg).await;
         let ok = outcomes.iter().filter(|o| o.result.is_ok()).count();
+        primary_backup_id = Some(part.backup_id.to_string());
+        failed_destinations.extend(
+            outcomes
+                .iter()
+                .filter(|o| o.result.is_err())
+                .map(|o| o.dest_name.clone()),
+        );
 
-        // 커밋된 목적지만 카탈로그 캐시에 반영한다(대시보드/조회용). 카탈로그는 **캐시일 뿐**이라
+        // 암호문+서명 매니페스트가 모두 커밋된 목적지만 카탈로그 캐시에 반영한다(대시보드/조회용).
+        // 카탈로그는 **캐시일 뿐**이라
         // 여기서 실패해도 백업 자체는 성공으로 둔다 — 매니페스트가 정본이고 rebuild로 복구된다.
         for outcome in outcomes.iter().filter(|o| o.result.is_ok()) {
             let kind = dest_kind_str(&kind_by_name, &outcome.dest_name);
@@ -346,7 +464,23 @@ async fn execute_job(
         }
     }
 
-    Ok(())
+    let backup_id = primary_backup_id
+        .ok_or_else(|| anyhow::anyhow!("job '{}'의 덤프 plan이 비어 있음", job.name))?;
+    Ok(summarize_job_result(backup_id, failed_destinations))
+}
+
+fn summarize_job_result(
+    backup_id: String,
+    failed_destinations: std::collections::BTreeSet<String>,
+) -> JobResult {
+    if failed_destinations.is_empty() {
+        JobResult::Success { backup_id }
+    } else {
+        JobResult::PartialSuccess {
+            backup_id,
+            failed_destinations: failed_destinations.into_iter().collect(),
+        }
+    }
 }
 
 /// config의 job.required_immutability(core 어휘)를 파이프라인 assert 어휘로 매핑(P1-2/R12).
@@ -488,8 +622,201 @@ fn build_ssh_dest(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dbbackup_core::SecretEncryptor;
+    use dbbackup_config::schema::{Database, Destination, Job, Notify, Retention, VerifyPolicy};
+    use dbbackup_core::{EncField, NotifyChannel, SecretEncryptor};
     use dbbackup_secrets::Credential;
+
+    fn valid_dry_run_config() -> Config {
+        let mut config = Config::empty();
+        config.databases.push(Database {
+            alias: "app".to_string(),
+            engine: Engine::Postgresql,
+            host: "127.0.0.1".to_string(),
+            port: 5432,
+            dbname: "app".to_string(),
+            user: "backup_reader".to_string(),
+            password: EncField::new(1, b"ciphertext".to_vec()),
+            tunnel: None,
+            dump_globals: true,
+            single_transaction: None,
+        });
+        config.destinations.push(Destination {
+            name: "local".to_string(),
+            kind: DestKind::Local,
+            endpoint: None,
+            region: None,
+            bucket: None,
+            prefix: String::new(),
+            access_key_id: None,
+            secret_access_key: None,
+            checksum_algo: None,
+            object_lock: None,
+            tunnel: None,
+            host: None,
+            port: None,
+            user: None,
+            private_key_path: None,
+            host_key_fingerprint: None,
+            path: Some("D:/backup-spool".into()),
+            reader: None,
+        });
+        config.jobs.push(Job {
+            name: "nightly".to_string(),
+            source: "app".to_string(),
+            destinations: vec!["local".to_string()],
+            required_immutability: ImmutabilityCapability::None,
+            retention: Retention::default(),
+            verify: VerifyPolicy::default(),
+            schedule: "0 3 * * *".to_string(),
+            enabled: true,
+        });
+        config
+    }
+
+    #[test]
+    fn job_filter_rejects_unknown_job_instead_of_running_everything() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("dbbackup.toml");
+        valid_dry_run_config().save(&config_path).unwrap();
+
+        let err = run_after_execution_authority_check(
+            &config_path,
+            RunArgs {
+                db: None,
+                job: Some("missing".to_string()),
+                scheduled: false,
+                dry_run: true,
+            },
+        )
+        .unwrap_err();
+
+        assert!(
+            err.to_string().contains("no matching enabled jobs"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn invalid_schedule_is_rejected_before_execution_setup() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("dbbackup.toml");
+        let mut config = valid_dry_run_config();
+        config.jobs[0].schedule = "unsupported cron".to_string();
+        config.save(&config_path).unwrap();
+
+        let err = run_after_execution_authority_check(
+            &config_path,
+            RunArgs {
+                db: None,
+                job: Some("nightly".to_string()),
+                scheduled: true,
+                dry_run: false,
+            },
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("schedule 파싱 실패"), "{err}");
+    }
+
+    #[test]
+    fn failed_execution_is_recorded_through_scheduler_entrypoint() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("dbbackup.toml");
+        let mut config = valid_dry_run_config();
+        config.policy.spool_dir = dir.path().join("spool");
+        config.save(&config_path).unwrap();
+
+        let password = Zeroizing::new("test-master-password".to_string());
+        let (keystore, _recovery) =
+            Keystore::init(&password, dir.path().join("dpapi.keyfile")).unwrap();
+        keystore
+            .save(&keystore_util::keystore_path(&config_path))
+            .unwrap();
+
+        std::env::set_var(keystore_util::MASTER_PW_ENV, &*password);
+        let run_result = run_after_execution_authority_check(
+            &config_path,
+            RunArgs {
+                db: None,
+                job: Some("nightly".to_string()),
+                scheduled: true,
+                dry_run: false,
+            },
+        );
+        std::env::remove_var(keystore_util::MASTER_PW_ENV);
+
+        let exit_code = run_result.unwrap();
+        assert_eq!(exit_code, dbbackup_scheduler::EXIT_FAILED);
+
+        let conn = dbbackup_catalog::open_reader_conn(&config.policy.spool_dir.join("catalog.db"))
+            .unwrap();
+        let failed_runs: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM runs WHERE job='nightly' AND status='failed'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(failed_runs, 1);
+    }
+
+    #[test]
+    fn encrypted_webhook_url_is_unwrapped_for_scheduler_notifications() {
+        let field_enc = DekEncryptor::new(Dek::generate(), FIELD_WRAP_GEN);
+        let webhook_url = field_enc.wrap("https://notify.invalid/dbbackup").unwrap();
+        let mut config = Config::empty();
+        config.notify = Some(Notify {
+            channel: NotifyChannel::Webhook,
+            webhook_url: Some(webhook_url),
+            email_to: None,
+        });
+
+        let sink = build_notification_sink(&config, &field_enc);
+
+        assert!(sink.sink_names().contains(&"webhook"));
+    }
+
+    #[test]
+    fn invalid_optional_webhook_keeps_default_notification_sinks() {
+        let encrypted_with_other_key = DekEncryptor::new(Dek::generate(), FIELD_WRAP_GEN)
+            .wrap("https://notify.invalid/dbbackup")
+            .unwrap();
+        let field_enc = DekEncryptor::new(Dek::generate(), FIELD_WRAP_GEN);
+        let mut config = Config::empty();
+        config.notify = Some(Notify {
+            channel: NotifyChannel::Webhook,
+            webhook_url: Some(encrypted_with_other_key),
+            email_to: None,
+        });
+
+        let sink = build_notification_sink(&config, &field_enc);
+        let names = sink.sink_names();
+
+        assert!(names.contains(&"log"));
+        assert!(names.contains(&"windows-event-log"));
+        assert!(!names.contains(&"webhook"));
+    }
+
+    #[test]
+    fn destination_failures_are_reported_as_partial_success_without_duplicates() {
+        let failed = ["ssh-archive", "s3-primary", "ssh-archive"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+
+        let result = summarize_job_result("backup-1".to_string(), failed);
+
+        match result {
+            JobResult::PartialSuccess {
+                backup_id,
+                failed_destinations,
+            } => {
+                assert_eq!(backup_id, "backup-1");
+                assert_eq!(failed_destinations, ["s3-primary", "ssh-archive"]);
+            }
+            other => panic!("expected partial success, got {other:?}"),
+        }
+    }
 
     /// 폐곡선: GUI/add-db가 KEK로 봉투암호화해 config에 쓴 EncField를,
     /// run이 키스토어에서 다시 unlock한 KEK로 그대로 복호한다.

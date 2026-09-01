@@ -21,6 +21,7 @@ fn write_manifest(sk: &SigningKey, dir: &Path, blake_seed: u8) -> (Manifest, Str
     let commit = SpoolCommit {
         spool_path: spool_path.clone(),
         plaintext_blake3: [blake_seed; 32],
+        ciphertext_blake3: [blake_seed.wrapping_add(1); 32],
         plaintext_bytes: 100,
         ciphertext_bytes: 120,
         stderr_tail: String::new(),
@@ -51,6 +52,7 @@ fn signature_gate_accepts_valid_rejects_unsigned_and_tampered() {
     let commit = SpoolCommit {
         spool_path: PathBuf::from("x.spool"),
         plaintext_blake3: [9; 32],
+        ciphertext_blake3: [10; 32],
         plaintext_bytes: 1,
         ciphertext_bytes: 2,
         stderr_tail: String::new(),
@@ -72,8 +74,8 @@ fn signature_gate_accepts_valid_rejects_unsigned_and_tampered() {
     );
 }
 
-#[test]
-fn rebuild_reconstructs_rows_from_manifests_after_catalog_wipe() {
+#[tokio::test]
+async fn rebuild_reconstructs_rows_from_manifests_after_catalog_wipe() {
     let (sk, vk) = generate_signing_keypair();
     let verifier = PinnedKeyVerifier::new(vk);
     let dest = tempfile::tempdir().unwrap(); // 목적지(매니페스트 동봉 위치)
@@ -101,6 +103,7 @@ fn rebuild_reconstructs_rows_from_manifests_after_catalog_wipe() {
         let commit = SpoolCommit {
             spool_path: PathBuf::from("bare.spool"),
             plaintext_blake3: [7; 32],
+            ciphertext_blake3: [8; 32],
             plaintext_bytes: 1,
             ciphertext_bytes: 2,
             stderr_tail: String::new(),
@@ -127,6 +130,7 @@ fn rebuild_reconstructs_rows_from_manifests_after_catalog_wipe() {
             ..Default::default()
         },
     )
+    .await
     .unwrap();
 
     assert_eq!(report.accepted, N, "유효 서명 N건만 반영");

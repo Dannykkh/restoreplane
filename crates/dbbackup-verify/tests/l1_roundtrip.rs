@@ -41,7 +41,9 @@ async fn l1_passes_on_valid_backup_and_fails_on_corruption() {
     // 3) 게이트 통과 후 L1 검증.
     let source = LocalManifestSource::new(&spool_dir);
     let verifier_gate = PinnedKeyVerifier::new(vk);
-    let inputs = load_trusted_inputs(&source, &verifier_gate, &key).expect("서명 통과");
+    let inputs = load_trusted_inputs(&source, &verifier_gate, &key)
+        .await
+        .expect("서명 통과");
 
     let restorer = Restorer {
         source: &source,

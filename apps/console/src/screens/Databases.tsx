@@ -1,206 +1,425 @@
-import { useEffect, useState } from "react";
-import "./Databases.css";
-import { addDatabase, listDatabases, type DbSummary } from "../lib/api";
-import { IconDatabase } from "../components/Icons";
+import { useMemo, useState } from "react";
+import { BackupScopeEditor } from "../components/BackupScopeEditor";
+import { Dialog } from "../components/Dialog";
+import { EvidenceRow, Inspector } from "../components/Inspector";
+import { InventoryTable } from "../components/InventoryTable";
+import { LoadingState, PageState } from "../components/PageState";
+import { FilterField, PageHeader } from "../components/PageHeader";
+import { StatusBadge, toneForState } from "../components/StatusBadge";
+import { ScopeCoverage } from "../components/ScopeCoverage";
+import { listBackupScopes, listDatabaseTargets } from "../lib/api";
+import { formatDateTime, formatFreshness } from "../lib/format";
+import {
+  collectCursorPages,
+  INVENTORY_PAGE_LIMIT,
+  type CollectedCursorPage,
+} from "../lib/pagination";
+import { useServiceQuery } from "../lib/queries";
+import { transitionTo } from "../lib/route";
+import type {
+  BackupScope,
+  BackupScopeSaveResult,
+  DatabaseTarget,
+  RouteState,
+} from "../lib/types";
 
-const ENGINES = [
-  { value: "postgresql", label: "PostgreSQL", port: 5432 },
-  { value: "mysql", label: "MySQL", port: 3306 },
-  { value: "mariadb", label: "MariaDB", port: 3306 },
-];
+interface DatabasesProps {
+  route: RouteState;
+}
 
-const EMPTY = {
-  alias: "",
-  engine: "postgresql",
-  host: "",
-  port: 5432,
-  dbname: "",
-  user: "",
-  password: "",
-  dumpGlobals: true,
-};
+export function Databases({ route }: DatabasesProps) {
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [inspectedScopeId, setInspectedScopeId] = useState<string | null>(null);
+  const [savedScope, setSavedScope] = useState<BackupScopeSaveResult | null>(null);
+  const query = useServiceQuery<CollectedCursorPage<DatabaseTarget>>("database-targets", () =>
+    collectCursorPages((cursor) => listDatabaseTargets({ cursor, limit: INVENTORY_PAGE_LIMIT })),
+  );
+  const scopeQuery = useServiceQuery<CollectedCursorPage<BackupScope>>(
+    "database-backup-scopes",
+    () => collectCursorPages((cursor) =>
+      listBackupScopes({ cursor, limit: INVENTORY_PAGE_LIMIT })
+    ),
+  );
+  const allTargets = useMemo(() => query.data?.items ?? [], [query.data]);
+  const scopes = useMemo(
+    () => scopeQuery.data?.items ?? [],
+    [scopeQuery.data],
+  );
+  const filter = route.filter ?? "all";
+  const rows = useMemo(
+    () =>
+      allTargets.filter((target) => {
+        if (filter === "all") return true;
+        if (filter === "unprotected") return target.protectionCompliance === "not_configured";
+        if (filter === "drift") {
+          return target.missingSinceMs !== null || scopes.some(
+            (scope) => scope.databaseTargetId === target.id && scope.driftState === "drifted",
+          );
+        }
+        if (filter === "rpo") return target.rpoViolation;
+        if (filter === "verification") return target.verificationOverdue;
+        return target.connectionId === filter || target.engine === filter;
+      }),
+    [allTargets, filter, scopes],
+  );
+  const selected =
+    rows.find((target) => target.id === route.selected) ?? rows[0] ?? null;
+  const selectedScopes = selected
+    ? scopes.filter((scope) => scope.databaseTargetId === selected.id && scope.state !== "retired")
+    : [];
+  const inspectedScope =
+    selectedScopes.find((scope) => scope.id === inspectedScopeId) ??
+    selectedScopes[0] ??
+    null;
 
-export function Databases() {
-  const [dbs, setDbs] = useState<DbSummary[]>([]);
-  const [form, setForm] = useState({ ...EMPTY });
-  const [masterPw, setMasterPw] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [flash, setFlash] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
-
-  function refresh() {
-    listDatabases()
-      .then(setDbs)
-      .catch((e) => setFlash({ kind: "err", msg: String(e) }));
-  }
-  useEffect(refresh, []);
-
-  const canSubmit =
-    form.alias.trim() &&
-    form.host.trim() &&
-    form.dbname.trim() &&
-    form.user.trim() &&
-    form.password &&
-    masterPw.length >= 8 &&
-    !busy;
-
-  function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
-    setForm((f) => ({ ...f, [k]: v }));
-  }
-
-  async function submit() {
-    setBusy(true);
-    setFlash(null);
-    try {
-      await addDatabase(masterPw, form);
-      setFlash({ kind: "ok", msg: `'${form.alias}' 등록됨 — 비밀번호는 봉투 암호화되어 저장되었습니다.` });
-      setForm({ ...EMPTY });
-      setMasterPw("");
-      refresh();
-    } catch (e) {
-      setFlash({ kind: "err", msg: String(e instanceof Error ? e.message : e) });
-    } finally {
-      setBusy(false);
-    }
+  if (query.status === "loading" && !query.data) return <LoadingState label="Database Target 근거를 불러오는 중입니다." />;
+  if (query.status === "error" && !query.data) {
+    return (
+      <PageState
+        kind="error"
+        title="Database inventory를 읽지 못했습니다."
+        detail="보호 여부를 알 수 없으므로 빈 목록을 정상 상태로 표시하지 않습니다."
+        error={query.error}
+        action={<button type="button" className="button button-secondary" onClick={query.refresh}>다시 연결</button>}
+      />
+    );
   }
 
   return (
-    <div>
-      <div className="db-layout">
-        <div className="db-list">
-          {dbs.length === 0 ? (
-            <div className="empty-note">등록된 데이터베이스가 없습니다. 오른쪽에서 추가하세요.</div>
-          ) : (
-            dbs.map((d) => (
-              <div className="db-row" key={d.alias}>
-                <span className="db-icon">
-                  <IconDatabase width={18} height={18} />
-                </span>
-                <div className="db-main">
-                  <div className="db-alias">
-                    {d.alias} <span className="engine-tag">{d.engine}</span>
-                  </div>
-                  <div className="db-sub">
-                    {d.user}@{d.host}:{d.port}/{d.dbname}
-                    {d.hasTunnel ? " · 터널" : ""}
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="card">
-          <h3 style={{ marginBottom: "var(--sp-4)" }}>데이터베이스 추가</h3>
-          {flash && <div className={`form-flash ${flash.kind}`}>{flash.msg}</div>}
-
-          <div className="form-grid">
-            <div className="col-span">
-              <label className="label">별칭(alias)</label>
-              <input
-                className="input"
-                value={form.alias}
-                onChange={(e) => set("alias", e.target.value)}
-                placeholder="prod-main"
-              />
-            </div>
-            <div>
-              <label className="label">엔진</label>
-              <select
-                className="select"
-                value={form.engine}
-                onChange={(e) => {
-                  const eng = ENGINES.find((x) => x.value === e.target.value)!;
-                  setForm((f) => ({ ...f, engine: eng.value, port: eng.port }));
-                }}
-              >
-                {ENGINES.map((x) => (
-                  <option key={x.value} value={x.value}>
-                    {x.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label">포트</label>
-              <input
-                className="input"
-                type="number"
-                value={form.port}
-                onChange={(e) => set("port", Number(e.target.value))}
-              />
-            </div>
-            <div className="col-span">
-              <label className="label">호스트</label>
-              <input
-                className="input"
-                value={form.host}
-                onChange={(e) => set("host", e.target.value)}
-                placeholder="10.0.0.5"
-              />
-            </div>
-            <div>
-              <label className="label">데이터베이스명</label>
-              <input
-                className="input"
-                value={form.dbname}
-                onChange={(e) => set("dbname", e.target.value)}
-                placeholder="app"
-              />
-            </div>
-            <div>
-              <label className="label">사용자</label>
-              <input
-                className="input"
-                value={form.user}
-                onChange={(e) => set("user", e.target.value)}
-                placeholder="backup"
-              />
-            </div>
-            <div className="col-span">
-              <label className="label">DB 비밀번호</label>
-              <input
-                className="input"
-                type="password"
-                value={form.password}
-                onChange={(e) => set("password", e.target.value)}
-                placeholder="봉투 암호화되어 저장됩니다"
-              />
-            </div>
-            {form.engine === "postgresql" && (
-              <label className="check-row col-span">
-                <input
-                  type="checkbox"
-                  checked={form.dumpGlobals}
-                  onChange={(e) => set("dumpGlobals", e.target.checked)}
-                />
-                전역 객체(roles/tablespaces) 동봉 — pg_dumpall --globals-only
-              </label>
-            )}
-          </div>
-
-          <hr className="form-divider" />
-
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label className="label">마스터 비밀번호 (키 잠금 해제)</label>
-            <input
-              className="input"
-              type="password"
-              value={masterPw}
-              onChange={(e) => setMasterPw(e.target.value)}
-              placeholder="초기 설정에서 정한 비밀번호"
-            />
-            <div className="field-hint">
-              DB 비밀번호를 봉투 암호화하려면 마스터 키를 잠깐 여는 데 필요합니다.
-            </div>
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "var(--sp-5)" }}>
-            <button className="btn btn-primary" onClick={submit} disabled={!canSubmit}>
-              {busy ? "등록 중…" : "데이터베이스 등록"}
-            </button>
-          </div>
-        </div>
+    <div className="page-stack">
+      <PageHeader
+        eyebrow="Protected objects"
+        title="Databases"
+        description="Connection에서 선택한 Database Target의 보호, drift, RPO, 검증 신선도를 한 목록에서 비교합니다."
+        meta={query.fetchedAt && <span>근거 {formatFreshness(query.fetchedAt)}</span>}
+        actions={
+          <button
+            type="button"
+            className="button button-primary"
+            disabled={
+              !selected ||
+              query.data?.complete !== true ||
+              scopeQuery.status !== "ready" ||
+              scopeQuery.data?.complete !== true ||
+              selectedScopes.length === 0
+            }
+            onClick={() =>
+              selected &&
+              transitionTo({
+                page: "backup-plans",
+                selected: selected.id,
+                action: "new",
+              })
+            }
+          >
+            선택 DB로 Plan 만들기
+          </button>
+        }
+      />
+      <div className="filter-bar">
+        <FilterField label="관찰할 상태">
+          <select
+            name="databaseFilter"
+            value={filter}
+            onChange={(event) =>
+              transitionTo(
+                {
+                  page: "databases",
+                  filter: event.target.value === "all" ? undefined : event.target.value,
+                },
+                true,
+              )
+            }
+          >
+            <option value="all">전체 Target</option>
+            <option value="unprotected">미보호</option>
+            <option value="rpo">RPO 위반</option>
+            <option value="verification">검증 기한 초과</option>
+            <option value="drift">Discovery drift</option>
+            <option value="postgresql">PostgreSQL</option>
+            <option value="mysql">MySQL</option>
+            <option value="mariadb">MariaDB</option>
+          </select>
+        </FilterField>
+        <span className="filter-summary">
+          {rows.length} / {allTargets.length} targets
+          {query.data?.complete === false ? " · partial inventory" : ""}
+        </span>
       </div>
+      {(query.data?.complete === false || scopeQuery.data?.complete === false) && (
+        <PageState
+          kind="partial"
+          title="Database inventory is partial."
+          detail="The bounded cursor scan did not reach a verified end. Filters and scope counts apply only to the rows shown."
+        />
+      )}
+      {query.status === "error" && query.data && (
+        <PageState
+          kind="stale"
+          title="마지막 Database 근거를 표시합니다."
+          detail="서비스가 새 projection을 제공할 때까지 작업 버튼을 신중하게 사용하세요."
+          error={query.error}
+        />
+      )}
+      {scopeQuery.status === "loading" && (
+        <LoadingState label="Database별 Backup Scope를 불러오는 중입니다." />
+      )}
+      {scopeQuery.status === "error" && (
+        <PageState
+          kind="partial"
+          title="Backup Scope 근거를 읽지 못했습니다."
+          detail="Database 상태는 표시하지만 범위가 확인되기 전에는 새 범위나 Plan을 만들지 않습니다."
+          error={scopeQuery.error}
+          action={<button type="button" className="button button-secondary" onClick={scopeQuery.refresh}>범위 다시 조회</button>}
+        />
+      )}
+      {savedScope && (
+        <p className="muted-copy" role="status">
+          Backup Scope {savedScope.scopeId}를 저장했습니다. 새 Plan revision에서 선택할 수 있습니다.
+        </p>
+      )}
+      <div className="inventory-layout">
+        <section className="inventory-main" aria-labelledby="database-list-title">
+          <header className="section-heading">
+            <div>
+              <span className="eyebrow">Protection inventory</span>
+              <h2 id="database-list-title">Database Targets</h2>
+            </div>
+          </header>
+          <InventoryTable<DatabaseTarget>
+            ariaLabel="Database Target inventory"
+            rows={rows}
+            rowKey={(row) => row.id}
+            selectedId={selected?.id ?? null}
+            onSelect={(row) =>
+              transitionTo({ ...route, selected: row.id, action: undefined }, true)
+            }
+            emptyMessage="이 필터에 해당하는 Database Target이 없습니다."
+            columns={[
+              {
+                key: "database",
+                header: "Database",
+                render: (row) => (
+                  <span className="resource-name" title={row.displayName}>
+                    <strong>{row.displayName}</strong>
+                    <small>{row.connectionName}</small>
+                  </span>
+                ),
+              },
+              {
+                key: "engine",
+                header: "Engine",
+                className: "mono",
+                render: (row) => row.engine,
+              },
+              {
+                key: "protection",
+                header: "Protection",
+                render: (row) => (
+                  <div className="status-stack">
+                    <StatusBadge
+                      label={row.protectionCompliance}
+                      tone={toneForState(row.protectionCompliance)}
+                      evidenceAtMs={row.evidenceAtMs}
+                    />
+                    <span className="mono">{row.protectionScope}</span>
+                  </div>
+                ),
+              },
+              {
+                key: "rpo",
+                header: "RPO",
+                render: (row) => (
+                  <StatusBadge
+                    label={row.rpoViolation ? "violation" : row.latestSuccessAtMs ? "within RPO" : "unknown"}
+                    tone={row.rpoViolation ? "danger" : row.latestSuccessAtMs ? "success" : "neutral"}
+                    evidenceAtMs={row.latestSuccessAtMs}
+                  />
+                ),
+              },
+              {
+                key: "verification",
+                header: "Verification",
+                render: (row) => (
+                  <StatusBadge
+                    label={row.verificationOverdue ? "overdue" : row.verificationState}
+                    tone={
+                      row.verificationOverdue || row.verificationState === "pending"
+                        ? "warning"
+                        : row.verificationState === "current"
+                          ? "success"
+                          : "neutral"
+                    }
+                  />
+                ),
+              },
+              {
+                key: "scope",
+                header: "Scopes",
+                className: "mono",
+                render: (row) => scopes.filter(
+                  (scope) => scope.databaseTargetId === row.id && scope.state !== "retired",
+                ).length,
+              },
+            ]}
+          />
+        </section>
+        {selected ? (
+          <Inspector
+            eyebrow="Database target"
+            title={selected.displayName}
+            actions={
+              <>
+                <button
+                  type="button"
+                  className="button button-secondary"
+                  disabled={scopeQuery.status !== "ready" || scopeQuery.data?.complete !== true}
+                  onClick={() => setEditorOpen(true)}
+                >
+                  새 선택 범위
+                </button>
+                <button
+                  type="button"
+                  className="button button-primary"
+                  disabled={
+                    scopeQuery.status !== "ready" ||
+                    scopeQuery.data?.complete !== true ||
+                    selectedScopes.length === 0
+                  }
+                  onClick={() =>
+                    transitionTo({
+                      page: "backup-plans",
+                      selected: selected.id,
+                      action: "new",
+                    })
+                  }
+                >
+                  Backup Plan 시작
+                </button>
+              </>
+            }
+          >
+            <dl className="evidence-list">
+              <EvidenceRow label="Connection" value={selected.connectionName} />
+              <EvidenceRow label="Engine" value={selected.engine} mono />
+              <EvidenceRow label="Target state" value={<StatusBadge label={selected.state} tone={toneForState(selected.state)} />} />
+              <EvidenceRow
+                label="Protection"
+                value={<StatusBadge label={selected.protectionCompliance} tone={toneForState(selected.protectionCompliance)} />}
+              />
+              <EvidenceRow label="Coverage" value={selected.protectionScope} mono />
+              <EvidenceRow
+                label="Replica durability"
+                value={<StatusBadge label={selected.replicaDurability} tone={toneForState(selected.replicaDurability)} />}
+              />
+              <EvidenceRow label="최근 성공" value={formatDateTime(selected.latestSuccessAtMs)} mono />
+              <EvidenceRow label="최근 실패" value={formatDateTime(selected.latestFailureAtMs)} mono />
+              <EvidenceRow label="Recovery Point" value={selected.latestRecoveryPointId ?? "없음"} mono />
+            </dl>
+            <section className="inspector-section" aria-labelledby="database-scope-title">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">Persisted selectors</span>
+                  <h3 id="database-scope-title">Backup Scopes</h3>
+                </div>
+                <span className="mono">{selectedScopes.length}</span>
+              </div>
+              {scopeQuery.status === "loading" ? (
+                <LoadingState label="선택한 Database의 Backup Scope를 불러오는 중입니다." />
+              ) : scopeQuery.status === "error" ? (
+                <p className="muted-copy" role="alert">
+                  범위 근거를 표시할 수 없습니다. 위의 범위 다시 조회를 사용하세요.
+                </p>
+              ) : scopeQuery.data?.complete === false ? (
+                <PageState
+                  kind="partial"
+                  title="Scope inventory is partial."
+                  detail="Refresh before creating or publishing a scope-dependent plan."
+                />
+              ) : selectedScopes.length === 0 ? (
+                <PageState
+                  kind="empty"
+                  title="저장된 Backup Scope가 없습니다."
+                  detail="범위를 만든 뒤 Plan revision에 연결하세요."
+                  action={<button type="button" className="button button-secondary" onClick={() => setEditorOpen(true)}>범위 만들기</button>}
+                />
+              ) : (
+                <fieldset className="target-picker" aria-labelledby="database-scope-title">
+                  <legend className="sr-only">확인할 Backup Scope</legend>
+                  {selectedScopes.map((scope) => (
+                    <label key={scope.id}>
+                      <input
+                        type="radio"
+                        name="inspectedBackupScope"
+                        value={scope.id}
+                        checked={inspectedScope?.id === scope.id}
+                        onChange={() => setInspectedScopeId(scope.id)}
+                      />
+                      <span>
+                        <strong>{scope.displayName}</strong>
+                        <small>
+                          {scope.mode === "whole_database" ? "전체 DB" : "명시 테이블"}
+                          {` · Plan ${scope.planCount ?? "?"} · Retention ${scope.retentionPolicyCount ?? "?"}`}
+                          {` · Drift ${scope.driftState}`}
+                        </small>
+                      </span>
+                      <ScopeCoverage
+                        mode={scope.mode}
+                        selectedObjectCount={scope.selectedObjectCount}
+                        eligibleObjectCount={scope.eligibleObjectCount}
+                        newObjectCount={scope.newObjectCount}
+                        missingObjectCount={scope.missingObjectCount}
+                        changedObjectCount={scope.changedObjectCount}
+                      />
+                    </label>
+                  ))}
+                </fieldset>
+              )}
+            </section>
+            {inspectedScope && (
+              <section className="inspector-section" aria-labelledby="scope-recovery-title">
+                <h3 id="scope-recovery-title">Scope recovery evidence</h3>
+                <dl className="evidence-list">
+                  <EvidenceRow label="Drift" value={<StatusBadge label={inspectedScope.driftState} tone={inspectedScope.driftState === "drifted" ? "warning" : toneForState(inspectedScope.driftState)} evidenceAtMs={inspectedScope.inventoryObservedAtMs} />} />
+                  <EvidenceRow label="최근 Backup Run" value={inspectedScope.latestBackupState ?? "unknown"} mono />
+                  <EvidenceRow label="Recovery Point" value={inspectedScope.latestRecoveryPointId ?? "unknown"} mono />
+                  <EvidenceRow label="복원 적격성" value={<StatusBadge label={inspectedScope.restoreEligibility} tone={toneForState(inspectedScope.restoreEligibility)} evidenceAtMs={inspectedScope.recoveryEvidenceAtMs} />} />
+                  <EvidenceRow label="최근 성공" value={formatDateTime(inspectedScope.latestSuccessAtMs)} mono />
+                  <EvidenceRow label="검증 레벨" value={inspectedScope.latestVerifiedLevel === null ? "unknown" : `L${inspectedScope.latestVerifiedLevel}`} mono />
+                </dl>
+              </section>
+            )}
+            {(selected.rpoViolation || selected.verificationOverdue) && (
+              <section className="inspector-section">
+                <h3>Attention reason</h3>
+                <ul className="reason-list">
+                  {selected.rpoViolation && <li>계획 RPO보다 최근 성공 근거가 오래됐습니다.</li>}
+                  {selected.verificationOverdue && <li>요구 검증 레벨의 최신 근거가 기한을 넘었습니다.</li>}
+                </ul>
+              </section>
+            )}
+          </Inspector>
+        ) : (
+          <PageState kind="empty" title="Target을 선택하세요." detail="보호 축별 근거와 Plan 진입점을 표시합니다." />
+        )}
+      </div>
+      {editorOpen && selected && (
+        <Dialog
+          title={`${selected.displayName} Backup Scope`}
+          description="전체 데이터베이스 또는 명시 테이블 집합을 저장합니다. 게시된 Plan은 바꾸지 않습니다."
+          onClose={() => setEditorOpen(false)}
+        >
+          <BackupScopeEditor
+            target={selected}
+            onCancel={() => setEditorOpen(false)}
+            onSaved={(result) => {
+              setSavedScope(result);
+              setEditorOpen(false);
+              scopeQuery.refresh();
+            }}
+          />
+        </Dialog>
+      )}
     </div>
   );
 }

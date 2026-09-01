@@ -1,0 +1,24 @@
+flowchart TD
+    staged([Artifact staging 완료]) --> validateParts{필수 Artifact Part가 모두 유효?}
+    validateParts -- 아니요 --> quarantine[staging을 Orphan Artifact로 격리]
+    quarantine --> incomplete([incomplete, 복원 목록에서 제외])
+    validateParts -- 예 --> signManifest[signed set Manifest 생성]
+    signManifest --> uploadReplicas[목적지별 Artifact Replica 업로드]
+    uploadReplicas --> evaluateRequired{모든 required 목적지 commit 성공?}
+    evaluateRequired -- 예 --> fencedCommit{현재 Fencing Token인가?}
+    evaluateRequired -- 아니요 --> anyEligible{적격 Replica가 하나 이상인가?}
+    anyEligible -- 아니요 --> scheduleRepair[Replica retry와 repair Work Item 생성]
+    scheduleRepair --> incomplete
+    anyEligible -- 예 --> fencedDegraded{현재 Fencing Token인가?}
+    fencedCommit -- 아니요 --> rejectStale[stale Attempt commit 거부]
+    fencedDegraded -- 아니요 --> rejectStale
+    rejectStale --> reconcile([Reconciliation 대상으로 전환])
+    fencedCommit -- 예 --> commitProtected[Recovery Point complete, protected]
+    fencedDegraded -- 예 --> commitDegraded[Recovery Point complete, degraded]
+    commitDegraded --> protectionFail[Protection Compliance 실패와 repair 예약]
+    commitProtected --> publishSnapshot[Snapshot projection과 Activity publish]
+    protectionFail --> publishSnapshot
+    publishSnapshot --> complete([검색·복원 가능한 Snapshot])
+
+    %% Storage: manifest signing and replica commit
+    %% Invariant: completeness, durability, compliance는 서로 다른 축

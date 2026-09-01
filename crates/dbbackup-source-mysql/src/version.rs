@@ -3,6 +3,8 @@
 //! (R5/R7, T4/T5). source-pg의 parse_version_major/probe_client_version과 평행하다.
 
 use crate::MySqlSourceError;
+#[cfg(windows)]
+use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServerKind {
@@ -72,15 +74,79 @@ pub fn parse_client_major_from_banner(raw: &str) -> Option<u32> {
 pub async fn probe_client_version(
     binary: &std::path::Path,
 ) -> Result<(u32, String), MySqlSourceError> {
-    let out = tokio::process::Command::new(binary)
-        .arg("--version")
-        .output()
+    probe_client_version_with_identity(binary, None, &[]).await
+}
+
+pub async fn probe_client_version_with_identity(
+    binary: &std::path::Path,
+    expected_sha256: Option<[u8; 32]>,
+    trusted_dependencies: &[(std::path::PathBuf, [u8; 32])],
+) -> Result<(u32, String), MySqlSourceError> {
+    #[cfg(windows)]
+    let raw = {
+        use dbbackup_runtime::{hash_executable, LaunchSpec, ProcessSupervisor};
+
+        let path = binary.to_path_buf();
+        let dependencies = trusted_dependencies.to_vec();
+        let expected = match expected_sha256 {
+            Some(expected) => expected,
+            None => hash_executable(&path)
+                .map_err(|_| MySqlSourceError::DumpToolUntrusted { path: path.clone() })?,
+        };
+        tokio::task::spawn_blocking(move || {
+            let working_directory = path
+                .parent()
+                .ok_or_else(|| MySqlSourceError::DumpToolUntrusted { path: path.clone() })?;
+            let spec = LaunchSpec::new(path.clone(), working_directory.to_path_buf(), expected)
+                .and_then(|spec| spec.with_args(["--version"]))
+                .and_then(|spec| spec.with_environment(std::env::vars_os()))
+                .and_then(|spec| spec.with_trusted_dependencies(dependencies))
+                .map_err(|_| MySqlSourceError::DumpToolUntrusted { path: path.clone() })?;
+            let mut process = ProcessSupervisor::launch(&spec)
+                .map_err(|_| MySqlSourceError::DumpToolUntrusted { path: path.clone() })?;
+            let Some(exit) = process
+                .wait_timeout(Duration::from_secs(30))
+                .map_err(|_| MySqlSourceError::DumpToolUntrusted { path: path.clone() })?
+            else {
+                let _ = process.terminate();
+                return Err(MySqlSourceError::DumpToolUntrusted { path });
+            };
+            if exit.exit_code() != 0 || exit.stdout().truncated() {
+                return Err(MySqlSourceError::DumpToolUntrusted { path });
+            }
+            Ok(String::from_utf8_lossy(exit.stdout().tail())
+                .trim()
+                .to_owned())
+        })
         .await
-        .map_err(|e| MySqlSourceError::DumpToolSpawnFailed {
+        .map_err(|_| MySqlSourceError::DumpToolUntrusted {
             path: binary.to_path_buf(),
-            source: e,
-        })?;
-    let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        })??
+    };
+
+    #[cfg(not(windows))]
+    let raw = {
+        if expected_sha256.is_some() {
+            return Err(MySqlSourceError::DumpToolUntrusted {
+                path: binary.to_path_buf(),
+            });
+        }
+        if !trusted_dependencies.is_empty() {
+            return Err(MySqlSourceError::DumpToolUntrusted {
+                path: binary.to_path_buf(),
+            });
+        }
+        let out = tokio::process::Command::new(binary)
+            .arg("--version")
+            .kill_on_drop(true)
+            .output()
+            .await
+            .map_err(|e| MySqlSourceError::DumpToolSpawnFailed {
+                path: binary.to_path_buf(),
+                source: e,
+            })?;
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
     let major = parse_client_major_from_banner(&raw)
         .ok_or_else(|| MySqlSourceError::VersionParseFailed(raw.clone()))?;
     Ok((major, raw))
@@ -159,6 +225,16 @@ mod tests {
             Some(10)
         );
         assert_eq!(parse_client_major_from_banner("no distrib token"), None);
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn trusted_version_probe_rejects_digest_mismatch_before_resume() {
+        let executable = std::env::current_exe().expect("test executable");
+        let error = probe_client_version_with_identity(&executable, Some([0; 32]), &[])
+            .await
+            .expect_err("mismatched attestation must block process launch");
+        assert!(matches!(error, MySqlSourceError::DumpToolUntrusted { .. }));
     }
 
     #[test]

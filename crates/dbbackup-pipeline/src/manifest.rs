@@ -120,6 +120,13 @@ impl SignedManifest {
     }
 }
 
+/// 암호문 객체와 같은 논리적 위치에 저장할 서명 매니페스트 경로.
+pub fn signed_manifest_path(spool_path: &std::path::Path) -> std::path::PathBuf {
+    let mut path = spool_path.as_os_str().to_os_string();
+    path.push(".manifest.json");
+    std::path::PathBuf::from(path)
+}
+
 /// KEK로 감싼 DEK WrapSet을 동봉해 서명 매니페스트를 쓴다(run/verify 봉투 경로의 정본).
 pub fn write_signed_manifest_with_wrapset(
     spool_path: &std::path::Path,
@@ -137,9 +144,7 @@ pub fn write_signed_manifest(
     sk: &SigningKey,
 ) -> anyhow::Result<(std::path::PathBuf, SignedManifest)> {
     let signed = SignedManifest::create(manifest, sk)?;
-    let mut manifest_path = spool_path.as_os_str().to_os_string();
-    manifest_path.push(".manifest.json");
-    let manifest_path = std::path::PathBuf::from(manifest_path);
+    let manifest_path = signed_manifest_path(spool_path);
     std::fs::write(&manifest_path, signed.to_json()?)?;
     Ok((manifest_path, signed))
 }

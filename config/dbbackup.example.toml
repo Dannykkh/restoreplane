@@ -45,6 +45,11 @@ checksum_algo = "sha256"
 mode = "governance"
 retention_days = 35
 
+# 복구/검증 전용 read-only 신원. 위 writer 신원과 같은 키를 재사용하지 않는다.
+[destination.reader]
+access_key_id = "enc:1:cGxhY2Vob2xkZXI="
+secret_access_key = "enc:1:cGxhY2Vob2xkZXI="
+
 [[destination]]
 name = "ssh-secondary"
 kind = "ssh"
@@ -53,6 +58,11 @@ path = "/mnt/backup-repo"
 user = "backupuser"
 private_key_path = "C:/keys/dest_id_ed25519"
 host_key_fingerprint = "SHA256:ZzYyXxWwVvUuTtSsRrQqPpOoNnMmLlKkJjIiHhGgFf"
+
+# 복구/검증 전용 SFTP 신원. password 대신 별도 개인키를 권장한다.
+[destination.reader]
+user = "restore-reader"
+private_key_path = "C:/keys/dest_reader_id_ed25519"
 
 [[destination]]
 name = "local-spool"

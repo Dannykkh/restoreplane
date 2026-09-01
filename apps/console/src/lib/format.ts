@@ -1,35 +1,48 @@
-// 기술값 포매팅(모노스페이스로 렌더되는 값들).
+const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
 
-export function bytes(n: number | null): string {
-  if (n === null || n === undefined) return "—";
-  if (n === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
-  const v = n / Math.pow(1024, i);
-  return `${v.toFixed(i === 0 ? 0 : v >= 100 ? 0 : 1)} ${units[i]}`;
+export function formatBytes(value: number | null): string {
+  if (value === null || !Number.isFinite(value) || value < 0) return "근거 없음";
+  if (value === 0) return "0 B";
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+  const index = Math.min(
+    units.length - 1,
+    Math.floor(Math.log(value) / Math.log(1024)),
+  );
+  const scaled = value / 1024 ** index;
+  return `${scaled.toFixed(index === 0 || scaled >= 100 ? 0 : 1)} ${units[index]}`;
 }
 
-export function ratio(plain: number | null, cipher: number | null): string {
-  if (!plain || !cipher) return "—";
-  return `${(plain / cipher).toFixed(1)}×`;
+export function formatDateTime(value: number | null): string {
+  if (value === null || !Number.isFinite(value) || value < 0) return "기록 없음";
+  return dateFormatter.format(new Date(value));
 }
 
-export function duration(startIso: string, endIso: string | null): string {
-  if (!endIso) return "—";
-  const ms = new Date(endIso.replace(" ", "T")).getTime() - new Date(startIso.replace(" ", "T")).getTime();
-  if (Number.isNaN(ms) || ms < 0) return "—";
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}초`;
-  const m = Math.floor(s / 60);
-  const rs = s % 60;
-  return rs ? `${m}분 ${rs}초` : `${m}분`;
+export function formatFreshness(value: number, now = Date.now()): string {
+  const elapsed = Math.max(0, now - value);
+  if (elapsed < 60_000) return "방금";
+  if (elapsed < 3_600_000) return `${Math.floor(elapsed / 60_000)}분 전`;
+  if (elapsed < 86_400_000) return `${Math.floor(elapsed / 3_600_000)}시간 전`;
+  return `${Math.floor(elapsed / 86_400_000)}일 전`;
 }
 
-export function agoFrom(nowIso: string, thenIso: string): string {
-  const then = new Date(thenIso.replace(" ", "T")).getTime();
-  const now = new Date(nowIso.replace(" ", "T")).getTime();
-  const s = Math.max(0, Math.round((now - then) / 1000));
-  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}분 전`;
-  if (s < 86400) return `${Math.floor(s / 3600)}시간 전`;
-  return `${Math.floor(s / 86400)}일 전`;
+export function formatDuration(valueMs: number | null): string {
+  if (valueMs === null || !Number.isFinite(valueMs) || valueMs < 0) return "설정 안 됨";
+  if (valueMs < 60_000) return `${Math.round(valueMs / 1_000)}초`;
+  if (valueMs < 3_600_000) return `${Math.round(valueMs / 60_000)}분`;
+  if (valueMs < 86_400_000) {
+    const hours = Math.floor(valueMs / 3_600_000);
+    const minutes = Math.round((valueMs % 3_600_000) / 60_000);
+    return minutes ? `${hours}시간 ${minutes}분` : `${hours}시간`;
+  }
+  return `${Math.round(valueMs / 86_400_000)}일`;
+}
+
+export function formatCount(value: number): string {
+  return new Intl.NumberFormat("ko-KR").format(value);
 }

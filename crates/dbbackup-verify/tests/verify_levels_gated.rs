@@ -26,7 +26,9 @@ async fn make_backup(spool_dir: &std::path::Path) -> (RestoreInputs, Dek, LocalM
     let (mpath, _s) = write_signed_manifest(&commit.spool_path, manifest, &sk).unwrap();
     let key = mpath.file_name().unwrap().to_string_lossy().into_owned();
     let source = LocalManifestSource::new(spool_dir);
-    let inputs = load_trusted_inputs(&source, &PinnedKeyVerifier::new(vk), &key).unwrap();
+    let inputs = load_trusted_inputs(&source, &PinnedKeyVerifier::new(vk), &key)
+        .await
+        .unwrap();
     (inputs, dek, source)
 }
 

@@ -1,0 +1,38 @@
+[package]
+name = "dbbackup-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait = "0.1"
+dbbackup-catalog = { path = "../dbbackup-catalog" }
+dbbackup-domain = { path = "../dbbackup-domain" }
+dbbackup-pipeline = { path = "../dbbackup-pipeline" }
+ed25519-dalek = "=2.2.0"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+sha2 = "=0.10.8"
+serde_json = "1"
+thiserror = { workspace = true }
+uuid = { version = "=1.11.0", features = ["v4"] }
+zeroize = "=1.9.0"
+tokio = { version = "=1.52.3", features = ["macros", "sync", "time"] }
+
+[dev-dependencies]
+blake3 = "=1.5.5"
+dbbackup-core = { path = "../dbbackup-core" }
+tempfile = "=3.14.0"
+tokio = { version = "=1.52.3", features = ["macros", "rt-multi-thread", "sync", "time"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "=0.58.0", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_JobObjects",
+  "Win32_System_Pipes",
+  "Win32_System_SystemServices",
+  "Win32_System_Threading",
+] }

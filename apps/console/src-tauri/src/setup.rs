@@ -74,8 +74,8 @@ mod tests {
     #[test]
     fn init_creates_keystore_then_refuses_overwrite() {
         let _env = crate::paths::env_guard();
-        let dir = std::env::temp_dir().join(format!("dbconsole-init-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let dir = temp_dir.path();
         let cfg = dir.join("dbbackup.toml");
         // config_path()가 이 경로를 쓰도록 env 지정(인프로세스 커맨드 경로 검증).
         std::env::set_var("DBBACKUP_CONFIG", &cfg);
@@ -104,6 +104,5 @@ mod tests {
         assert!(init_keystore("short".to_string()).is_err(), "8자 미만 거부");
 
         std::env::remove_var("DBBACKUP_CONFIG");
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

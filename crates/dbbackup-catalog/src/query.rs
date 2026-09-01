@@ -22,6 +22,29 @@ pub struct BackupRecord {
     pub last_verify_result: Option<String>,
 }
 
+/// 잡의 최신 실행 시도. 성공 backup과 독립적으로 최근 실패/실행 중 상태를 표시한다.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LatestRunRecord {
+    pub id: String,
+    pub job: String,
+    pub started_at: String,
+    pub status: String,
+}
+
+/// 실제 catalog에 기록된 목적지 artifact 한 건.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactRecord {
+    pub backup_id: String,
+    pub dest_name: String,
+    pub dest_kind: String,
+    pub object_key: String,
+    pub object_checksum: Option<String>,
+    pub immutability: Option<String>,
+    pub retention_until: Option<String>,
+    pub status: String,
+    pub uploaded_at: Option<String>,
+}
+
 fn row_to_record(row: &Row) -> rusqlite::Result<BackupRecord> {
     Ok(BackupRecord {
         id: row.get("id")?,
@@ -90,6 +113,65 @@ pub fn recent_backups(conn: &Connection, limit: u32) -> rusqlite::Result<Vec<Bac
         attach_latest_verification(conn, r)?;
     }
     Ok(recs)
+}
+
+/// 잡별 최신 실행 시도 1건. timestamp 동률은 SQLite rowid가 큰 행을 최신으로 본다.
+pub fn latest_run_per_job(conn: &Connection) -> rusqlite::Result<Vec<LatestRunRecord>> {
+    let mut stmt = conn.prepare(
+        "SELECT r.id, r.job, r.started_at, r.status
+         FROM runs r
+         WHERE NOT EXISTS (
+             SELECT 1
+             FROM runs newer
+             WHERE newer.job = r.job
+               AND (
+                   newer.started_at > r.started_at
+                   OR (newer.started_at = r.started_at AND newer.rowid > r.rowid)
+               )
+         )
+         ORDER BY r.job",
+    )?;
+    let records = stmt
+        .query_map([], |row| {
+            Ok(LatestRunRecord {
+                id: row.get("id")?,
+                job: row.get("job")?,
+                started_at: row.get("started_at")?,
+                status: row.get("status")?,
+            })
+        })?
+        .collect();
+    records
+}
+
+/// 주어진 backup에 실제로 저장된 artifact row만 반환한다.
+pub fn artifacts_for_backup(
+    conn: &Connection,
+    backup_id: &str,
+) -> rusqlite::Result<Vec<ArtifactRecord>> {
+    let mut stmt = conn.prepare(
+        "SELECT backup_id, dest_name, dest_kind, object_key, object_checksum,
+                immutability, retention_until, status, uploaded_at
+         FROM artifacts
+         WHERE backup_id = ?1
+         ORDER BY dest_name",
+    )?;
+    let records = stmt
+        .query_map([backup_id], |row| {
+            Ok(ArtifactRecord {
+                backup_id: row.get("backup_id")?,
+                dest_name: row.get("dest_name")?,
+                dest_kind: row.get("dest_kind")?,
+                object_key: row.get("object_key")?,
+                object_checksum: row.get("object_checksum")?,
+                immutability: row.get("immutability")?,
+                retention_until: row.get("retention_until")?,
+                status: row.get("status")?,
+                uploaded_at: row.get("uploaded_at")?,
+            })
+        })?
+        .collect();
+    records
 }
 
 #[cfg(test)]

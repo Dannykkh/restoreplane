@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "gateId": "G1",
+  "commands": [
+    {
+      "id": "g1.occurrence_uniqueness",
+      "display": "cargo test -p dbbackup-scheduler --test service_wake repeated_service_wake_materializes_one_occurrence_and_one_work_per_target -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-scheduler", "--test", "service_wake",
+        "repeated_service_wake_materializes_one_occurrence_and_one_work_per_target",
+        "--", "--exact"
+      ],
+      "platform": "windows"
+    },
+    {
+      "id": "g1.stale_fencing_rejection",
+      "display": "cargo test -p dbbackup-catalog --test runtime_repository backup_work_subject_and_claim_fence_are_enforced_by_database_and_repository -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-catalog", "--test", "runtime_repository",
+        "backup_work_subject_and_claim_fence_are_enforced_by_database_and_repository",
+        "--", "--exact"
+      ],
+      "platform": "windows"
+    },
+    {
+      "id": "g1.process_tree_reaping",
+      "display": "cargo test -p dbbackup-runtime --test process_supervisor_windows suspended_launch_assigns_the_entire_process_tree_to_a_kill_on_close_job -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-runtime", "--test", "process_supervisor_windows",
+        "suspended_launch_assigns_the_entire_process_tree_to_a_kill_on_close_job",
+        "--", "--exact"
+      ],
+      "platform": "windows"
+    },
+    {
+      "id": "g1.checkpoint_crash_reconciliation",
+      "display": "cargo test -p dbbackup-runtime --test recovery_commit_crash -- --nocapture",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-runtime", "--test", "recovery_commit_crash", "--", "--nocapture"
+      ],
+      "platform": "windows"
+    },
+    {
+      "id": "g1.spool_reservation",
+      "display": "cargo test -p dbbackup-catalog --test resource_admission one_insufficient_resource_creates_no_allocation_or_spool_reservation -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-catalog", "--test", "resource_admission",
+        "one_insufficient_resource_creates_no_allocation_or_spool_reservation",
+        "--", "--exact"
+      ],
+      "platform": "windows"
+    },
+    {
+      "id": "g1.resource_permit_limits",
+      "display": "cargo test -p dbbackup-catalog --test resource_admission successful_admission_is_idempotent_and_reserves_every_requested_unit -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-catalog", "--test", "resource_admission",
+        "successful_admission_is_idempotent_and_reserves_every_requested_unit",
+        "--", "--exact"
+      ],
+      "platform": "windows"
+    },
+    {
+      "id": "g1.required_destination_truth",
+      "display": "cargo test -p dbbackup-catalog --test catalog_projection_repository incomplete_or_cross_recovery_evidence_and_fake_l3_are_rejected -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-catalog", "--test", "catalog_projection_repository",
+        "incomplete_or_cross_recovery_evidence_and_fake_l3_are_rejected",
+        "--", "--exact"
+      ],
+      "platform": "windows"
+    },
+    {
+      "id": "g1.single_service_execution_path",
+      "display": "cargo test -p dbbackup-service --test service_host singleton_host_is_gui_independent_and_pre_g1_is_rehearsal_only -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-service", "--test", "service_host",
+        "singleton_host_is_gui_independent_and_pre_g1_is_rehearsal_only",
+        "--", "--exact"
+      ],
+      "platform": "windows"
+    },
+    {
+      "id": "g1.operational_store_online_backup",
+      "display": "cargo test -p dbbackup-catalog --test online_backup live_wal_online_backup_and_separate_restore_rehearsal_are_valid -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-catalog", "--test", "online_backup",
+        "live_wal_online_backup_and_separate_restore_rehearsal_are_valid",
+        "--", "--exact"
+      ],
+      "platform": "windows"
+    }
+  ]
+}

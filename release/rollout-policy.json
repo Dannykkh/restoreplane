@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "policyId": "connected-backup-platform-v2",
+  "safetyInvariants": {
+    "unexplainedMissedOccurrences": 0,
+    "duplicateRecoveryPointsPerOccurrenceTarget": 0,
+    "staleFenceCommits": 0,
+    "secretCanaryMatches": 0,
+    "unsupportedClaimPromotions": 0,
+    "partialScopesReportedAsWholeDatabase": 0,
+    "recoveryPointsWithoutSignedManifestOrRequiredReplicaEvidence": 0,
+    "setManifestPayloadDeletionViolations": 0
+  },
+  "ownerApprovedStopMetrics": {
+    "status": "pending_owner_approval",
+    "requiredBeforeStage": "controlled_beta",
+    "metrics": [
+      "queueFreshnessMs",
+      "restoreDrillPassRate",
+      "rpoViolationTimeToDetectMs",
+      "repairBacklog",
+      "notificationDeliveryRate",
+      "supportBundleFailureRate"
+    ]
+  },
+  "stages": [
+    {
+      "id": "internal_dogfood",
+      "scope": [
+        "destination.local",
+        "backup.postgresql",
+        "backup.mysql",
+        "backup.mariadb"
+      ],
+      "entryGate": [
+        "G0",
+        "G1",
+        "G2"
+      ],
+      "stopAction": "halt_new_installs_preserve_service_authority"
+    },
+    {
+      "id": "controlled_beta",
+      "scope": [
+        "destination.s3",
+        "destination.ssh",
+        "migration_rehearsal"
+      ],
+      "entryGate": [
+        "G3-A",
+        "G3-B",
+        "owner_stop_metrics_approved"
+      ],
+      "stopAction": "disable_beta_capabilities_and_forward_fix"
+    },
+    {
+      "id": "opt_in_v2_cutover",
+      "scope": [
+        "service_authority"
+      ],
+      "entryGate": [
+        "G0",
+        "G1",
+        "G2",
+        "G3-A",
+        "G3-B",
+        "rollback_rehearsal"
+      ],
+      "stopAction": "clean_cutover_rollback_or_forward_fix"
+    },
+    {
+      "id": "wave_1",
+      "scope": [
+        "backup.sqlite",
+        "backup.sqlserver_candidate"
+      ],
+      "entryGate": [
+        "G4"
+      ],
+      "stopAction": "demote_failed_provider_claim"
+    },
+    {
+      "id": "general_availability",
+      "scope": [
+        "signed_install",
+        "signed_update",
+        "diagnostics",
+        "support_bundle",
+        "approved_slo"
+      ],
+      "entryGate": [
+        "G5",
+        "production_signing",
+        "owner_stop_metrics_approved"
+      ],
+      "stopAction": "halt_cohort_keep_current_authority"
+    }
+  ],
+  "deferred": [
+    "public_http_api",
+    "organization_rbac",
+    "remote_agent",
+    "backup_content_browser"
+  ]
+}

@@ -2,6 +2,9 @@
 name = "dbbackup-console"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
 description = "dbbackupsystem 관리 GUI (Tauri 데스크톱 콘솔)"
 
 # GUI 백엔드는 기존 lib 크레이트를 직접 의존해 재사용한다(재구현 금지).
@@ -16,12 +19,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-serde = { workspace = true }
 serde_json = "1"
-anyhow = { workspace = true }
-zeroize = "1"
 
-dbbackup-core = { path = "../../../crates/dbbackup-core" }
-dbbackup-config = { path = "../../../crates/dbbackup-config" }
-dbbackup-catalog = { path = "../../../crates/dbbackup-catalog" }
-dbbackup-secrets = { path = "../../../crates/dbbackup-secrets" }
+dbbackup-application = { path = "../../../crates/dbbackup-application" }
+dbbackup-ipc-client = { path = "../../../crates/dbbackup-ipc-client" }

@@ -16,6 +16,9 @@ use time::OffsetDateTime;
 use crate::cli::ScheduleArgs;
 
 pub fn run(config_path: &Path, args: ScheduleArgs) -> anyhow::Result<()> {
+    if !args.remove {
+        crate::commands::direct_execution_guard::enforce()?;
+    }
     let config = dbbackup_config::Config::load(config_path)?;
     dbbackup_config::validate(&config).map_err(|errs| anyhow::anyhow!("{errs:?}"))?;
 
@@ -41,6 +44,9 @@ pub fn run(config_path: &Path, args: ScheduleArgs) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("job '{}'의 schedule 파싱 실패: {e}", job.name))?;
 
     let exe_path = std::env::current_exe()?.to_string_lossy().into_owned();
+    let registered_config_path = std::path::absolute(config_path)?
+        .to_string_lossy()
+        .into_owned();
     let working_dir = std::env::current_dir()?.to_string_lossy().into_owned();
     let user = std::env::var("USERNAME").unwrap_or_else(|_| "SYSTEM".to_string());
     // "DOMAIN\\USER"(USERDOMAIN) 형식이 SID 매핑에 안전하다(로컬 ".\\user" 표기는 일부 환경에서 실패).
@@ -56,6 +62,7 @@ pub fn run(config_path: &Path, args: ScheduleArgs) -> anyhow::Result<()> {
     let params = TaskXmlParams {
         job_name: job.name.clone(),
         exe_path,
+        config_path: registered_config_path,
         working_dir,
         service_account,
         logon_type: LogonType::S4U, // FR2 기본값: 비밀번호 미저장.

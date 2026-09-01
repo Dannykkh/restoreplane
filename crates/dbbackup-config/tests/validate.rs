@@ -1,5 +1,7 @@
 // validate() 교차참조/필수필드 검증 케이스.
-use dbbackup_config::schema::{Config, Database, Destination, Job, Retention, VerifyPolicy};
+use dbbackup_config::schema::{
+    Config, Database, Destination, Job, ReaderIdentity, Retention, VerifyPolicy,
+};
 use dbbackup_config::{validate, ValidationError};
 use dbbackup_core::{
     ChecksumAlgo, DestKind, EncField, Engine, ImmutabilityCapability, ObjectLockMode,
@@ -43,6 +45,7 @@ fn local_dest(name: &str) -> Destination {
         private_key_path: None,
         host_key_fingerprint: None,
         path: Some("D:/backup-spool".into()),
+        reader: None,
     }
 }
 
@@ -160,6 +163,34 @@ fn s3_missing_required_fields_are_all_collected() {
         "access_key_id"
     )));
     assert!(errors.contains(&ValidationError::MissingS3Field(
+        "s3".to_string(),
+        "secret_access_key"
+    )));
+}
+
+#[test]
+fn s3_reader_identity_requires_both_credentials() {
+    let mut config = Config::empty();
+    let mut d = local_dest("s3");
+    d.kind = DestKind::S3;
+    d.path = None;
+    d.endpoint = Some("https://s3.example.com".to_string());
+    d.bucket = Some("bucket".to_string());
+    d.access_key_id = Some(enc());
+    d.secret_access_key = Some(enc());
+    d.reader = Some(ReaderIdentity {
+        access_key_id: Some(enc()),
+        secret_access_key: None,
+        user: None,
+        private_key_path: None,
+        private_key_passphrase: None,
+        password: None,
+    });
+    config.destinations.push(d);
+
+    let errors = validate(&config).unwrap_err();
+
+    assert!(errors.contains(&ValidationError::MissingS3ReaderField(
         "s3".to_string(),
         "secret_access_key"
     )));

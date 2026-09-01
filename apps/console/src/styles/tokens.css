@@ -1,59 +1,42 @@
-/* tokens.css — DESIGN.md 정본 토큰을 CSS 커스텀 프로퍼티로 1:1 이식.
-   변경 시 DESIGN.md를 정본으로 삼고 여기 값을 맞춘다(드리프트 방지). */
-
 :root {
-  color-scheme: dark light;
+  color-scheme: dark;
 
-  /* --- near-black 슬레이트 베이스 (순수 검정 금지) --- */
-  --bg: #14181f;
-  --surface: #1b212b;
-  --surface-2: #232b37;
-  --border: #2e3846;
-  --border-strong: #3b4757;
+  --bg: #10171a;
+  --surface: #172126;
+  --surface-2: #1e2b31;
+  --surface-raised: #24343a;
+  --border: #31434a;
+  --border-strong: #496067;
+  --text: #eef5f3;
+  --text-muted: #a9bab7;
+  --text-faint: #93a6a1;
 
-  --text: #edf1f6;
-  --text-muted: #a5b0be;
-  --text-faint: #6c7788;
+  --primary: #50c7b5;
+  --primary-strong: #73d9c9;
+  --on-primary: #06251f;
+  --accent: #e4b860;
+  --on-accent: #291c05;
 
-  /* --- 지배색: 침착한 틸 트러스트 --- */
-  --primary: #3fbfb0;
-  --primary-strong: #2aa396;
-  --on-primary: #052420;
+  --success: #65c99b;
+  --warning: #e4b860;
+  --danger: #ef7e73;
+  --info: #6fbfd0;
+  --immutable: #a5a4ed;
 
-  /* --- 날카로운 액센트: 포커스/CTA --- */
-  --accent: #5bc8e8;
-  --on-accent: #04222c;
-
-  /* --- 상태색 (절제된 채도) --- */
-  --success: #46c08a;
-  --on-success: #04241a;
-  --warning: #e0a94a;
-  --on-warning: #2a1d05;
-  --danger: #e56a62;
-  --on-danger: #2a0906;
-  --info: #3fbfb0;
-
-  /* --- 불변성/보안 전용 강조 (배지) --- */
-  --immutable: #7c9cf5;
-  --on-immutable: #0a1130;
-
-  /* --- 타이포그래피 --- */
   --font-heading: "Space Grotesk", "Pretendard Variable", "Pretendard", sans-serif;
   --font-body: "Pretendard Variable", "Pretendard", sans-serif;
   --font-label: "Pretendard Variable", "Pretendard", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  --fs-h1: 28px;
-  --fs-h2: 22px;
-  --fs-h3: 18px;
-  --fs-body-lg: 16px;
-  --fs-body: 14px;
-  --fs-body-sm: 13px;
-  --fs-label: 12px;
-  --fs-mono: 12px;
-  --fs-mono-sm: 11px;
+  --fs-h1: clamp(1.7rem, 2.5vw, 2.35rem);
+  --fs-h2: clamp(1.2rem, 1.7vw, 1.55rem);
+  --fs-h3: 1rem;
+  --fs-body-lg: 1rem;
+  --fs-body: 0.875rem;
+  --fs-body-sm: 0.8125rem;
+  --fs-label: 0.75rem;
+  --fs-mono: 0.75rem;
 
-  /* --- 간격 스케일 [2,4,8,12,16,24,32,48,64] --- */
   --sp-1: 2px;
   --sp-2: 4px;
   --sp-3: 8px;
@@ -66,36 +49,92 @@
   --gutter: 16px;
   --section: 32px;
 
-  /* --- 라운드 --- */
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 14px;
+  --r-sm: 5px;
+  --r-md: 8px;
+  --r-lg: 12px;
   --r-full: 999px;
 
-  /* --- elevation --- */
-  --el-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--border);
-  --el-modal: 0 12px 40px rgba(0, 0, 0, 0.5);
-  --el-focus: 0 0 0 3px color-mix(in oklch, var(--accent) 45%, transparent);
+  --el-card: 0 1px 0 rgb(255 255 255 / 3%), 0 14px 30px rgb(0 0 0 / 13%);
+  --el-modal: 0 28px 72px rgb(0 0 0 / 52%);
+  --el-focus: 0 0 0 3px rgb(80 199 181 / 34%);
 
-  /* --- motion --- */
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --dur-slow: 320ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
+  --rail-width: 224px;
+  --content-max: 1480px;
 }
 
-/* 라이트 테마 override (접근성/선호 대응, 부차) */
+@supports (color: oklch(60% 0.1 180)) {
+  :root {
+    --bg: oklch(19% 0.018 190);
+    --surface: oklch(24% 0.022 190);
+    --surface-2: oklch(29% 0.026 190);
+    --surface-raised: oklch(34% 0.03 190);
+    --border: oklch(38% 0.027 190);
+    --border-strong: oklch(48% 0.035 190);
+    --text: oklch(96% 0.012 175);
+    --text-muted: oklch(76% 0.027 175);
+    --text-faint: oklch(70% 0.03 175);
+    --primary: oklch(76% 0.12 174);
+    --primary-strong: oklch(83% 0.105 174);
+    --on-primary: oklch(22% 0.045 174);
+    --accent: oklch(80% 0.13 80);
+    --on-accent: oklch(24% 0.055 80);
+    --success: oklch(77% 0.12 155);
+    --warning: oklch(80% 0.13 80);
+    --danger: oklch(72% 0.16 25);
+    --info: oklch(76% 0.09 210);
+    --immutable: oklch(75% 0.11 285);
+  }
+}
+
 :root[data-theme="light"] {
-  --bg: #f5f7fa;
-  --surface: #ffffff;
-  --surface-2: #edf1f6;
-  --border: #d6dee8;
-  --border-strong: #c3cedb;
-  --text: #141a22;
-  --text-muted: #4a5566;
-  --text-faint: #8895a6;
-  --primary: #1e9e90;
-  --primary-strong: #17867a;
-  --on-primary: #ffffff;
-  --el-card: 0 1px 2px rgba(20, 26, 34, 0.08), 0 0 0 1px var(--border);
+  color-scheme: light;
+  --bg: #edf2ef;
+  --surface: #f9fbfa;
+  --surface-2: #e8efec;
+  --surface-raised: #ffffff;
+  --border: #cbd8d3;
+  --border-strong: #9eb3ac;
+  --text: #17211f;
+  --text-muted: #334843;
+  --text-faint: #405650;
+  --primary: #0d675c;
+  --primary-strong: #085348;
+  --on-primary: #f4fffc;
+  --accent: #72500f;
+  --on-accent: #ffffff;
+  --success: #176443;
+  --warning: #74500e;
+  --danger: #9b2f2b;
+  --info: #1c5967;
+  --immutable: #4d499a;
+  --el-card: 0 1px 0 rgb(255 255 255 / 70%), 0 12px 26px rgb(25 55 46 / 7%);
+  --el-modal: 0 28px 72px rgb(23 33 31 / 28%);
+  --el-focus: 0 0 0 3px rgb(24 127 114 / 27%);
+}
+
+@supports (color: oklch(60% 0.1 180)) {
+  :root[data-theme="light"] {
+    --bg: oklch(95% 0.012 170);
+    --surface: oklch(99% 0.006 170);
+    --surface-2: oklch(94% 0.018 170);
+    --surface-raised: oklch(100% 0 0);
+    --border: oklch(85% 0.028 170);
+    --border-strong: oklch(72% 0.045 170);
+    --text: oklch(25% 0.025 170);
+    --text-muted: oklch(38% 0.035 170);
+    --text-faint: oklch(43% 0.04 170);
+    --primary: oklch(43% 0.1 174);
+    --primary-strong: oklch(37% 0.09 174);
+    --on-primary: oklch(99% 0.005 174);
+    --accent: oklch(42% 0.11 80);
+    --success: oklch(42% 0.11 155);
+    --warning: oklch(42% 0.11 80);
+    --danger: oklch(45% 0.16 25);
+    --info: oklch(42% 0.08 210);
+    --immutable: oklch(44% 0.13 285);
+  }
 }

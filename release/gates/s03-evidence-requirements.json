@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "gateId": "S03",
+  "sameSourceRevision": true,
+  "sameBuildId": true,
+  "allRequired": true,
+  "requiredEvidenceIds": [
+    "s03.singleton_service_authority",
+    "s03.named_pipe_kernel_security",
+    "s03.bounded_codec_fuzz",
+    "s03.durable_ipc_replay",
+    "s03.confirmation_binding",
+    "s03.dpapi_secret_custody",
+    "s03.typed_config_cutover",
+    "s03.clean_rollback_boundary",
+    "s03.offline_cutover_recovery",
+    "s03.real_scheduler_recovery",
+    "s03.real_scm_verifier_wiring",
+    "s03.shutdown_drain_order",
+    "s03.real_pipe_roundtrip",
+    "s03.legacy_direct_guard"
+  ]
+}

@@ -25,6 +25,7 @@ fn selftest_params(job: &str) -> TaskXmlParams {
         job_name: job.to_string(),
         // 해가 없는 커맨드(실행되어도 무해). 실제 실행은 이 테스트에서 트리거하지 않는다.
         exe_path: r"C:\Windows\System32\cmd.exe".to_string(),
+        config_path: r"C:\Windows\Temp\dbbackup.toml".to_string(),
         working_dir: r"C:\Windows\Temp".to_string(),
         service_account: account,
         logon_type: LogonType::S4U,

@@ -3,7 +3,10 @@
 //! Postgres(S03)/MySQL(S04)이 이 trait을 구현한다. 타입은 여기(공용 계약)에 두고
 //! dbbackup-source-pg 등 구현 크레이트가 이를 참조한다.
 
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
+use dbbackup_core::ConsistencyGrade;
 use uuid::Uuid;
 
 use crate::artifact::DumpArtifact;
@@ -16,6 +19,18 @@ pub trait BackupSource: Send + Sync {
 
     /// 계획의 파트 1개를 실제 자식 프로세스로 구동한다(프로세스 시작 자체는 non-blocking).
     fn spawn(&self, part: &DumpPlanPart) -> anyhow::Result<DumpArtifact>;
+
+    /// Collects source-specific evidence after every dump stream has been consumed.
+    /// Callers invoke this once, immediately before signing the set manifest.
+    fn take_manifest_evidence(&self) -> anyhow::Result<SourceManifestEvidence> {
+        Ok(SourceManifestEvidence::default())
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SourceManifestEvidence {
+    pub manifest_options: BTreeMap<String, String>,
+    pub consistency_grade: Option<ConsistencyGrade>,
 }
 
 /// 한 번의 `plan()` 호출로 확정된 실행 계획. globals + DB별 파트로 구성된다.
@@ -36,6 +51,13 @@ pub struct DumpPlanPart {
     pub pairs_with_globals_backup_id: Option<Uuid>,
     pub dump_tool: &'static str, // "pg_dump" | "pg_dumpall"
     pub dump_tool_path: std::path::PathBuf,
+    /// Package-attested executable digest. Production native sources require this value so the
+    /// supervisor can verify the locked image before resuming a credential-bearing process.
+    /// Legacy/test sources may leave it unset and rely on the supervisor's local hash pin.
+    pub dump_tool_sha256: Option<[u8; 32]>,
+    /// Exact audited dependency closure for the native executable. The Windows supervisor locks
+    /// and verifies these files for the child lifetime to prevent post-start DLL substitution.
+    pub dump_tool_dependencies: Vec<(std::path::PathBuf, [u8; 32])>,
     pub dump_tool_version: String,
     pub dump_format: &'static str, // "custom" | "plain"
     pub dump_flags: String,        // 실행될 전체 커맨드라인, 시크릿 없음(R9)

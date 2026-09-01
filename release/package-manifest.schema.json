@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dbbackupsystem.local/schemas/package-manifest-v1.json",
+  "title": "DbBackup signed package manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "channel",
+    "version",
+    "minimumReaderVersion",
+    "buildId",
+    "revision",
+    "sourceTreeDigest",
+    "files"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "channel": { "const": "production" }
+        },
+        "required": ["channel"]
+      },
+      "then": {
+        "required": ["nativeTools"],
+        "properties": {
+          "files": {
+            "contains": {
+              "properties": {
+                "path": { "const": "provider-certifications.json" }
+              },
+              "required": ["path"]
+            },
+            "minContains": 1,
+            "maxContains": 1
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "channel": {
+      "enum": [
+        "development",
+        "production"
+      ]
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "minimumReaderVersion": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "buildId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40,64}$"
+    },
+    "sourceTreeDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8192,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "sha256",
+          "sizeBytes",
+          "authenticodeRequired",
+          "signerRole",
+          "signerThumbprint",
+          "publisher"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483648
+          },
+          "authenticodeRequired": {
+            "type": "boolean"
+          },
+          "signerRole": {
+            "enum": ["release", "vendor", "hash_only"]
+          },
+          "signerThumbprint": {
+            "type": "string",
+            "pattern": "^(?:|[0-9a-f]{40}|[0-9a-f]{64})$"
+          },
+          "publisher": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      }
+    },
+    "nativeTools": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "auditManifestPath",
+        "auditManifestSha256",
+        "fileCount"
+      ],
+      "properties": {
+        "auditManifestPath": {
+          "const": "tools/native-tools-audit.json"
+        },
+        "auditManifestSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "fileCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
+        }
+      }
+    }
+  }
+}

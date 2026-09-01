@@ -97,6 +97,25 @@ pub(crate) fn unwrap_with_kek(kek: &Dek, st: &WrapStanza) -> Result<Dek, SecretE
     }
 }
 
+pub fn wrap_dek_with_kek(kek: &Dek, dek: &Dek, generation: u32) -> Result<WrapSet, SecretError> {
+    if generation == 0 {
+        return Err(SecretError::WrapFailed);
+    }
+    Ok(WrapSet {
+        dek_wrap_gen: generation,
+        stanzas: vec![wrap_with_kek(kek, dek)?],
+    })
+}
+
+pub fn unwrap_dek_with_kek(kek: &Dek, set: &WrapSet) -> Result<Dek, SecretError> {
+    for stanza in &set.stanzas {
+        if let Ok(dek) = unwrap_with_kek(kek, stanza) {
+            return Ok(dek);
+        }
+    }
+    Err(SecretError::NoUsableStanza)
+}
+
 /// (a) 비밀번호 경로 wrap.
 pub(crate) fn wrap_password(dek: &Dek, password: &[u8]) -> Result<WrapStanza, SecretError> {
     let mut salt = [0u8; 16];

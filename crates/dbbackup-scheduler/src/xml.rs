@@ -5,6 +5,8 @@ use time::OffsetDateTime;
 pub struct TaskXmlParams {
     pub job_name: String,
     pub exe_path: String,
+    /// 태스크 등록 시 사용한 config의 절대 경로. 예약 실행이 기본 경로로 되돌아가지 않게 고정한다.
+    pub config_path: String,
     pub working_dir: String,
     /// 예: "CORP\\svc-dbbackup" 또는 ".\\svc-dbbackup"(로컬 계정).
     pub service_account: String,
@@ -45,6 +47,12 @@ pub fn escape_xml(s: &str) -> String {
 
 fn schedule_by_block(spec: &ScheduleSpec) -> String {
     match spec {
+        ScheduleSpec::Hourly { .. } => concat!(
+            "<ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>",
+            "<Repetition><Interval>PT1H</Interval><Duration>P1D</Duration>",
+            "<StopAtDurationEnd>false</StopAtDurationEnd></Repetition>"
+        )
+        .to_owned(),
         ScheduleSpec::Daily { .. } => {
             "<ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>".to_string()
         }
@@ -57,6 +65,7 @@ fn schedule_by_block(spec: &ScheduleSpec) -> String {
 
 fn start_boundary_for(spec: &ScheduleSpec, from: OffsetDateTime) -> String {
     let (hour, minute) = match spec {
+        ScheduleSpec::Hourly { minute } => (from.hour(), *minute),
         ScheduleSpec::Daily { hour, minute } => (*hour, *minute),
         ScheduleSpec::Weekly { hour, minute, .. } => (*hour, *minute),
     };
@@ -115,12 +124,13 @@ pub fn render_task_xml(p: &TaskXmlParams) -> String {
   <Actions Context="Author">
     <Exec>
       <Command>{exe}</Command>
-      <Arguments>run --job &quot;{job}&quot; --scheduled</Arguments>
+      <Arguments>--config &quot;{config}&quot; run --job &quot;{job}&quot; --scheduled</Arguments>
       <WorkingDirectory>{wd}</WorkingDirectory>
     </Exec>
   </Actions>
 </Task>"#,
         job = escape_xml(&p.job_name),
+        config = escape_xml(&p.config_path),
         start = start_boundary,
         schedule_block = schedule_by_block(&p.schedule),
         backoff = p.retry_backoff_min,

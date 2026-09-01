@@ -2,11 +2,17 @@
 pub mod migrate;
 pub mod prune;
 pub mod schema;
+pub mod shadow;
 pub mod validate;
 
 use std::path::PathBuf;
 
 pub use schema::Config;
+pub use shadow::{
+    load_v1_shadow_model, CanonicalConnection, CanonicalDestination, CanonicalPlan,
+    CanonicalSecretBinding, CanonicalTarget, CanonicalV1ShadowModel, ImportedSecretRef,
+    LegacySecretSink, ShadowImportError,
+};
 pub use validate::{validate, ValidationError};
 
 #[derive(Debug, thiserror::Error)]

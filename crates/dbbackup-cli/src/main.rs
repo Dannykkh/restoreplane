@@ -12,10 +12,18 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         Command::Init(args) => commands::init::run(&cli.config, args),
         Command::Doctor => commands::doctor::run(&cli.config),
+        Command::Service { action } => commands::service::run(action),
         Command::TestConnection(args) => commands::test_connection::run(&cli.config, args),
         Command::AddDb(args) => commands::add_db::run(&cli.config, args),
         Command::AddDest(args) => commands::add_dest::run(&cli.config, args),
-        Command::Run(args) => commands::run::run(&cli.config, args),
+        Command::Run(args) => {
+            let exit_code = commands::run::run(&cli.config, args)?;
+            if exit_code == 0 {
+                Ok(())
+            } else {
+                std::process::exit(exit_code)
+            }
+        }
         Command::Verify(args) => commands::verify::run(&cli.config, args),
         Command::Restore(args) => commands::restore::run(&cli.config, args),
         Command::RotateKey(args) => commands::rotate_key::run(&cli.config, args),

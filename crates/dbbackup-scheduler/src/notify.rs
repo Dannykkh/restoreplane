@@ -135,16 +135,34 @@ impl NotificationSink for EmailPlaceholderSink {
 
 pub struct WebhookSink {
     /// SecretManager로 복호화된 평문 URL. 절대 로그에 출력하지 않는다.
-    url: String,
+    url: zeroize::Zeroizing<String>,
     client: reqwest::Client,
 }
 
 impl WebhookSink {
     pub fn new(url: String) -> Self {
-        WebhookSink {
+        Self::with_timeouts(
             url,
-            client: reqwest::Client::new(),
-        }
+            std::time::Duration::from_secs(5),
+            std::time::Duration::from_secs(15),
+        )
+        .expect("고정 webhook HTTP client 설정은 유효해야 함")
+    }
+
+    /// 테스트와 특수 배포에서 timeout을 명시적으로 줄일 수 있는 생성자.
+    pub fn with_timeouts(
+        url: String,
+        connect_timeout: std::time::Duration,
+        total_timeout: std::time::Duration,
+    ) -> anyhow::Result<Self> {
+        let client = reqwest::Client::builder()
+            .connect_timeout(connect_timeout)
+            .timeout(total_timeout)
+            .build()?;
+        Ok(WebhookSink {
+            url: zeroize::Zeroizing::new(url),
+            client,
+        })
     }
 }
 
@@ -159,7 +177,7 @@ impl NotificationSink for WebhookSink {
             "rpo": event.rpo_summary,
         });
         self.client
-            .post(&self.url)
+            .post(self.url.as_str())
             .json(&body)
             .send()
             .await?

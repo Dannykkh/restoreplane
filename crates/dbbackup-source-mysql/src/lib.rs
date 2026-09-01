@@ -16,20 +16,33 @@ pub mod flags;
 pub mod meta;
 pub mod version;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use async_trait::async_trait;
-use dbbackup_pipeline::artifact::{DumpArtifact, DumpExit, DumpStream};
-use dbbackup_pipeline::source::{BackupSource, DumpPartKind, DumpPlan, DumpPlanPart};
+use dbbackup_core::{BackupScopeSelection, ConsistencyGrade};
+use dbbackup_pipeline::artifact::{
+    DumpArtifact, DumpExit, DumpStream, NativeChildProcess, NativeDumpStream,
+};
+use dbbackup_pipeline::source::{
+    BackupSource, DumpPartKind, DumpPlan, DumpPlanPart, SourceManifestEvidence,
+};
+#[cfg(windows)]
+use dbbackup_runtime::{StreamingProcessExit, SupervisedStreamingProcess};
 use uuid::Uuid;
 
 use anchor::{AnchorScanningReader, BinlogAnchor};
-use binary::{ClientKind, MysqldumpBinaryMatrix};
+use binary::{tool_name_for, ClientKind, MysqldumpBinaryMatrix};
 use dump::{drain_stderr_tail, render_dump_flags, spawn_mysqldump, MySqlConnCfg};
-use engine_scan::{classify_non_transactional, ensure_not_system_schema, NonTransactionalTable};
-use flags::{build_flags, DDL_RACE_FATAL_PATTERNS};
+use engine_scan::{
+    classify_non_transactional_for_selection, ensure_not_system_schema, NonTransactionalTable,
+};
+use flags::{build_dump_args, DDL_RACE_FATAL_PATTERNS};
 use meta::MySqlMetaConn;
-use version::{enforce_client_not_older, probe_client_version, ServerKind, ServerVersionInfo};
+use version::{
+    enforce_client_not_older, probe_client_version_with_identity, ServerKind, ServerVersionInfo,
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum MySqlSourceError {
@@ -52,6 +65,13 @@ pub enum MySqlSourceError {
         path: std::path::PathBuf,
         source: std::io::Error,
     },
+    #[error("MySQL-family dump tool trust verification failed: {path}")]
+    DumpToolUntrusted { path: std::path::PathBuf },
+    #[error("configured engine {expected:?} does not match detected server {actual:?}")]
+    ServerKindMismatch {
+        expected: ServerKind,
+        actual: ServerKind,
+    },
 }
 
 /// S04 소스. meta(경량 메타 조회)와 conn(mysqldump CLI 인증)을 분리해 둔다.
@@ -65,6 +85,8 @@ pub struct MySqlSource {
     pub binary_matrix: MysqldumpBinaryMatrix,
     /// R8 — 기본 true 권장(비가역성: 앵커 공백은 영구 재현 불가).
     pub capture_binlog: bool,
+    expected_server_kind: Option<ServerKind>,
+    selection: BackupScopeSelection,
     /// plan()이 채우는 사이드채널. 트레이트가 DumpArtifact만 반환하도록 고정돼(S05 계약) 있어,
     /// 매니페스트용 도메인 메타데이터는 이 채널로 노출하고 커밋 직후 회수한다(take_pre_dump_report).
     pre_dump: Arc<Mutex<Option<MySqlPreDumpReport>>>,
@@ -79,7 +101,6 @@ pub struct MySqlPreDumpReport {
     pub collation: String,
     pub non_transactional_tables: Vec<NonTransactionalTable>,
     pub dump_flags: String,
-    binary: std::path::PathBuf,
     spawn_args: Vec<String>,
     /// 스트림 소비(=커밋)가 끝난 뒤 값이 채워진다(anchor tee가 헤더 구간을 읽은 뒤).
     pub binlog_anchor: Arc<Mutex<BinlogAnchor>>,
@@ -101,8 +122,20 @@ impl MySqlSource {
             conn,
             binary_matrix,
             capture_binlog,
+            expected_server_kind: None,
+            selection: BackupScopeSelection::whole_database(),
             pre_dump: Arc::new(Mutex::new(None)),
         }
+    }
+
+    pub fn with_selection(mut self, selection: BackupScopeSelection) -> Self {
+        self.selection = selection;
+        self
+    }
+
+    pub fn with_expected_server_kind(mut self, expected: ServerKind) -> Self {
+        self.expected_server_kind = Some(expected);
+        self
     }
 
     /// S05 PipelineCfg 구성 시 이 잡의 fatal_patterns에 병합해야 하는 MySQL 전용 패턴(R9).
@@ -132,18 +165,23 @@ impl BackupSource for MySqlSource {
         // R7: 매 run 서버 종류/버전 재감지(설치 시점 1회성 아님).
         let raw = self.meta.query_version().await?;
         let server = ServerVersionInfo::from_raw(&raw)?;
+        ensure_expected_server_kind(self.expected_server_kind, server.kind)?;
 
         // R6: 배포판축 매트릭스 해석 — 미매칭이면 하드 실패(가장 가까운 걸로 강행 금지).
         let (client_kind, binary) = self.binary_matrix.resolve(&server)?;
+        let binary_sha256 = self.binary_matrix.expected_sha256(&binary)?;
+        let binary_dependencies = self.binary_matrix.trusted_dependencies(&binary)?;
 
         // R7: 선택된 바이너리를 실제 실행해 클라이언트≥서버 게이트 통과 확인.
-        let (client_major, client_raw) = probe_client_version(&binary).await?;
+        let (client_major, client_raw) =
+            probe_client_version_with_identity(&binary, binary_sha256, &binary_dependencies)
+                .await?;
         enforce_client_not_older(client_major, server.major)?;
         tracing::info!(server = %server.raw, client = %client_raw, "mysql version probe ok");
 
         // R1: PRE-DUMP 엔진 스캔 — 덤프 시작 전에 반드시 완료.
         let rows = self.meta.scan_tables(&db_name).await?;
-        let non_tx = classify_non_transactional(rows);
+        let non_tx = classify_non_transactional_for_selection(rows, &self.selection);
         if !non_tx.is_empty() {
             tracing::warn!(
                 db = %db_name,
@@ -157,9 +195,14 @@ impl BackupSource for MySqlSource {
         let (charset, collation) = self.meta.fetch_charset(&db_name).await?;
 
         // R2/R4/R8: 플래그 조립 + DB명. dump_args가 그대로 spawn argv가 된다.
-        let mut spawn_args = build_flags(&server, client_kind, self.capture_binlog);
-        spawn_args.push(db_name.clone());
-        let dump_flags = render_dump_flags(&binary, &spawn_args);
+        let spawn_args = build_dump_args(
+            &server,
+            client_kind,
+            self.capture_binlog,
+            &db_name,
+            &self.selection,
+        )?;
+        let dump_flags = render_dump_flags(&binary, &spawn_args, &self.conn, client_kind)?;
 
         let anchor = Arc::new(Mutex::new(BinlogAnchor::default()));
 
@@ -171,7 +214,6 @@ impl BackupSource for MySqlSource {
             collation: collation.clone(),
             non_transactional_tables: non_tx,
             dump_flags: dump_flags.clone(),
-            binary: binary.clone(),
             spawn_args,
             binlog_anchor: anchor,
         });
@@ -183,8 +225,10 @@ impl BackupSource for MySqlSource {
             source_alias: self.alias.clone(),
             kind: DumpPartKind::Database { name: db_name },
             pairs_with_globals_backup_id: None,
-            dump_tool: "mysqldump",
+            dump_tool: tool_name_for(client_kind),
             dump_tool_path: binary,
+            dump_tool_sha256: binary_sha256,
+            dump_tool_dependencies: binary_dependencies,
             dump_tool_version: client_raw,
             dump_format: "plain",
             dump_flags,
@@ -209,44 +253,133 @@ impl BackupSource for MySqlSource {
         }
 
         // plan()이 적재한 실행 인자/바이너리/앵커를 회수한다(잡당 1파트).
-        let (binary, spawn_args, anchor) = {
+        let (spawn_args, anchor, client_kind) = {
             let guard = self.pre_dump.lock().unwrap();
             let report = guard
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("spawn 전에 plan()이 호출되지 않음"))?;
             (
-                report.binary.clone(),
                 report.spawn_args.clone(),
                 report.binlog_anchor.clone(),
+                report.client_kind,
             )
         };
 
-        let mut child = spawn_mysqldump(&binary, &spawn_args, &self.conn)?;
-        let stdout = child.stdout.take().expect("stdout piped");
-        let stderr = child.stderr.take().expect("stderr piped");
+        let mut child = spawn_mysqldump(
+            &part.dump_tool_path,
+            part.dump_tool_sha256,
+            &part.dump_tool_dependencies,
+            &spawn_args,
+            &self.conn,
+            client_kind,
+        )?;
+        let process = NativeChildProcess::supervised(
+            i64::from(child.id()),
+            child.start_time_ms()?,
+            child.job_key(),
+            child.executable_path().to_path_buf(),
+            *child.executable_sha256(),
+        )?;
+        let stdout = tokio::fs::File::from_std(child.take_stdout()?);
+        let stderr = tokio::fs::File::from_std(child.take_stderr()?);
+        let abort_requested = Arc::new(AtomicBool::new(false));
+        let waiter_abort = Arc::clone(&abort_requested);
+        let process_waiter =
+            tokio::task::spawn_blocking(move || wait_for_supervised_exit(child, &waiter_abort));
+        let mut abort_on_drop = AbortOnDrop::new(Arc::clone(&abort_requested));
 
         // R8/R11: 바이트는 원본 그대로 파이프라인에 전달하되 헤더 구간에서 앵커를 훔쳐본다.
         let reader = AnchorScanningReader::new(stdout, anchor);
 
         let wait = Box::pin(async move {
-            let stderr_tail = drain_stderr_tail(stderr).await;
-            let status = child.wait().await?;
+            let stderr_task = tokio::spawn(drain_stderr_tail(stderr));
+            let exit = process_waiter
+                .await
+                .map_err(|error| anyhow::anyhow!("MySQL dump waiter failed: {error}"))??;
+            abort_on_drop.disarm();
+            let stderr_tail = stderr_task.await.unwrap_or_default();
             Ok(DumpExit {
-                code: status.code(),
-                success: status.success(),
+                code: Some(exit.exit_code() as i32),
+                success: exit.exit_code() == 0,
                 stderr_tail,
             })
         });
 
-        Ok(DumpArtifact::Stream(DumpStream {
-            reader: Box::new(reader),
-            wait,
+        Ok(DumpArtifact::NativeStream(NativeDumpStream {
+            process,
+            stream: DumpStream {
+                reader: Box::new(reader),
+                wait,
+                abort: Some(Box::new(move || {
+                    abort_requested.store(true, Ordering::Release);
+                })),
+            },
         }))
     }
+
+    fn take_manifest_evidence(&self) -> anyhow::Result<SourceManifestEvidence> {
+        self.take_pre_dump_report()
+            .ok_or_else(|| anyhow::anyhow!("MYSQL_PRE_DUMP_EVIDENCE_MISSING"))?
+            .into_manifest_fields()
+            .into_source_evidence()
+    }
+}
+
+fn ensure_expected_server_kind(
+    expected: Option<ServerKind>,
+    actual: ServerKind,
+) -> Result<(), MySqlSourceError> {
+    if let Some(expected) = expected {
+        if expected != actual {
+            return Err(MySqlSourceError::ServerKindMismatch { expected, actual });
+        }
+    }
+    Ok(())
 }
 
 /// S08 Manifest로 흘려보낼 MySQL 전용 필드(현 파이프라인 Manifest에 아직 필드가 없어, 이 크레이트가
 /// 별도 타입으로 노출한다 — S08 확장 시 그대로 매핑). non_transactional_tables는 비어도 명시적 []이다(R1).
+#[cfg(windows)]
+fn wait_for_supervised_exit(
+    mut child: SupervisedStreamingProcess,
+    abort_requested: &AtomicBool,
+) -> Result<StreamingProcessExit, dbbackup_runtime::SupervisorError> {
+    loop {
+        if abort_requested.load(Ordering::Acquire) {
+            return child.terminate();
+        }
+        if let Some(exit) = child.wait_timeout(Duration::from_millis(50))? {
+            return Ok(exit);
+        }
+    }
+}
+
+struct AbortOnDrop {
+    requested: Arc<AtomicBool>,
+    armed: bool,
+}
+
+impl AbortOnDrop {
+    fn new(requested: Arc<AtomicBool>) -> Self {
+        Self {
+            requested,
+            armed: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        if self.armed {
+            self.requested.store(true, Ordering::Release);
+        }
+    }
+}
+
 pub struct MySqlManifestFields {
     pub db_engine: String, // "mysql" | "mariadb"
     pub server_version: String,
@@ -259,10 +392,46 @@ pub struct MySqlManifestFields {
     pub gtid_set: Option<String>,
 }
 
+impl MySqlManifestFields {
+    pub fn into_source_evidence(self) -> anyhow::Result<SourceManifestEvidence> {
+        let consistency_grade = if self.non_transactional_tables.is_empty() {
+            None
+        } else {
+            Some(ConsistencyGrade::CrashConsistent)
+        };
+        let mut manifest_options = std::collections::BTreeMap::new();
+        manifest_options.insert("mysql.dbEngine".to_owned(), self.db_engine);
+        manifest_options.insert("mysql.serverVersion".to_owned(), self.server_version);
+        if let Some(charset) = self.charset {
+            manifest_options.insert("mysql.charset".to_owned(), charset);
+        }
+        if let Some(collation) = self.collation {
+            manifest_options.insert("mysql.collation".to_owned(), collation);
+        }
+        manifest_options.insert(
+            "mysql.nonTransactionalTables".to_owned(),
+            serde_json::to_string(&self.non_transactional_tables)?,
+        );
+        manifest_options.insert("mysql.dumpTool".to_owned(), self.dump_tool);
+        manifest_options.insert("mysql.dumpFlags".to_owned(), self.dump_flags);
+        if let Some(coordinates) = self.binlog_coordinates {
+            manifest_options.insert("mysql.binlogCoordinates".to_owned(), coordinates);
+        }
+        if let Some(gtid_set) = self.gtid_set {
+            manifest_options.insert("mysql.gtidSet".to_owned(), gtid_set);
+        }
+        Ok(SourceManifestEvidence {
+            manifest_options,
+            consistency_grade,
+        })
+    }
+}
+
 impl MySqlPreDumpReport {
     /// 스트림 소비(=커밋)가 끝난 뒤 호출해야 binlog_anchor가 채워져 있다(anchor tee가 헤더까지 읽은 뒤).
     pub fn into_manifest_fields(self) -> MySqlManifestFields {
         let anchor = self.binlog_anchor.lock().unwrap().clone();
+        let dump_tool = tool_name_for(self.client_kind).to_owned();
         MySqlManifestFields {
             db_engine: match self.server_version.kind {
                 ServerKind::MariaDb => "mariadb".to_string(),
@@ -276,10 +445,70 @@ impl MySqlPreDumpReport {
                 .into_iter()
                 .map(|t| t.display())
                 .collect(),
-            dump_tool: "mysqldump".to_string(),
+            dump_tool,
             dump_flags: self.dump_flags,
             binlog_coordinates: anchor.binlog_coordinates,
             gtid_set: anchor.gtid_set,
         }
+    }
+}
+
+#[cfg(test)]
+mod manifest_evidence_tests {
+    use dbbackup_core::ConsistencyGrade;
+
+    use super::*;
+
+    #[test]
+    fn configured_engine_family_must_match_live_server_before_tool_selection() {
+        assert!(
+            ensure_expected_server_kind(Some(ServerKind::OracleMySql), ServerKind::MariaDb)
+                .is_err()
+        );
+        assert!(
+            ensure_expected_server_kind(Some(ServerKind::MariaDb), ServerKind::MariaDb).is_ok()
+        );
+    }
+
+    #[test]
+    fn non_transactional_tables_and_binlog_anchor_flow_into_source_evidence() {
+        let fields = MySqlManifestFields {
+            db_engine: "mysql".to_owned(),
+            server_version: "8.4.5".to_owned(),
+            charset: Some("utf8mb4".to_owned()),
+            collation: Some("utf8mb4_0900_ai_ci".to_owned()),
+            non_transactional_tables: vec!["app.legacy_log(MyISAM)".to_owned()],
+            dump_tool: "mysqldump".to_owned(),
+            dump_flags: "--single-transaction --source-data=2".to_owned(),
+            binlog_coordinates: Some(
+                "-- CHANGE MASTER TO MASTER_LOG_FILE='bin.0001', MASTER_LOG_POS=154;".to_owned(),
+            ),
+            gtid_set: Some("SET @@GLOBAL.GTID_PURGED='uuid:1-42';".to_owned()),
+        };
+
+        let evidence = fields.into_source_evidence().expect("evidence");
+
+        assert_eq!(
+            evidence.consistency_grade,
+            Some(ConsistencyGrade::CrashConsistent)
+        );
+        assert_eq!(
+            evidence.manifest_options.get("mysql.serverVersion"),
+            Some(&"8.4.5".to_owned())
+        );
+        assert_eq!(
+            evidence
+                .manifest_options
+                .get("mysql.nonTransactionalTables"),
+            Some(&"[\"app.legacy_log(MyISAM)\"]".to_owned())
+        );
+        assert!(evidence
+            .manifest_options
+            .get("mysql.binlogCoordinates")
+            .is_some_and(|value| value.contains("MASTER_LOG_POS=154")));
+        assert!(evidence
+            .manifest_options
+            .get("mysql.gtidSet")
+            .is_some_and(|value| value.contains("uuid:1-42")));
     }
 }

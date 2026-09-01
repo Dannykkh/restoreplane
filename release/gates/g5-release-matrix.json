@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "gateId": "G5",
+  "allRequired": true,
+  "commands": [
+    {
+      "id": "g5.update_fault_matrix",
+      "executable": "cargo",
+      "arguments": [
+        "test",
+        "-p",
+        "dbbackup-service",
+        "--test",
+        "update_lifecycle"
+      ]
+    },
+    {
+      "id": "g5.minimum_reader_guard",
+      "executable": "cargo",
+      "arguments": [
+        "test",
+        "-p",
+        "dbbackup-service",
+        "--test",
+        "service_host",
+        "minimum_reader_version_blocks_old_binary_writes_but_keeps_diagnostics_available",
+        "--",
+        "--exact"
+      ]
+    },
+    {
+      "id": "g5.diagnostics_and_drain",
+      "executable": "cargo",
+      "arguments": [
+        "test",
+        "-p",
+        "dbbackup-service",
+        "--test",
+        "service_application"
+      ]
+    },
+    {
+      "id": "g5.support_bundle_canary",
+      "executable": "cargo",
+      "arguments": [
+        "test",
+        "-p",
+        "dbbackup-service",
+        "--test",
+        "support_bundle"
+      ]
+    },
+    {
+      "id": "g5.support_bundle_operation",
+      "executable": "cargo",
+      "arguments": [
+        "test",
+        "-p",
+        "dbbackup-service",
+        "--test",
+        "support_bundle_operation_worker"
+      ]
+    },
+    {
+      "id": "g5.telemetry_archive",
+      "executable": "cargo",
+      "arguments": [
+        "test",
+        "-p",
+        "dbbackup-service",
+        "--test",
+        "telemetry_archive"
+      ]
+    },
+    {
+      "id": "g5.installer_contract",
+      "executable": "powershell",
+      "arguments": [
+        "-NoProfile",
+        "-File",
+        "scripts/tests/install-lifecycle.Tests.ps1"
+      ]
+    },
+    {
+      "id": "g5.release_policy",
+      "executable": "powershell",
+      "arguments": [
+        "-NoProfile",
+        "-File",
+        "scripts/tests/check-release-policy.Tests.ps1"
+      ]
+    }
+  ],
+  "externalPromotionRequirements": [
+    "production_authenticode_certificate",
+    "rfc3161_timestamp_service",
+    "clean_windows_install_fixture",
+    "signed_update_fixture",
+    "exact_signed_artifact_functional_qualification",
+    "owner_approved_stop_metrics"
+  ]
+}

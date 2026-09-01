@@ -129,6 +129,31 @@ pub struct Destination {
 
     // --- ssh 원격 경로 / local 경로 공용 ---
     pub path: Option<PathBuf>,
+
+    /// 복구·검증 전용 읽기 신원. 백업 쓰기 자격증명과 의도적으로 분리하며,
+    /// 원격 ManifestSource는 이 값이 없을 때 writer 신원으로 폴백하지 않는다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reader: Option<ReaderIdentity>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReaderIdentity {
+    // --- s3 ---
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access_key_id: Option<dbbackup_core::EncField>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret_access_key: Option<dbbackup_core::EncField>,
+
+    // --- ssh ---
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub private_key_path: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub private_key_passphrase: Option<dbbackup_core::EncField>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub password: Option<dbbackup_core::EncField>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -9,10 +9,12 @@
 pub mod cron;
 pub mod entrypoint;
 pub mod notify;
+pub mod occurrence;
 pub mod overlap;
 pub mod redact;
 pub mod register;
 pub mod rpo;
+pub mod service_wake;
 pub mod xml;
 
 pub use cron::{parse_cron_subset, CronError, ScheduleSpec, Weekday};

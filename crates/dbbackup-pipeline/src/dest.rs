@@ -34,6 +34,10 @@ pub enum DestError {
     /// 원격 목적지(S3/SSH) 백엔드가 매핑해 넘기는 일반 오류. key는 로그/영수증용(시크릿 아님).
     #[error("목적지 백엔드 오류({key}): {msg}")]
     Backend { key: String, msg: String },
+    #[error("목적지 객체 키가 안전하지 않음: {key}")]
+    InvalidKey { key: String },
+    #[error("목적지 읽기 상한 초과({key}): max_bytes={max_bytes}")]
+    ReadLimitExceeded { key: String, max_bytes: u64 },
 }
 
 impl DestError {
@@ -44,6 +48,26 @@ impl DestError {
             msg: msg.to_string(),
         }
     }
+
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            Self::Io { source, .. } => matches!(
+                source.kind(),
+                std::io::ErrorKind::Interrupted
+                    | std::io::ErrorKind::WouldBlock
+                    | std::io::ErrorKind::TimedOut
+                    | std::io::ErrorKind::ConnectionAborted
+                    | std::io::ErrorKind::ConnectionReset
+                    | std::io::ErrorKind::ConnectionRefused
+                    | std::io::ErrorKind::NotConnected
+            ),
+            Self::Backend { .. } => true,
+            Self::WriterClosed
+            | Self::ImmutabilityUnmet { .. }
+            | Self::InvalidKey { .. }
+            | Self::ReadLimitExceeded { .. } => false,
+        }
+    }
 }
 
 /// 업로드 성공 영수증(→ S08 artifacts).
@@ -51,6 +75,7 @@ impl DestError {
 pub struct UploadReceipt {
     pub key: String,
     pub bytes: u64,
+    pub version: Option<String>,
 }
 
 /// 팬아웃 재시도 판정용 업로드 오류.
@@ -69,7 +94,20 @@ pub enum UploadError {
 impl UploadError {
     /// v1: IO 오류만 재시도 가능으로 취급(네트워크 목적지가 붙으면 세분화).
     pub fn is_retryable(&self) -> bool {
-        matches!(self, UploadError::Io(_))
+        match self {
+            Self::Dest(error) => error.is_retryable(),
+            Self::Io(error) => matches!(
+                error.kind(),
+                std::io::ErrorKind::Interrupted
+                    | std::io::ErrorKind::WouldBlock
+                    | std::io::ErrorKind::TimedOut
+                    | std::io::ErrorKind::ConnectionAborted
+                    | std::io::ErrorKind::ConnectionReset
+                    | std::io::ErrorKind::ConnectionRefused
+                    | std::io::ErrorKind::NotConnected
+            ),
+            Self::NotAttempted | Self::TaskPanic(_) => false,
+        }
     }
 }
 
@@ -131,6 +169,58 @@ pub trait Destination: Send + Sync {
     fn capabilities(&self) -> DestCaps;
     /// 멀티파트/스트리밍 writer. **commit()에서만 최종 객체가 보인다**(multipart-only-commit, R6).
     async fn writer(&self, key: &str) -> Result<DestWriter, DestError>;
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReaderObjectProbeV2 {
+    pub bytes: u64,
+    pub blake3: String,
+    pub version: Option<String>,
+}
+
+impl ReaderObjectProbeV2 {
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        Self {
+            bytes: bytes.len() as u64,
+            blake3: blake3::hash(bytes).to_hex().to_string(),
+            version: None,
+        }
+    }
+}
+
+/// Metadata-only observation for large objects whose expected digest is
+/// authenticated by an atomic signed commit marker.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReaderObjectMetadataV2 {
+    pub bytes: u64,
+    pub version: Option<String>,
+}
+
+#[async_trait]
+pub trait DestinationReaderV2: Send + Sync {
+    async fn probe_object(&self, key: &str) -> Result<ReaderObjectProbeV2, DestError>;
+    async fn read_bytes_bounded(&self, key: &str, max_bytes: u64) -> Result<Vec<u8>, DestError>;
+
+    /// Compatibility implementations may hash the object, while production
+    /// readers override this with a backend metadata request.
+    async fn stat_object(&self, key: &str) -> Result<ReaderObjectMetadataV2, DestError> {
+        let probe = self.probe_object(key).await?;
+        Ok(ReaderObjectMetadataV2 {
+            bytes: probe.bytes,
+            version: probe.version,
+        })
+    }
+
+    async fn copy_object_to(
+        &self,
+        key: &str,
+        writer: &mut DestWriter,
+        max_bytes: u64,
+    ) -> Result<ReaderObjectProbeV2, DestError> {
+        let bytes = self.read_bytes_bounded(key, max_bytes).await?;
+        writer.write_all(&bytes).await?;
+        Ok(ReaderObjectProbeV2::from_bytes(&bytes))
+    }
 }
 
 /// multipart-only-commit 규율의 백엔드 경계.
@@ -231,17 +321,26 @@ impl WriterBackend for LocalBackend {
 
     async fn commit(mut self: Box<Self>) -> Result<UploadReceipt, DestError> {
         let mut f = self.file.take().ok_or(DestError::WriterClosed)?;
-        {
+        let flush_result = {
             use std::io::Write;
-            f.flush().map_err(|e| self.io_err(e))?;
-        }
-        f.sync_all().map_err(|e| self.io_err(e))?;
+            f.flush().and_then(|_| f.sync_all())
+        };
         drop(f);
-        std::fs::rename(&self.part_path, &self.final_path).map_err(|e| self.io_err(e))?;
+        if let Err(error) = flush_result {
+            let _ = std::fs::remove_file(&self.part_path);
+            self.committed = true;
+            return Err(self.io_err(error));
+        }
+        if let Err(error) = std::fs::rename(&self.part_path, &self.final_path) {
+            let _ = std::fs::remove_file(&self.part_path);
+            self.committed = true;
+            return Err(self.io_err(error));
+        }
         self.committed = true;
         Ok(UploadReceipt {
             key: self.final_path.display().to_string(),
             bytes: self.bytes,
+            version: None,
         })
     }
 
@@ -280,6 +379,21 @@ impl LocalDest {
             root: root.into(),
         }
     }
+
+    fn object_path(&self, key: &str) -> Result<PathBuf, DestError> {
+        let relative = Path::new(key);
+        if key.is_empty()
+            || relative.is_absolute()
+            || relative
+                .components()
+                .any(|component| !matches!(component, std::path::Component::Normal(_)))
+        {
+            return Err(DestError::InvalidKey {
+                key: key.to_owned(),
+            });
+        }
+        Ok(self.root.join(relative))
+    }
 }
 
 #[async_trait]
@@ -295,7 +409,7 @@ impl Destination for LocalDest {
         }
     }
     async fn writer(&self, key: &str) -> Result<DestWriter, DestError> {
-        let final_path = self.root.join(key);
+        let final_path = self.object_path(key)?;
         if let Some(parent) = final_path.parent() {
             // root가 실제로는 파일이면(테스트: unwritable dir) 여기서 실패한다.
             std::fs::create_dir_all(parent).map_err(|e| DestError::Io {
@@ -315,6 +429,154 @@ impl Destination for LocalDest {
             bytes: 0,
             committed: false,
         })))
+    }
+}
+
+#[async_trait]
+impl DestinationReaderV2 for LocalDest {
+    async fn probe_object(&self, key: &str) -> Result<ReaderObjectProbeV2, DestError> {
+        use tokio::io::AsyncReadExt;
+
+        let path = self.object_path(key)?;
+        let mut file = tokio::fs::File::open(&path)
+            .await
+            .map_err(|source| DestError::Io {
+                key: key.to_owned(),
+                source,
+            })?;
+        let mut hasher = blake3::Hasher::new();
+        let mut total = 0_u64;
+        let mut buffer = vec![0_u8; 1024 * 1024];
+        loop {
+            let read = file
+                .read(&mut buffer)
+                .await
+                .map_err(|source| DestError::Io {
+                    key: key.to_owned(),
+                    source,
+                })?;
+            if read == 0 {
+                break;
+            }
+            total = total
+                .checked_add(read as u64)
+                .ok_or_else(|| DestError::ReadLimitExceeded {
+                    key: key.to_owned(),
+                    max_bytes: u64::MAX,
+                })?;
+            hasher.update(&buffer[..read]);
+        }
+        Ok(ReaderObjectProbeV2 {
+            bytes: total,
+            blake3: hasher.finalize().to_hex().to_string(),
+            version: None,
+        })
+    }
+
+    async fn read_bytes_bounded(&self, key: &str, max_bytes: u64) -> Result<Vec<u8>, DestError> {
+        let path = self.object_path(key)?;
+        let metadata = tokio::fs::metadata(&path)
+            .await
+            .map_err(|source| DestError::Io {
+                key: key.to_owned(),
+                source,
+            })?;
+        if metadata.len() > max_bytes {
+            return Err(DestError::ReadLimitExceeded {
+                key: key.to_owned(),
+                max_bytes,
+            });
+        }
+        let bytes = tokio::fs::read(&path)
+            .await
+            .map_err(|source| DestError::Io {
+                key: key.to_owned(),
+                source,
+            })?;
+        if bytes.len() as u64 > max_bytes {
+            return Err(DestError::ReadLimitExceeded {
+                key: key.to_owned(),
+                max_bytes,
+            });
+        }
+        Ok(bytes)
+    }
+
+    async fn stat_object(&self, key: &str) -> Result<ReaderObjectMetadataV2, DestError> {
+        let path = self.object_path(key)?;
+        let metadata = tokio::fs::metadata(&path)
+            .await
+            .map_err(|source| DestError::Io {
+                key: key.to_owned(),
+                source,
+            })?;
+        Ok(ReaderObjectMetadataV2 {
+            bytes: metadata.len(),
+            version: None,
+        })
+    }
+
+    async fn copy_object_to(
+        &self,
+        key: &str,
+        writer: &mut DestWriter,
+        max_bytes: u64,
+    ) -> Result<ReaderObjectProbeV2, DestError> {
+        use tokio::io::AsyncReadExt;
+
+        let path = self.object_path(key)?;
+        let metadata = tokio::fs::metadata(&path)
+            .await
+            .map_err(|source| DestError::Io {
+                key: key.to_owned(),
+                source,
+            })?;
+        if metadata.len() > max_bytes {
+            return Err(DestError::ReadLimitExceeded {
+                key: key.to_owned(),
+                max_bytes,
+            });
+        }
+        let mut file = tokio::fs::File::open(path)
+            .await
+            .map_err(|source| DestError::Io {
+                key: key.to_owned(),
+                source,
+            })?;
+        let mut buffer = vec![0_u8; 1024 * 1024];
+        let mut hasher = blake3::Hasher::new();
+        let mut total = 0_u64;
+        loop {
+            let read = file
+                .read(&mut buffer)
+                .await
+                .map_err(|source| DestError::Io {
+                    key: key.to_owned(),
+                    source,
+                })?;
+            if read == 0 {
+                break;
+            }
+            total = total
+                .checked_add(u64::try_from(read).unwrap_or(u64::MAX))
+                .ok_or_else(|| DestError::ReadLimitExceeded {
+                    key: key.to_owned(),
+                    max_bytes,
+                })?;
+            if total > max_bytes {
+                return Err(DestError::ReadLimitExceeded {
+                    key: key.to_owned(),
+                    max_bytes,
+                });
+            }
+            writer.write_all(&buffer[..read]).await?;
+            hasher.update(&buffer[..read]);
+        }
+        Ok(ReaderObjectProbeV2 {
+            bytes: total,
+            blake3: hasher.finalize().to_hex().to_string(),
+            version: None,
+        })
     }
 }
 

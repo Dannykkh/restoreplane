@@ -11,17 +11,25 @@ members = [
   "crates/dbbackup-dest-ssh",
   "crates/dbbackup-source-pg",
   "crates/dbbackup-source-mysql",
+  "crates/dbbackup-source-sqlserver",
+  "crates/dbbackup-source-sqlite",
   "crates/dbbackup-catalog",
+  "crates/dbbackup-domain",
+  "crates/dbbackup-application",
+  "crates/dbbackup-runtime",
+  "crates/dbbackup-service",
+  "crates/dbbackup-ipc-client",
   "crates/dbbackup-verify",
   "crates/dbbackup-scheduler",
   "apps/console/src-tauri",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.0-rc.1"
 edition = "2021"
-rust-version = "1.81"
+rust-version = "1.91"
 license = "MIT"
+publish = false
 
 [workspace.dependencies]
 clap = { version = "4.6.2", features = ["derive"] }

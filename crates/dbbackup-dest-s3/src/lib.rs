@@ -17,6 +17,8 @@
 //!   의존 표면 축소 + 결정성. XML 파싱은 경량 substring(호환 provider 필드 차이에 관대).
 
 pub mod admin;
+pub mod delete;
+pub mod source;
 
 use async_trait::async_trait;
 use dbbackup_pipeline::{
@@ -24,6 +26,8 @@ use dbbackup_pipeline::{
 };
 
 pub use admin::{S3Admin, SelfTestReport};
+pub use delete::{S3DeleteCfg, S3DeleteOperatorV2, DELETE_ONLY_IAM_POLICY};
+pub use source::{S3ManifestSource, S3ReaderCfg};
 
 /// append-only(무인 백업) writer 신원에 붙이는 IAM 정책 템플릿(R8).
 /// PutObject/멀티파트 관련만 Allow, 파괴 동작(Delete*/lifecycle/versioning/retention/legal-hold/bypass)은
@@ -103,6 +107,8 @@ pub enum S3Error {
     SelfTestTransport(String),
     #[error("자가테스트 서명/구성 오류: {0}")]
     SelfTest(String),
+    #[error("S3 delete operator 구성 오류: {0}")]
+    DeleteConfigInvalid(String),
 }
 
 /// S3Dest 구성. access/secret은 **append-only(writer) 신원** — delete 권한 없음(R9).
@@ -142,6 +148,9 @@ pub struct S3Dest {
 impl S3Dest {
     /// M4/M5 가드를 통과해야만 생성된다. Compliance는 opt-in 필수(dry-run 통과 증적은 init 플로우 소관).
     pub fn new(name: impl Into<String>, cfg: S3Cfg) -> Result<Self, S3Error> {
+        // default-features=false에서는 HTTP transport 자동 등록이 꺼진다.
+        opendal::install_default();
+
         // M4: 보존이 dwell보다 짧으면 불변 사본이 정작 필요할 때 이미 만료.
         if cfg.retention_days < cfg.min_dwell_days {
             return Err(S3Error::RetentionBelowDwell {
@@ -167,7 +176,6 @@ impl S3Dest {
         if let Some(algo) = &cfg.checksum_algo {
             builder = builder.checksum_algorithm(algo);
         }
-        // opendal 0.58: Operator::new(builder)?는 Operator를 직접 반환(구버전의 .finish() 불필요 — 실측).
         let op = opendal::Operator::new(builder)?;
         Ok(Self {
             name: name.into(),
@@ -242,12 +250,14 @@ impl WriterBackend for S3Backend {
     /// 완전 성공 경로에서만 호출 → CompleteMultipartUpload(유일한 커밋 지점).
     async fn commit(mut self: Box<Self>) -> Result<UploadReceipt, DestError> {
         let mut w = self.writer.take().ok_or(DestError::WriterClosed)?;
-        w.close()
+        let metadata = w
+            .close()
             .await
             .map_err(|e| DestError::backend(&self.key, e))?;
         Ok(UploadReceipt {
             key: self.key.clone(),
             bytes: self.bytes,
+            version: metadata.version().map(ToOwned::to_owned),
         })
     }
 

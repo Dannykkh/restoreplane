@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dbbackupsystem.local/schemas/provider-promotion-v1.json",
+  "title": "DbBackup provider promotion evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "providerId",
+    "revision",
+    "buildId",
+    "capabilities",
+    "decision"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "providerId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40,64}$"
+    },
+    "buildId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backup",
+        "restore",
+        "reader",
+        "conformance"
+      ],
+      "properties": {
+        "backup": {
+          "$ref": "#/$defs/evidence"
+        },
+        "restore": {
+          "$ref": "#/$defs/evidence"
+        },
+        "reader": {
+          "$ref": "#/$defs/evidence"
+        },
+        "conformance": {
+          "$ref": "#/$defs/evidence"
+        }
+      }
+    },
+    "decision": {
+      "enum": [
+        "experimental",
+        "candidate",
+        "supported"
+      ]
+    }
+  },
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "buildId",
+        "locator",
+        "checksumBlake3"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "not_run"
+          ]
+        },
+        "buildId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "checksumBlake3": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

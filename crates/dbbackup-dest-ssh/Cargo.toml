@@ -2,6 +2,9 @@
 name = "dbbackup-dest-ssh"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
 
 # S07 — SshDest(russh 0.62 SFTP, rename-commit) + Tunnel(direct-tcpip) + STRICT host-key 핀.
 #
@@ -11,15 +14,18 @@ edition.workspace = true
 
 [dependencies]
 dbbackup-pipeline = { path = "../dbbackup-pipeline" }
+dbbackup-catalog = { path = "../dbbackup-catalog" }
 
 # 보안 임계 + API churn → 정확 핀 필수(H6, rust-stack §4).
 # default의 aws-lc-rs(NASM/C 빌드 필요)를 끄고 순수 Rust ring 백엔드 사용(H6 — openssl/C 툴체인 유입 0).
-russh = { version = "=0.62.2", default-features = false, features = ["ring", "flate2", "rsa"] }
+# RSA는 RUSTSEC-2023-0071의 수정 버전이 없어 제외하고 Ed25519/ECDSA 키만 허용한다.
+russh = { version = "=0.62.2", default-features = false, features = ["ring", "flate2"] }
 # SFTP v3 클라이언트. russh 채널을 into_stream()으로 받는 stream-agnostic 설계라 russh 버전과 느슨 결합.
 russh-sftp = "=2.3.0"
 
 tokio = { version = "=1.52.3", features = ["net", "io-util", "rt-multi-thread", "macros", "sync", "time"] }
 bytes = "1"
+blake3 = "=1.5.5"
 async-trait = "0.1"
 zeroize = { version = "=1.9.0" }
 anyhow = { workspace = true }

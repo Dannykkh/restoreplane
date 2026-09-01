@@ -1,281 +1,315 @@
-import { useEffect, useState } from "react";
-import "./Databases.css";
-import { addDestination, listDestinations, type DestSummary, type NewDestination } from "../lib/api";
-import { ImmutabilityBadge } from "../components/Badges";
-import type { ImmutabilityKind } from "../types";
+import { useMemo, useState } from "react";
+import { DestinationWizard } from "../components/DestinationWizard";
+import { Dialog } from "../components/Dialog";
+import { EvidenceRow, Inspector } from "../components/Inspector";
+import { InventoryTable } from "../components/InventoryTable";
+import { LoadingState, PageState } from "../components/PageState";
+import { FilterField, PageHeader } from "../components/PageHeader";
+import { StatusBadge, toneForState } from "../components/StatusBadge";
+import {
+  getWorkItem,
+  listDestinations,
+  probeDestination,
+} from "../lib/api";
+import { asServiceError, ServiceError } from "../lib/errors";
+import { formatDateTime, formatFreshness } from "../lib/format";
+import { useMutationAttemptRegistry } from "../lib/mutationAttempts";
+import {
+  collectCursorPages,
+  INVENTORY_PAGE_LIMIT,
+  type CollectedCursorPage,
+} from "../lib/pagination";
+import { useServiceQuery } from "../lib/queries";
+import { transitionTo } from "../lib/route";
+import type { Destination, RouteState } from "../lib/types";
 
-const KINDS = [
-  { value: "local", label: "로컬 디스크" },
-  { value: "s3", label: "S3 (Object Lock)" },
-  { value: "ssh", label: "SSH / SFTP" },
-];
-
-type Form = {
-  name: string;
-  kind: string;
-  path: string;
-  endpoint: string;
-  region: string;
-  bucket: string;
-  prefix: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  objectLockMode: string;
-  retentionDays: number;
-  host: string;
-  port: number;
-  user: string;
-  privateKeyPath: string;
-  hostKeyFingerprint: string;
-};
-
-const EMPTY: Form = {
-  name: "",
-  kind: "s3",
-  path: "",
-  endpoint: "",
-  region: "",
-  bucket: "",
-  prefix: "",
-  accessKeyId: "",
-  secretAccessKey: "",
-  objectLockMode: "governance",
-  retentionDays: 30,
-  host: "",
-  port: 22,
-  user: "",
-  privateKeyPath: "",
-  hostKeyFingerprint: "",
-};
-
-// 폼 상태로부터 결과 불변성 등급을 미리 보여준다(DESIGN.md: 불변성 capability 배지).
-function previewImmut(f: Form): ImmutabilityKind {
-  if (f.kind === "ssh") return "server_append_only";
-  if (f.kind === "s3" && f.objectLockMode === "governance") return "object_lock_governance";
-  if (f.kind === "s3" && f.objectLockMode === "compliance") return "object_lock_compliance";
-  return "none";
+interface DestinationsProps {
+  route: RouteState;
 }
 
-export function Destinations() {
-  const [dests, setDests] = useState<DestSummary[]>([]);
-  const [form, setForm] = useState<Form>({ ...EMPTY });
-  const [masterPw, setMasterPw] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [flash, setFlash] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
+export function Destinations({ route }: DestinationsProps) {
+  const mutationAttempts = useMutationAttemptRegistry();
+  const [wizardOpen, setWizardOpen] = useState(route.action === "new");
+  const [probeBusy, setProbeBusy] = useState(false);
+  const [probeError, setProbeError] = useState<ServiceError | null>(null);
+  const query = useServiceQuery<CollectedCursorPage<Destination>>("destinations", () =>
+    collectCursorPages((cursor) =>
+      listDestinations({ cursor, limit: INVENTORY_PAGE_LIMIT })
+    ),
+  );
+  const filter = route.filter ?? "all";
+  const rows = useMemo(
+    () =>
+      (query.data?.items ?? []).filter(
+        (destination) =>
+          filter === "all" ||
+          destination.kind === filter ||
+          destination.state === filter,
+      ),
+    [filter, query.data],
+  );
+  const selected =
+    rows.find((destination) => destination.id === route.selected) ?? rows[0] ?? null;
+  const inventoryComplete = query.status === "ready" && query.data?.complete === true;
 
-  function refresh() {
-    listDestinations()
-      .then(setDests)
-      .catch((e) => setFlash({ kind: "err", msg: String(e) }));
+  function closeWizard(): void {
+    setWizardOpen(false);
+    transitionTo({ ...route, action: undefined }, true);
   }
-  useEffect(refresh, []);
 
-  function set<K extends keyof Form>(k: K, v: Form[K]) {
-    setForm((f) => ({ ...f, [k]: v }));
-  }
-
-  const needsMasterPw = form.kind === "s3" && (form.accessKeyId !== "" || form.secretAccessKey !== "");
-  const canSubmit =
-    form.name.trim() &&
-    (form.kind !== "local" || form.path.trim()) &&
-    (form.kind !== "s3" || form.bucket.trim()) &&
-    (form.kind !== "ssh" || (form.host.trim() && form.hostKeyFingerprint.trim())) &&
-    (!needsMasterPw || masterPw.length >= 8) &&
-    !busy;
-
-  async function submit() {
-    setBusy(true);
-    setFlash(null);
+  async function runProbe(destinationId: string): Promise<void> {
+    if (!inventoryComplete) return;
+    setProbeBusy(true);
+    setProbeError(null);
     try {
-      const payload: NewDestination = { name: form.name, kind: form.kind };
-      if (form.kind === "local") payload.path = form.path;
-      if (form.kind === "s3") {
-        Object.assign(payload, {
-          endpoint: form.endpoint || undefined,
-          region: form.region || undefined,
-          bucket: form.bucket,
-          prefix: form.prefix,
-          accessKeyId: form.accessKeyId || undefined,
-          secretAccessKey: form.secretAccessKey || undefined,
-          objectLockMode: form.objectLockMode,
-          retentionDays: form.retentionDays,
-        });
+      const work = await mutationAttempts.run(
+        `destination-probe:${destinationId}`,
+        "destination.probe",
+        { destinationId },
+        (key) => probeDestination(destinationId, key),
+      );
+      if (!isSuccessful(work.state)) {
+        await waitForSuccessfulWork(work.workItemId);
       }
-      if (form.kind === "ssh") {
-        Object.assign(payload, {
-          host: form.host,
-          port: form.port,
-          user: form.user,
-          privateKeyPath: form.privateKeyPath,
-          hostKeyFingerprint: form.hostKeyFingerprint,
-          path: form.path,
-        });
-      }
-      await addDestination(masterPw, payload);
-      setFlash({ kind: "ok", msg: `'${form.name}' 등록됨.` });
-      setForm({ ...EMPTY });
-      setMasterPw("");
-      refresh();
-    } catch (e) {
-      setFlash({ kind: "err", msg: String(e instanceof Error ? e.message : e) });
+      query.refresh();
+    } catch (failure) {
+      setProbeError(asServiceError(failure));
     } finally {
-      setBusy(false);
+      setProbeBusy(false);
     }
   }
 
+  if (query.status === "loading" && !query.data) return <LoadingState label="Destination 역할 근거를 불러오는 중입니다." />;
+  if (query.status === "error" && !query.data) {
+    return (
+      <PageState
+        kind="error"
+        title="Destination inventory를 읽지 못했습니다."
+        detail="writer 성공만으로 reader와 delete 권한을 추정하지 않습니다."
+        error={query.error}
+        action={<button type="button" className="button button-secondary" onClick={query.refresh}>다시 연결</button>}
+      />
+    );
+  }
+
   return (
-    <div className="db-layout">
-      <div className="db-list">
-        {dests.length === 0 ? (
-          <div className="empty-note">등록된 목적지가 없습니다. 오른쪽에서 추가하세요.</div>
-        ) : (
-          dests.map((d) => (
-            <div className="db-row" key={d.name}>
-              <span className="db-icon">{d.kind.toUpperCase().slice(0, 1)}</span>
-              <div className="db-main">
-                <div className="db-alias">
-                  {d.name} <span className="engine-tag">{d.kind}</span>
-                </div>
-                <div className="db-sub">{d.location}</div>
-              </div>
-              <ImmutabilityBadge kind={d.immutability as ImmutabilityKind} />
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="card">
-        <h3 style={{ marginBottom: "var(--sp-4)" }}>목적지 추가</h3>
-        {flash && <div className={`form-flash ${flash.kind}`}>{flash.msg}</div>}
-
-        <div className="form-grid">
-          <div className="col-span">
-            <label className="label">이름</label>
-            <input
-              className="input"
-              value={form.name}
-              onChange={(e) => set("name", e.target.value)}
-              placeholder="s3-worm"
-            />
-          </div>
-          <div className="col-span">
-            <label className="label">종류</label>
-            <select className="select" value={form.kind} onChange={(e) => set("kind", e.target.value)}>
-              {KINDS.map((k) => (
-                <option key={k.value} value={k.value}>
-                  {k.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {form.kind === "local" && (
-            <div className="col-span">
-              <label className="label">경로</label>
-              <input
-                className="input"
-                value={form.path}
-                onChange={(e) => set("path", e.target.value)}
-                placeholder="D:\\backups"
-              />
-            </div>
-          )}
-
-          {form.kind === "s3" && (
-            <>
-              <div className="col-span">
-                <label className="label">버킷</label>
-                <input className="input" value={form.bucket} onChange={(e) => set("bucket", e.target.value)} placeholder="my-backups" />
-              </div>
-              <div>
-                <label className="label">리전</label>
-                <input className="input" value={form.region} onChange={(e) => set("region", e.target.value)} placeholder="ap-northeast-2" />
-              </div>
-              <div>
-                <label className="label">접두어(prefix)</label>
-                <input className="input" value={form.prefix} onChange={(e) => set("prefix", e.target.value)} placeholder="prod/" />
-              </div>
-              <div className="col-span">
-                <label className="label">엔드포인트(옵션)</label>
-                <input className="input" value={form.endpoint} onChange={(e) => set("endpoint", e.target.value)} placeholder="https://s3.ap-northeast-2.amazonaws.com" />
-              </div>
-              <div>
-                <label className="label">Access Key ID</label>
-                <input className="input" value={form.accessKeyId} onChange={(e) => set("accessKeyId", e.target.value)} />
-              </div>
-              <div>
-                <label className="label">Secret Access Key</label>
-                <input className="input" type="password" value={form.secretAccessKey} onChange={(e) => set("secretAccessKey", e.target.value)} />
-              </div>
-              <div>
-                <label className="label">Object Lock</label>
-                <select className="select" value={form.objectLockMode} onChange={(e) => set("objectLockMode", e.target.value)}>
-                  <option value="governance">Governance</option>
-                  <option value="compliance">Compliance</option>
-                  <option value="none">없음</option>
-                </select>
-              </div>
-              {form.objectLockMode !== "none" && (
-                <div>
-                  <label className="label">보존일(days)</label>
-                  <input className="input" type="number" value={form.retentionDays} onChange={(e) => set("retentionDays", Number(e.target.value))} />
-                </div>
-              )}
-            </>
-          )}
-
-          {form.kind === "ssh" && (
-            <>
-              <div>
-                <label className="label">호스트</label>
-                <input className="input" value={form.host} onChange={(e) => set("host", e.target.value)} placeholder="bastion.example.com" />
-              </div>
-              <div>
-                <label className="label">포트</label>
-                <input className="input" type="number" value={form.port} onChange={(e) => set("port", Number(e.target.value))} />
-              </div>
-              <div>
-                <label className="label">사용자</label>
-                <input className="input" value={form.user} onChange={(e) => set("user", e.target.value)} placeholder="svc-backup" />
-              </div>
-              <div>
-                <label className="label">원격 경로</label>
-                <input className="input" value={form.path} onChange={(e) => set("path", e.target.value)} placeholder="/srv/backups" />
-              </div>
-              <div className="col-span">
-                <label className="label">개인키 경로</label>
-                <input className="input" value={form.privateKeyPath} onChange={(e) => set("privateKeyPath", e.target.value)} placeholder="C:\\keys\\id_ed25519" />
-              </div>
-              <div className="col-span">
-                <label className="label">호스트키 지문(host key fingerprint)</label>
-                <input className="input" value={form.hostKeyFingerprint} onChange={(e) => set("hostKeyFingerprint", e.target.value)} placeholder="SHA256:..." />
-                <div className="field-hint">MITM 방어를 위해 필수 — blind-accept는 허용하지 않습니다.</div>
-              </div>
-            </>
-          )}
-
-          <div className="col-span" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span className="label" style={{ margin: 0 }}>결과 불변성</span>
-            <ImmutabilityBadge kind={previewImmut(form)} />
-          </div>
-        </div>
-
-        {needsMasterPw && (
-          <>
-            <hr className="form-divider" />
-            <div className="field" style={{ marginBottom: 0 }}>
-              <label className="label">마스터 비밀번호 (자격증명 암호화)</label>
-              <input className="input" type="password" value={masterPw} onChange={(e) => setMasterPw(e.target.value)} placeholder="초기 설정에서 정한 비밀번호" />
-            </div>
-          </>
-        )}
-
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "var(--sp-5)" }}>
-          <button className="btn btn-primary" onClick={submit} disabled={!canSubmit}>
-            {busy ? "등록 중…" : "목적지 등록"}
+    <div className="page-stack">
+      <PageHeader
+        eyebrow="Replica endpoints"
+        title="Destinations"
+        description="백업 writer, 복구 reader, 보존 delete 역할을 각각 probe하고 Plan 영향과 불변성 근거를 표시합니다."
+        meta={query.fetchedAt && <span>근거 {formatFreshness(query.fetchedAt)}</span>}
+        actions={
+          <button
+            type="button"
+            className="button button-primary"
+            disabled={!inventoryComplete}
+            onClick={() => {
+              if (!inventoryComplete) return;
+              setWizardOpen(true);
+              transitionTo({ ...route, action: "new" }, true);
+            }}
+          >
+            새 Destination
           </button>
-        </div>
+        }
+      />
+      <div className="filter-bar">
+        <FilterField label="종류 또는 상태">
+          <select
+            name="destinationFilter"
+            value={filter}
+            onChange={(event) =>
+              transitionTo(
+                {
+                  page: "destinations",
+                  filter: event.target.value === "all" ? undefined : event.target.value,
+                },
+                true,
+              )
+            }
+          >
+            <option value="all">전체</option>
+            <option value="ready">Ready</option>
+            <option value="attention">Attention</option>
+            <option value="local">Local</option>
+            <option value="s3">S3</option>
+            <option value="ssh_sftp">SSH/SFTP</option>
+          </select>
+        </FilterField>
       </div>
+      {query.status === "error" && query.data && (
+        <PageState
+          kind="stale"
+          title="마지막 Destination 근거입니다."
+          detail="새 probe가 실패했으므로 이 근거의 시각과 역할별 상태를 확인하세요."
+          error={query.error}
+          action={<button type="button" className="button button-secondary" onClick={query.refresh}>Destination 다시 조회</button>}
+        />
+      )}
+      {query.data?.complete === false && (
+        <PageState
+          kind="partial"
+          title="Destination inventory is partial."
+          detail="The bounded cursor scan did not reach a verified end; selection-dependent probes are disabled."
+        />
+      )}
+      {probeError && (
+        <PageState
+          kind="error"
+          title={probeError.message}
+          detail="writer 성공만으로 복구 가능 상태를 만들지 않습니다. 실패한 역할의 endpoint 또는 자격 증명을 확인하세요."
+          error={probeError}
+        />
+      )}
+      <div className="inventory-layout">
+        <section className="inventory-main" aria-labelledby="destination-list-title">
+          <header className="section-heading">
+            <div>
+              <span className="eyebrow">Storage roles</span>
+              <h2 id="destination-list-title">{rows.length} destinations</h2>
+            </div>
+          </header>
+          <InventoryTable
+            ariaLabel="Destination inventory"
+            rows={rows}
+            rowKey={(row) => row.id}
+            selectedId={selected?.id ?? null}
+            onSelect={(row) => transitionTo({ ...route, selected: row.id }, true)}
+            emptyMessage="이 필터에 해당하는 Destination이 없습니다."
+            columns={[
+              {
+                key: "destination",
+                header: "Destination",
+                render: (row) => (
+                  <span className="resource-name" title={row.displayName}>
+                    <strong>{row.displayName}</strong>
+                    <small className="mono">{row.endpoint}</small>
+                  </span>
+                ),
+              },
+              { key: "kind", header: "Kind", className: "mono", render: (row) => row.kind },
+              {
+                key: "writer",
+                header: "Writer",
+                render: (row) => {
+                  const role = row.roles.find((item) => item.role === "backup_writer");
+                  return <StatusBadge label={role?.probeStatus ?? (role?.credentialBound ? "configured" : "unknown")} tone={toneForState(role?.probeStatus ?? "unknown")} evidenceAtMs={role?.probedAtMs} />;
+                },
+              },
+              {
+                key: "reader",
+                header: "Reader",
+                render: (row) => {
+                  const role = row.roles.find((item) => item.role === "restore_reader");
+                  return <StatusBadge label={role?.probeStatus ?? (role?.credentialBound ? "configured" : "unknown")} tone={toneForState(role?.probeStatus ?? "unknown")} evidenceAtMs={role?.probedAtMs} />;
+                },
+              },
+              {
+                key: "immutability",
+                header: "Immutability",
+                render: (row) => <StatusBadge label={row.immutabilityCapability} tone={toneForState(row.immutabilityCapability)} />,
+              },
+            ]}
+          />
+        </section>
+        {selected ? (
+          <Inspector
+            eyebrow="Destination"
+            title={selected.displayName}
+            actions={
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={probeBusy || !inventoryComplete}
+                onClick={() => void runProbe(selected.id)}
+              >
+                {probeBusy ? "역할 Probe 실행 중" : "역할별 Probe"}
+              </button>
+            }
+          >
+            <dl className="evidence-list">
+              <EvidenceRow label="State" value={<StatusBadge label={selected.state} tone={toneForState(selected.state)} />} />
+              <EvidenceRow label="Kind" value={selected.kind} mono />
+              <EvidenceRow label="Endpoint" value={selected.endpoint} mono />
+              <EvidenceRow label="Latest aggregate probe" value={formatDateTime(selected.lastProbeAtMs)} mono />
+              <EvidenceRow
+                label="Immutability"
+                value={<StatusBadge label={selected.immutabilityCapability} tone={toneForState(selected.immutabilityCapability)} />}
+              />
+            </dl>
+            <section className="inspector-section">
+              <h3>Credential roles</h3>
+              <ul className="role-list">
+                {selected.roles.map((role) => (
+                  <li key={role.role}>
+                    <div>
+                      <strong className="mono">{role.role}</strong>
+                      <small>{role.credentialBound ? "별도 credential 연결됨" : "credential 없음 또는 불필요"}</small>
+                    </div>
+                    <StatusBadge
+                      label={role.probeStatus ?? (role.credentialBound ? "configured" : "unknown")}
+                      tone={toneForState(role.probeStatus ?? "unknown")}
+                      evidenceAtMs={role.probedAtMs}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </section>
+            {selected.roles.some((role) => role.role === "restore_reader" && role.probeStatus !== "passed") && (
+              <PageState
+                kind="partial"
+                title="백업 쓰기와 복구 읽기 근거가 다릅니다."
+                detail="writer가 통과했더라도 reader가 통과하기 전에는 복구 가능 Destination으로 간주하지 않습니다."
+              />
+            )}
+          </Inspector>
+        ) : (
+          <PageState kind="empty" title="Destination을 선택하세요." detail="역할별 credential과 probe 근거를 표시합니다." />
+        )}
+      </div>
+      {wizardOpen && inventoryComplete && (
+        <Dialog
+          title="Destination onboarding"
+          description="Endpoint, 역할별 자격 증명, 실제 객체 probe를 순서대로 진행합니다."
+          onClose={closeWizard}
+        >
+          <DestinationWizard
+            onCancel={closeWizard}
+            onComplete={(destinationId) => {
+              setWizardOpen(false);
+              query.refresh();
+              transitionTo({
+                page: "destinations",
+                selected: destinationId,
+              });
+            }}
+          />
+        </Dialog>
+      )}
     </div>
   );
+}
+
+function isSuccessful(state: string): boolean {
+  return state === "succeeded" || state === "partially_succeeded";
+}
+
+async function waitForSuccessfulWork(workItemId: string) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const work = await getWorkItem(workItemId);
+    if (isSuccessful(work.state)) return work;
+    if (
+      work.state === "failed_terminal" ||
+      work.state === "failed" ||
+      work.state === "cancelled"
+    ) {
+      throw new ServiceError(
+        work.errorCode ?? "DESTINATION_PROBE_FAILED",
+        { retryable: false },
+      );
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 500));
+  }
+  throw new ServiceError("PROCESS_TIMEOUT", { retryable: true });
 }

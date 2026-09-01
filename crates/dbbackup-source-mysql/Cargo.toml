@@ -2,6 +2,9 @@
 name = "dbbackup-source-mysql"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
 
 # S04 — BackupSource + MySqlSource. mysqldump을 tokio::process로 구동한다. MySQL/MariaDB의
 # 두 배포판(Oracle MySQL, MariaDB) 축을 별도 매트릭스로 분리하고, 덤프 실행 전 엔진 스캔으로
@@ -17,14 +20,19 @@ edition.workspace = true
 [dependencies]
 dbbackup-pipeline = { path = "../dbbackup-pipeline" }
 dbbackup-core = { path = "../dbbackup-core" }
+dbbackup-runtime = { path = "../dbbackup-runtime" }
 
-tokio = { version = "=1.52.3", features = ["process", "io-util", "rt-multi-thread", "macros"] }
+tokio = { version = "=1.52.3", features = ["process", "io-util", "fs", "rt-multi-thread", "macros"] }
 async-trait = "0.1"
 uuid = { version = "=1.11.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 zeroize = { version = "=1.9.0", features = ["derive"] }
 futures = "=0.3.31"
 serde = { workspace = true }
+serde_json = "1"
 thiserror = { workspace = true }
 tracing = { workspace = true }
 anyhow = { workspace = true }
+
+[dev-dependencies]
+tempfile = "=3.14.0"

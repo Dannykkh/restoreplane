@@ -23,6 +23,10 @@ export function cronPreview(expr: string): string {
     return `${stepMin[1]}분마다`;
   }
 
+  if (/^\d+$/.test(min) && hour === "*" && dom === "*" && mon === "*" && dow === "*") {
+    return `매시간 ${Number(min)}분`;
+  }
+
   const t = hhmm(hour, min);
   if (t && dom === "*" && mon === "*") {
     if (dow === "*") return `매일 ${t}`;

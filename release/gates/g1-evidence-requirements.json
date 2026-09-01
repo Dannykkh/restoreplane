@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "gateId": "G1",
+  "sameSourceRevision": true,
+  "sameBuildId": true,
+  "allRequired": true,
+  "requiredEvidenceIds": [
+    "g1.occurrence_uniqueness",
+    "g1.stale_fencing_rejection",
+    "g1.process_tree_reaping",
+    "g1.checkpoint_crash_reconciliation",
+    "g1.spool_reservation",
+    "g1.resource_permit_limits",
+    "g1.required_destination_truth",
+    "g1.single_service_execution_path",
+    "g1.operational_store_online_backup"
+  ]
+}

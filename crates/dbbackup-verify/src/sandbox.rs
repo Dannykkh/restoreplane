@@ -17,6 +17,8 @@ fn engine_str(e: &Engine) -> &'static str {
         Engine::Postgresql => "postgresql",
         Engine::Mysql => "mysql",
         Engine::Mariadb => "mariadb",
+        Engine::Sqlserver => "sqlserver",
+        Engine::Sqlite => "sqlite",
     }
 }
 
@@ -163,15 +165,40 @@ impl Sandbox {
             spec,
             removed: false,
         };
+        if matches!(sb.spec.engine.as_str(), "mysql" | "mariadb") {
+            sb.prepare_mysql_client_config().await?;
+        }
         sb.wait_ready().await?;
         sb.prepare_restricted_role().await?;
         Ok(sb)
     }
 
+    async fn prepare_mysql_client_config(&self) -> anyhow::Result<()> {
+        self.exec(
+            "sh",
+            &[
+                "-c",
+                "umask 077; echo [client] > /tmp/dbbackup-client.cnf; \
+                 echo user=root >> /tmp/dbbackup-client.cnf; \
+                 printf password= >> /tmp/dbbackup-client.cnf; \
+                 printenv MYSQL_ROOT_PASSWORD >> /tmp/dbbackup-client.cnf",
+            ],
+        )
+        .await?
+        .ok_or_ctx("MySQL-family client credential file creation failed")
+    }
+
     async fn wait_ready(&self) -> anyhow::Result<()> {
         let (bin, args): (&str, Vec<&str>) = match self.spec.engine.as_str() {
             "postgresql" => ("pg_isready", vec!["-q"]),
-            _ => ("mysqladmin", vec!["ping", "--silent"]),
+            engine => (
+                admin_tool_for(engine)?,
+                vec![
+                    "--defaults-extra-file=/tmp/dbbackup-client.cnf",
+                    "ping",
+                    "--silent",
+                ],
+            ),
         };
         for _ in 0..60 {
             let ok = self
@@ -271,13 +298,11 @@ impl Sandbox {
                 let bytes = read_stream(plain)?;
                 scan_dangerous_sql(&bytes)?;
                 let args = [
+                    "--defaults-extra-file=/tmp/dbbackup-client.cnf",
                     "--local-infile=0",
-                    "-u",
-                    "root",
-                    "-pverify_only_ephemeral",
                     &self.spec.db_name,
                 ];
-                self.exec_with_stdin("mysql", &args, &bytes)
+                self.exec_with_stdin(sql_client_for(&self.spec.engine)?, &args, &bytes)
                     .await?
                     .ok_or_ctx("mysql 복원 실패")
             }
@@ -304,12 +329,10 @@ impl Sandbox {
             .await?
         } else {
             self.exec(
-                "mysqldump",
+                schema_dump_tool_for(&self.spec.engine)?,
                 &[
+                    "--defaults-extra-file=/tmp/dbbackup-client.cnf",
                     "--no-data",
-                    "-u",
-                    "root",
-                    "-pverify_only_ephemeral",
                     &self.spec.db_name,
                 ],
             )
@@ -334,6 +357,26 @@ impl Sandbox {
                     .query_scalar(&format!("SELECT count(*) FROM \"{t}\""))
                     .await?;
                 out.insert(t.to_string(), c.trim().parse::<u64>().unwrap_or(0));
+            }
+        } else {
+            let tables = self
+                .query_scalar(
+                    "SELECT GROUP_CONCAT(TABLE_NAME ORDER BY TABLE_NAME) \
+                     FROM information_schema.TABLES \
+                     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'",
+                )
+                .await?;
+            for table in tables.trim().split(',').filter(|name| !name.is_empty()) {
+                let quoted = table.replace('`', "``");
+                let count = self
+                    .query_scalar(&format!("SELECT COUNT(*) FROM `{quoted}`"))
+                    .await?;
+                out.insert(
+                    table.to_owned(),
+                    count.trim().parse::<u64>().map_err(|error| {
+                        anyhow::anyhow!("invalid restored row count for {table}: {error}")
+                    })?,
+                );
             }
         }
         Ok(out)
@@ -398,13 +441,11 @@ impl Sandbox {
             .await?
         } else {
             self.exec(
-                "mysql",
+                sql_client_for(&self.spec.engine)?,
                 &[
+                    "--defaults-extra-file=/tmp/dbbackup-client.cnf",
                     "-N",
                     "-B",
-                    "-u",
-                    "root",
-                    "-pverify_only_ephemeral",
                     "-e",
                     sql,
                     &self.spec.db_name,
@@ -431,5 +472,44 @@ fn read_stream(p: PlaintextDump) -> anyhow::Result<Vec<u8>> {
     match p {
         PlaintextDump::Bytes(b) => Ok(b),
         PlaintextDump::Directory(_) => anyhow::bail!("스트림이 필요한데 디렉토리 포맷"),
+    }
+}
+
+fn sql_client_for(engine: &str) -> anyhow::Result<&'static str> {
+    match engine {
+        "mysql" => Ok("mysql"),
+        "mariadb" => Ok("mariadb"),
+        other => anyhow::bail!("SQL client is unavailable for engine: {other}"),
+    }
+}
+
+fn schema_dump_tool_for(engine: &str) -> anyhow::Result<&'static str> {
+    match engine {
+        "mysql" => Ok("mysqldump"),
+        "mariadb" => Ok("mariadb-dump"),
+        other => anyhow::bail!("schema dump tool is unavailable for engine: {other}"),
+    }
+}
+
+fn admin_tool_for(engine: &str) -> anyhow::Result<&'static str> {
+    match engine {
+        "mysql" => Ok("mysqladmin"),
+        "mariadb" => Ok("mariadb-admin"),
+        other => anyhow::bail!("admin tool is unavailable for engine: {other}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mariadb_sandbox_never_falls_back_to_mysql_tool_names() {
+        assert_eq!(sql_client_for("mariadb").unwrap(), "mariadb");
+        assert_eq!(schema_dump_tool_for("mariadb").unwrap(), "mariadb-dump");
+        assert_eq!(admin_tool_for("mariadb").unwrap(), "mariadb-admin");
+        assert_eq!(sql_client_for("mysql").unwrap(), "mysql");
+        assert_eq!(schema_dump_tool_for("mysql").unwrap(), "mysqldump");
+        assert_eq!(admin_tool_for("mysql").unwrap(), "mysqladmin");
     }
 }

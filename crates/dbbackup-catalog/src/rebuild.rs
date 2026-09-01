@@ -34,20 +34,20 @@ pub struct RebuildReport {
 }
 
 /// 목적지의 매니페스트만으로 카탈로그를 재구성한다.
-pub fn catalog_rebuild(
+pub async fn catalog_rebuild(
     source: &dyn ManifestSource,
     verifier: &dyn ManifestVerifier,
     writer: &CatalogWriterHandle,
     args: RebuildArgs,
 ) -> anyhow::Result<RebuildReport> {
-    let keys = source.list_manifests(args.job_filter.as_deref())?;
+    let keys = source.list_manifests(args.job_filter.as_deref()).await?;
 
     let mut report = RebuildReport::default();
     // (manifest, key) — 서명 검증 통과분만.
     let mut accepted = Vec::new();
 
     for key in &keys {
-        let bytes = match source.read_bytes(key) {
+        let bytes = match source.read_bytes(key).await {
             Ok(b) => b,
             Err(_) => {
                 report.rejected_unsigned_or_tampered.push(key.clone());

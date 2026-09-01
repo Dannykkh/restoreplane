@@ -17,5 +17,6 @@ pub fn run(args: PruneArgs) -> anyhow::Result<()> {
         return Ok(());
     }
 
+    crate::commands::direct_execution_guard::enforce()?;
     anyhow::bail!("prune execution not implemented yet (see section S06/S07 Destination)");
 }

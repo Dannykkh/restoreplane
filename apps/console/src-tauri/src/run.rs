@@ -112,7 +112,41 @@ pub fn run_job(app: AppHandle, source: String, dry_run: bool) -> Result<(), Stri
     spawn_stream(app, args)
 }
 
-/// 백업 복원. 서명 게이트→(decrypt_only면 평문만, 아니면 샌드박스 임포트)는 CLI restore가 수행.
+fn restore_args(
+    backup: &str,
+    from_destination: &str,
+    to: Option<&str>,
+    decrypt_only: bool,
+    with_recovery_code: bool,
+) -> Result<Vec<String>, String> {
+    if !decrypt_only {
+        return Err(
+            "RESTORE_DECRYPT_ONLY_REQUIRED: 실제 DB 대상 복원은 아직 지원하지 않습니다.".into(),
+        );
+    }
+    let output_path = to
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            "RESTORE_OUTPUT_REQUIRED: 평문 덤프를 기록할 산출 경로가 필요합니다.".to_string()
+        })?;
+    let mut args = vec![
+        "restore".into(),
+        "--backup".into(),
+        backup.into(),
+        "--from-destination".into(),
+        from_destination.into(),
+        "--to".into(),
+        output_path.into(),
+        "--decrypt-only".into(),
+    ];
+    if with_recovery_code {
+        args.push("--with-recovery-code".into());
+    }
+    Ok(args)
+}
+
+/// 백업 복원. 현재 공개 경로는 서명 게이트 뒤 평문 덤프를 만드는 decrypt-only만 허용한다.
 /// with_recovery_code면 DBBACKUP_RECOVERY_CODE 무인 경로를 쓴다(복원 측 CLI 규약).
 #[tauri::command]
 pub fn restore_backup(
@@ -123,23 +157,13 @@ pub fn restore_backup(
     decrypt_only: bool,
     with_recovery_code: bool,
 ) -> Result<(), String> {
-    let mut args = vec![
-        "restore".into(),
-        "--backup".into(),
-        backup,
-        "--from-destination".into(),
-        from_destination,
-    ];
-    if let Some(t) = to.filter(|s| !s.trim().is_empty()) {
-        args.push("--to".into());
-        args.push(t);
-    }
-    if decrypt_only {
-        args.push("--decrypt-only".into());
-    }
-    if with_recovery_code {
-        args.push("--with-recovery-code".into());
-    }
+    let args = restore_args(
+        &backup,
+        &from_destination,
+        to.as_deref(),
+        decrypt_only,
+        with_recovery_code,
+    )?;
     spawn_stream(app, args)
 }
 
@@ -151,4 +175,25 @@ pub fn register_schedule(app: AppHandle, job: String, remove: bool) -> Result<()
         args.push("--remove".into());
     }
     spawn_stream(app, args)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::restore_args;
+
+    #[test]
+    fn restore_sidecar_contract_allows_only_decrypt_only_with_output_path() {
+        let non_decrypt = restore_args("backup-1", "s3-primary", Some("dump.sql"), false, false)
+            .expect_err("database-target restore must not be exposed before its safety gate");
+        assert!(non_decrypt.contains("RESTORE_DECRYPT_ONLY_REQUIRED"));
+
+        let missing_output = restore_args("backup-1", "s3-primary", None, true, false)
+            .expect_err("decrypt-only restore requires an explicit output path");
+        assert!(missing_output.contains("RESTORE_OUTPUT_REQUIRED"));
+
+        let args = restore_args("backup-1", "s3-primary", Some("dump.sql"), true, true).unwrap();
+        assert!(args.iter().any(|arg| arg == "--decrypt-only"));
+        assert!(args.iter().any(|arg| arg == "--with-recovery-code"));
+        assert!(args.windows(2).any(|pair| pair == ["--to", "dump.sql"]));
+    }
 }

@@ -2,6 +2,9 @@
 name = "dbbackup-catalog"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
 
 # S08 — Catalog(SQLite 로컬 캐시) + Manifest rebuild/서명 게이트.
 # 랜섬웨어 전제(H5/P0-6): 로컬 SQLite는 신뢰 불가 캐시. 진실 소스는 목적지에 동봉된 서명 매니페스트.
@@ -9,15 +12,19 @@ edition.workspace = true
 
 [dependencies]
 dbbackup-core = { path = "../dbbackup-core" }
+dbbackup-config = { path = "../dbbackup-config" }
+dbbackup-domain = { path = "../dbbackup-domain" }
 dbbackup-pipeline = { path = "../dbbackup-pipeline" }
 
 # SQLite: bundled로 시스템 sqlite 불필요(Windows 배포 단순화).
-rusqlite = { version = "=0.31.0", features = ["bundled"] }
+rusqlite = { version = "=0.31.0", features = ["backup", "bundled"] }
 serde = { workspace = true }
 serde_json = "1"
 blake3 = "=1.5.5"
-uuid = { version = "=1.11.0", features = ["v4"] }
+uuid = { version = "=1.11.0", features = ["v4", "v5"] }
 ed25519-dalek = { version = "=2.2.0" }
+chrono = { version = "=0.4.45", default-features = false, features = ["std"] }
+chrono-tz = "=0.10.4"
 
 # overlap guard 1차 방어(OS 네임드 뮤텍스, 크로스플랫폼).
 named-lock = "0.4"
@@ -25,7 +32,11 @@ named-lock = "0.4"
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+async-trait = "0.1"
+tokio = { version = "=1.52.3", features = ["rt-multi-thread"] }
+crossbeam-channel = "=0.5.16"
 
 [dev-dependencies]
 dbbackup-secrets = { path = "../dbbackup-secrets" }
 tempfile = "=3.14.0"
+tokio = { version = "=1.52.3", features = ["rt-multi-thread", "macros"] }

@@ -9,7 +9,7 @@
 //! 백엔드 작업). 이 커맨드는 "config를 올바르게(암호화된 시크릿 포함) 기록"하는 계층까지 책임진다.
 
 use dbbackup_config::schema::{
-    Config, Database, Destination, Job, ObjectLockConfig, Retention, VerifyPolicy,
+    Config, Database, Destination, Job, ObjectLockConfig, ReaderIdentity, Retention, VerifyPolicy,
 };
 use dbbackup_core::{DestKind, Engine, ImmutabilityCapability, ObjectLockMode, SecretEncryptor};
 use dbbackup_secrets::{Credential, DekEncryptor, Keystore};
@@ -134,6 +134,17 @@ pub fn list_databases() -> Result<Vec<DbSummary>, String> {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct NewReaderIdentity {
+    pub access_key_id: Option<String>,
+    pub secret_access_key: Option<String>,
+    pub user: Option<String>,
+    pub private_key_path: Option<String>,
+    pub private_key_passphrase: Option<String>,
+    pub password: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NewDestination {
     pub name: String,
     pub kind: String, // local | s3 | ssh
@@ -157,6 +168,8 @@ pub struct NewDestination {
     pub user: Option<String>,
     pub private_key_path: Option<String>,
     pub host_key_fingerprint: Option<String>,
+    #[serde(default)]
+    pub reader: Option<NewReaderIdentity>,
 }
 
 fn parse_dest_kind(s: &str) -> Result<DestKind, String> {
@@ -198,32 +211,123 @@ pub fn add_destination(master_password: String, dest: NewDestination) -> Result<
     if config.destinations.iter().any(|d| d.name == dest.name) {
         return Err(format!("이미 존재하는 목적지 이름입니다: {}", dest.name));
     }
+    if matches!(kind, DestKind::S3 | DestKind::Ssh) && dest.reader.is_none() {
+        return Err(format!(
+            "{} 목적지는 writer와 분리된 복구용 reader 신원이 필요합니다.",
+            dest.kind
+        ));
+    }
 
-    // S3 자격증명이 있으면 KEK 언락 후 EncField로 암호화.
-    let (access_enc, secret_enc) = if kind == DestKind::S3
-        && (dest.access_key_id.is_some() || dest.secret_access_key.is_some())
-    {
+    let s3_reader_secret_present = kind == DestKind::S3
+        && dest.reader.as_ref().is_some_and(|reader| {
+            reader.access_key_id.is_some() || reader.secret_access_key.is_some()
+        });
+    let ssh_reader_secret_present = kind == DestKind::Ssh
+        && dest.reader.as_ref().is_some_and(|reader| {
+            reader.private_key_passphrase.is_some() || reader.password.is_some()
+        });
+    let needs_encryptor = (kind == DestKind::S3
+        && (dest.access_key_id.is_some()
+            || dest.secret_access_key.is_some()
+            || s3_reader_secret_present))
+        || ssh_reader_secret_present;
+    let encryptor = if needs_encryptor {
         let ks = Keystore::load(&keystore_path(&cfg_path))
             .map_err(|e| format!("키스토어 로드 실패(초기 설정 필요): {e}"))?;
         let kek = ks
             .unlock_kek(&Credential::Password(Zeroizing::new(master_password)))
             .map_err(|_| "마스터 비밀번호가 올바르지 않습니다.".to_string())?;
-        let enc = DekEncryptor::new(kek, FIELD_WRAP_GEN);
+        Some(DekEncryptor::new(kek, FIELD_WRAP_GEN))
+    } else {
+        None
+    };
+
+    let wrap = |value: Option<String>, label: &str| {
+        value
+            .map(|value| {
+                encryptor
+                    .as_ref()
+                    .expect("시크릿이 있으면 encryptor가 초기화되어야 함")
+                    .wrap(&value)
+                    .map_err(|e| format!("{label} 암호화 실패: {e:?}"))
+            })
+            .transpose()
+    };
+
+    // S3 writer 자격증명은 EncField로 봉투암호화.
+    let (access_enc, secret_enc) = if kind == DestKind::S3 {
         let a = dest
             .access_key_id
-            .as_deref()
-            .map(|v| enc.wrap(v))
-            .transpose()
-            .map_err(|e| format!("access key 암호화 실패: {e:?}"))?;
+            .map(|value| wrap(Some(value), "access key"))
+            .transpose()?
+            .flatten();
         let s = dest
             .secret_access_key
-            .as_deref()
-            .map(|v| enc.wrap(v))
-            .transpose()
-            .map_err(|e| format!("secret key 암호화 실패: {e:?}"))?;
+            .map(|value| wrap(Some(value), "secret key"))
+            .transpose()?
+            .flatten();
         (a, s)
     } else {
         (None, None)
+    };
+
+    let reader = match (kind, dest.reader) {
+        (DestKind::S3, Some(reader)) => {
+            let access_key_id = reader
+                .access_key_id
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| "s3 reader는 access key id가 필요합니다.".to_string())?;
+            let secret_access_key = reader
+                .secret_access_key
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| "s3 reader는 secret access key가 필요합니다.".to_string())?;
+            Some(ReaderIdentity {
+                access_key_id: wrap(Some(access_key_id), "reader access key")?,
+                secret_access_key: wrap(Some(secret_access_key), "reader secret key")?,
+                user: None,
+                private_key_path: None,
+                private_key_passphrase: None,
+                password: None,
+            })
+        }
+        (DestKind::Ssh, Some(reader)) => {
+            let user = reader
+                .user
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| "ssh reader는 user가 필요합니다.".to_string())?;
+            let private_key_path = reader
+                .private_key_path
+                .filter(|value| !value.trim().is_empty());
+            let password = reader.password.filter(|value| !value.is_empty());
+            if private_key_path.is_none() && password.is_none() {
+                return Err("ssh reader는 개인키 경로 또는 비밀번호가 필요합니다.".to_string());
+            }
+            if private_key_path.is_some() && password.is_some() {
+                return Err(
+                    "ssh reader 인증은 개인키와 비밀번호 중 하나만 선택해야 합니다.".to_string(),
+                );
+            }
+            let private_key_passphrase = reader
+                .private_key_passphrase
+                .filter(|value| !value.is_empty());
+            if private_key_passphrase.is_some() && private_key_path.is_none() {
+                return Err(
+                    "ssh reader 개인키 암호문은 개인키 경로와 함께 입력해야 합니다.".to_string(),
+                );
+            }
+            Some(ReaderIdentity {
+                access_key_id: None,
+                secret_access_key: None,
+                user: Some(user),
+                private_key_path: private_key_path.map(Into::into),
+                private_key_passphrase: wrap(
+                    private_key_passphrase,
+                    "reader private key passphrase",
+                )?,
+                password: wrap(password, "reader password")?,
+            })
+        }
+        _ => None,
     };
 
     // 종류별 필수 필드 검증.
@@ -255,6 +359,9 @@ pub fn add_destination(master_password: String, dest: NewDestination) -> Result<
     }
 
     let object_lock = parse_object_lock(dest.object_lock_mode.as_deref(), dest.retention_days)?;
+    let checksum_algo = object_lock
+        .as_ref()
+        .map(|_| dbbackup_core::ChecksumAlgo::Sha256);
 
     config.destinations.push(Destination {
         name: dest.name,
@@ -265,7 +372,7 @@ pub fn add_destination(master_password: String, dest: NewDestination) -> Result<
         prefix: dest.prefix,
         access_key_id: access_enc,
         secret_access_key: secret_enc,
-        checksum_algo: None,
+        checksum_algo,
         object_lock,
         tunnel: None,
         host: dest.host.filter(|s| !s.trim().is_empty()),
@@ -274,7 +381,16 @@ pub fn add_destination(master_password: String, dest: NewDestination) -> Result<
         private_key_path: dest.private_key_path.map(Into::into),
         host_key_fingerprint: dest.host_key_fingerprint.filter(|s| !s.trim().is_empty()),
         path: dest.path.map(Into::into),
+        reader,
     });
+    if let Err(errors) = dbbackup_config::validate(&config) {
+        let details = errors
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(format!("목적지 설정 검증 실패: {details}"));
+    }
     config
         .save(&cfg_path)
         .map_err(|e| format!("config 저장 실패: {e}"))?;
@@ -480,9 +596,9 @@ mod tests {
     #[test]
     fn add_database_encrypts_password_roundtrip() {
         let _env = crate::paths::env_guard();
-        let dir = std::env::temp_dir().join(format!("dbconsole-adddb-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let pw = init_ks(&dir);
+        let temp_dir = tempfile::tempdir().unwrap();
+        let dir = temp_dir.path();
+        let pw = init_ks(dir);
 
         add_database(
             pw.clone(),
@@ -550,15 +666,14 @@ mod tests {
         .is_err());
 
         std::env::remove_var("DBBACKUP_CONFIG");
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn add_destination_s3_encrypts_keys_and_local_needs_no_secret() {
         let _env = crate::paths::env_guard();
-        let dir = std::env::temp_dir().join(format!("dbconsole-adddest-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let pw = init_ks(&dir);
+        let temp_dir = tempfile::tempdir().unwrap();
+        let dir = temp_dir.path();
+        let pw = init_ks(dir);
 
         // S3 + Object Lock governance + 자격증명 암호화.
         add_destination(
@@ -580,6 +695,14 @@ mod tests {
                 user: None,
                 private_key_path: None,
                 host_key_fingerprint: None,
+                reader: Some(NewReaderIdentity {
+                    access_key_id: Some("RESTORE-ID".into()),
+                    secret_access_key: Some("restore-secret".into()),
+                    user: None,
+                    private_key_path: None,
+                    private_key_passphrase: None,
+                    password: None,
+                }),
             },
         )
         .expect("s3 목적지 등록");
@@ -604,6 +727,7 @@ mod tests {
                 user: None,
                 private_key_path: None,
                 host_key_fingerprint: None,
+                reader: None,
             },
         )
         .expect("local 목적지 등록");
@@ -623,6 +747,12 @@ mod tests {
             .iter()
             .find(|d| d.name == "s3-worm")
             .unwrap();
+        assert_eq!(
+            s3d.checksum_algo,
+            Some(dbbackup_core::ChecksumAlgo::Sha256),
+            "Object Lock 등록은 S3 checksum을 함께 고정해야 함"
+        );
+        dbbackup_config::validate(&config).expect("GUI가 저장한 config는 즉시 유효해야 함");
         let ks = Keystore::load(&keystore_path(&cfg_path)).unwrap();
         let kek = ks
             .unlock_kek(&Credential::Password(Zeroizing::new(pw)))
@@ -653,20 +783,319 @@ mod tests {
                 user: Some("svc".into()),
                 private_key_path: Some("/keys/id".into()),
                 host_key_fingerprint: None,
+                reader: None,
             },
         )
         .is_err());
 
         std::env::remove_var("DBBACKUP_CONFIG");
-        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn add_destination_s3_encrypts_separate_reader_identity() {
+        let _env = crate::paths::env_guard();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let dir = temp_dir.path();
+        let pw = init_ks(dir);
+
+        add_destination(
+            pw.clone(),
+            NewDestination {
+                name: "s3-reader".into(),
+                kind: "s3".into(),
+                path: None,
+                endpoint: Some("http://127.0.0.1:9000".into()),
+                region: Some("us-east-1".into()),
+                bucket: Some("backups".into()),
+                prefix: "prod/".into(),
+                access_key_id: Some("WRITER-ID".into()),
+                secret_access_key: Some("writer-secret".into()),
+                object_lock_mode: Some("governance".into()),
+                retention_days: Some(30),
+                host: None,
+                port: None,
+                user: None,
+                private_key_path: None,
+                host_key_fingerprint: None,
+                reader: Some(NewReaderIdentity {
+                    access_key_id: Some("READER-ID".into()),
+                    secret_access_key: Some("reader-secret".into()),
+                    user: None,
+                    private_key_path: None,
+                    private_key_passphrase: None,
+                    password: None,
+                }),
+            },
+        )
+        .expect("분리된 S3 reader 신원 등록");
+
+        let cfg_path = config_path();
+        let config = Config::load(&cfg_path).unwrap();
+        let destination = &config.destinations[0];
+        let reader = destination.reader.as_ref().expect("reader 저장");
+        let ks = Keystore::load(&keystore_path(&cfg_path)).unwrap();
+        let kek = ks
+            .unlock_kek(&Credential::Password(Zeroizing::new(pw)))
+            .unwrap();
+        let dec = DekEncryptor::new(kek, FIELD_WRAP_GEN);
+
+        assert_eq!(
+            &*dec
+                .unwrap_field(reader.access_key_id.as_ref().unwrap())
+                .unwrap(),
+            "READER-ID"
+        );
+        assert_eq!(
+            &*dec
+                .unwrap_field(reader.secret_access_key.as_ref().unwrap())
+                .unwrap(),
+            "reader-secret"
+        );
+
+        std::env::remove_var("DBBACKUP_CONFIG");
+    }
+
+    #[test]
+    fn add_destination_rejects_s3_without_reader_identity() {
+        let _env = crate::paths::env_guard();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let dir = temp_dir.path();
+        let pw = init_ks(dir);
+
+        let error = add_destination(
+            pw,
+            NewDestination {
+                name: "s3-no-reader".into(),
+                kind: "s3".into(),
+                path: None,
+                endpoint: Some("http://127.0.0.1:9000".into()),
+                region: Some("us-east-1".into()),
+                bucket: Some("backups".into()),
+                prefix: "prod/".into(),
+                access_key_id: Some("WRITER-ID".into()),
+                secret_access_key: Some("writer-secret".into()),
+                object_lock_mode: Some("governance".into()),
+                retention_days: Some(30),
+                host: None,
+                port: None,
+                user: None,
+                private_key_path: None,
+                host_key_fingerprint: None,
+                reader: None,
+            },
+        )
+        .expect_err("복구 reader 없는 S3 등록은 거부");
+
+        assert!(error.contains("reader"), "{error}");
+
+        std::env::remove_var("DBBACKUP_CONFIG");
+    }
+
+    #[test]
+    fn add_destination_rejects_config_that_schema_validator_would_reject() {
+        let _env = crate::paths::env_guard();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let dir = temp_dir.path();
+        let pw = init_ks(dir);
+
+        let error = add_destination(
+            pw,
+            NewDestination {
+                name: "s3-missing-endpoint".into(),
+                kind: "s3".into(),
+                path: None,
+                endpoint: None,
+                region: Some("us-east-1".into()),
+                bucket: Some("backups".into()),
+                prefix: "prod/".into(),
+                access_key_id: Some("WRITER-ID".into()),
+                secret_access_key: Some("writer-secret".into()),
+                object_lock_mode: Some("governance".into()),
+                retention_days: Some(30),
+                host: None,
+                port: None,
+                user: None,
+                private_key_path: None,
+                host_key_fingerprint: None,
+                reader: Some(NewReaderIdentity {
+                    access_key_id: Some("READER-ID".into()),
+                    secret_access_key: Some("reader-secret".into()),
+                    user: None,
+                    private_key_path: None,
+                    private_key_passphrase: None,
+                    password: None,
+                }),
+            },
+        )
+        .expect_err("schema validator가 거부할 config는 저장하지 않음");
+
+        assert!(error.contains("endpoint"), "{error}");
+        assert!(
+            !config_path().exists(),
+            "유효하지 않은 config는 저장하지 않음"
+        );
+
+        std::env::remove_var("DBBACKUP_CONFIG");
+    }
+
+    #[test]
+    fn add_destination_ssh_encrypts_reader_key_passphrase() {
+        let _env = crate::paths::env_guard();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let dir = temp_dir.path();
+        let pw = init_ks(dir);
+
+        add_destination(
+            pw.clone(),
+            NewDestination {
+                name: "ssh-reader".into(),
+                kind: "ssh".into(),
+                path: Some("/srv/backups".into()),
+                endpoint: None,
+                region: None,
+                bucket: None,
+                prefix: String::new(),
+                access_key_id: None,
+                secret_access_key: None,
+                object_lock_mode: None,
+                retention_days: None,
+                host: Some("archive.example.test".into()),
+                port: Some(22),
+                user: Some("backup-writer".into()),
+                private_key_path: Some("C:/keys/writer".into()),
+                host_key_fingerprint: Some("SHA256:pinned".into()),
+                reader: Some(NewReaderIdentity {
+                    access_key_id: None,
+                    secret_access_key: None,
+                    user: Some("restore-reader".into()),
+                    private_key_path: Some("C:/keys/reader".into()),
+                    private_key_passphrase: Some("reader-key-passphrase".into()),
+                    password: None,
+                }),
+            },
+        )
+        .expect("분리된 SSH reader 신원 등록");
+
+        let cfg_path = config_path();
+        let config = Config::load(&cfg_path).unwrap();
+        let reader = config.destinations[0].reader.as_ref().expect("reader 저장");
+        assert_eq!(reader.user.as_deref(), Some("restore-reader"));
+        assert_eq!(
+            reader
+                .private_key_path
+                .as_ref()
+                .map(|path| path.to_string_lossy().into_owned())
+                .as_deref(),
+            Some("C:/keys/reader")
+        );
+        let ks = Keystore::load(&keystore_path(&cfg_path)).unwrap();
+        let kek = ks
+            .unlock_kek(&Credential::Password(Zeroizing::new(pw)))
+            .unwrap();
+        let dec = DekEncryptor::new(kek, FIELD_WRAP_GEN);
+        assert_eq!(
+            &*dec
+                .unwrap_field(reader.private_key_passphrase.as_ref().unwrap())
+                .unwrap(),
+            "reader-key-passphrase"
+        );
+
+        std::env::remove_var("DBBACKUP_CONFIG");
+    }
+
+    #[test]
+    fn add_destination_ssh_encrypts_reader_password() {
+        let _env = crate::paths::env_guard();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let dir = temp_dir.path();
+        let pw = init_ks(dir);
+
+        add_destination(
+            pw.clone(),
+            NewDestination {
+                name: "ssh-password-reader".into(),
+                kind: "ssh".into(),
+                path: Some("/srv/backups".into()),
+                endpoint: None,
+                region: None,
+                bucket: None,
+                prefix: String::new(),
+                access_key_id: None,
+                secret_access_key: None,
+                object_lock_mode: None,
+                retention_days: None,
+                host: Some("archive.example.test".into()),
+                port: Some(22),
+                user: Some("backup-writer".into()),
+                private_key_path: Some("C:/keys/writer".into()),
+                host_key_fingerprint: Some("SHA256:pinned".into()),
+                reader: Some(NewReaderIdentity {
+                    access_key_id: None,
+                    secret_access_key: None,
+                    user: Some("restore-reader".into()),
+                    private_key_path: None,
+                    private_key_passphrase: None,
+                    password: Some("reader-password".into()),
+                }),
+            },
+        )
+        .expect("SSH reader 비밀번호 신원 등록");
+
+        let cfg_path = config_path();
+        let config = Config::load(&cfg_path).unwrap();
+        let reader = config.destinations[0].reader.as_ref().expect("reader 저장");
+        let ks = Keystore::load(&keystore_path(&cfg_path)).unwrap();
+        let kek = ks
+            .unlock_kek(&Credential::Password(Zeroizing::new(pw)))
+            .unwrap();
+        let dec = DekEncryptor::new(kek, FIELD_WRAP_GEN);
+        assert_eq!(
+            &*dec.unwrap_field(reader.password.as_ref().unwrap()).unwrap(),
+            "reader-password"
+        );
+
+        std::env::remove_var("DBBACKUP_CONFIG");
+    }
+
+    #[test]
+    fn add_destination_rejects_ssh_without_reader_identity() {
+        let _env = crate::paths::env_guard();
+
+        let error = add_destination(
+            String::new(),
+            NewDestination {
+                name: "ssh-no-reader".into(),
+                kind: "ssh".into(),
+                path: Some("/srv/backups".into()),
+                endpoint: None,
+                region: None,
+                bucket: None,
+                prefix: String::new(),
+                access_key_id: None,
+                secret_access_key: None,
+                object_lock_mode: None,
+                retention_days: None,
+                host: Some("archive.example.test".into()),
+                port: Some(22),
+                user: Some("backup-writer".into()),
+                private_key_path: Some("C:/keys/writer".into()),
+                host_key_fingerprint: Some("SHA256:pinned".into()),
+                reader: None,
+            },
+        )
+        .expect_err("복구 reader 없는 SSH 등록은 거부");
+
+        assert!(error.contains("reader"), "{error}");
+
+        std::env::remove_var("DBBACKUP_CONFIG");
     }
 
     #[test]
     fn add_job_enforces_referential_integrity() {
         let _env = crate::paths::env_guard();
-        let dir = std::env::temp_dir().join(format!("dbconsole-addjob-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let pw = init_ks(&dir);
+        let temp_dir = tempfile::tempdir().unwrap();
+        let dir = temp_dir.path();
+        let pw = init_ks(dir);
 
         add_database(
             pw.clone(),
@@ -701,6 +1130,7 @@ mod tests {
                 user: None,
                 private_key_path: None,
                 host_key_fingerprint: None,
+                reader: None,
             },
         )
         .unwrap();
@@ -721,7 +1151,6 @@ mod tests {
         assert!(jobs[0].enabled);
 
         std::env::remove_var("DBBACKUP_CONFIG");
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn mk_job(name: &str, source: &str, dests: &[&str]) -> Result<(), String> {

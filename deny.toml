@@ -5,9 +5,10 @@
 version = 2
 # RustSec 권고: 취약점/미유지보수는 CI에서 실패시킨다.
 yanked = "deny"
+unmaintained = "none"
+unsound = "workspace"
 # 근거는 audit.toml 참조(수정본 없음 + 우리 경로 비해당).
 ignore = [
-    "RUSTSEC-2023-0071", # rsa Marvin — russh 전이, RSA 개인키 복호화 미수행
     "RUSTSEC-2026-0097", # rand 0.8 unsound — OsRng 직접 사용, 해당 조합 아님
 ]
 
@@ -26,6 +27,7 @@ allow = [
     "Zlib",
     "MPL-2.0",
     "CC0-1.0",
+    "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.9
 
@@ -33,6 +35,7 @@ confidence-threshold = 0.9
 # 동일 크레이트 다중 버전은 경고(공급망 표면 축소). 보안 크리티컬은 아래에서 deny로 승격 가능.
 multiple-versions = "warn"
 wildcards = "deny"
+allow-wildcard-paths = true
 # 알려진 위험/중복 크레이트를 여기서 차단할 수 있다.
 deny = []
 
@@ -41,3 +44,4 @@ deny = []
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = ["https://github.com/apache/opendal"]

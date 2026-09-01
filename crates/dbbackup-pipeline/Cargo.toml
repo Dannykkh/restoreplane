@@ -2,6 +2,9 @@
 name = "dbbackup-pipeline"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
 
 # S05 — Pipeline + Commit Protocol(옵션 C 스풀-후-팬아웃) + S06 Destination(LocalDest) +
 # S03 BackupSource trait 계약. 슬라이스 1의 하중 리스크(finish/절단, 평문해시 tee, 옵션 C)를
@@ -39,3 +42,9 @@ async-trait = "0.1"
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows = { version = "=0.58.0", features = [
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
+] }

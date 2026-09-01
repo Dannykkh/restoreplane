@@ -2,6 +2,9 @@
 name = "dbbackup-verify"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
 
 # S09 — Restorer + Verifier(L1-L3, Docker 샌드박스).
 # 복호 체인은 dbbackup-pipeline 인코딩 체인의 정확한 역순(chacha20poly1305 STREAM → zstd)이며
@@ -25,6 +28,7 @@ serde_json = "1"
 uuid = { version = "=1.11.0", features = ["v4"] }
 zeroize = { version = "=1.9.0" }
 ed25519-dalek = { version = "=2.2.0" }
+tempfile = "=3.14.0"
 
 anyhow = { workspace = true }
 thiserror = { workspace = true }
@@ -32,4 +36,3 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 dbbackup-secrets = { path = "../dbbackup-secrets" }
-tempfile = "=3.14.0"

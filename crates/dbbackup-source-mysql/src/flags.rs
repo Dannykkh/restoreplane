@@ -3,6 +3,8 @@
 //! §2.5의 핵심: --column-statistics는 **client_kind(바이너리 종류)**로 분기해야지 server_kind만
 //! 보고 분기하면 안 된다(MariaDB 바이너리엔 이 옵션 자체가 없어 unknown option으로 죽음).
 
+use dbbackup_core::BackupScopeSelection;
+
 use crate::binary::ClientKind;
 use crate::version::{ServerKind, ServerVersionInfo};
 
@@ -45,6 +47,28 @@ pub fn build_flags(
     args
 }
 
+pub fn build_dump_args(
+    server: &ServerVersionInfo,
+    client_kind: ClientKind,
+    capture_binlog: bool,
+    database: &str,
+    selection: &BackupScopeSelection,
+) -> anyhow::Result<Vec<String>> {
+    let mut args = build_flags(server, client_kind, capture_binlog);
+    if !selection.is_whole_database() {
+        args.retain(|arg| arg != "--routines" && arg != "--events");
+    }
+    args.push("--".to_owned());
+    args.push(database.to_owned());
+    for table in selection.tables() {
+        if table.schema_name() != database {
+            anyhow::bail!("MYSQL_SCOPE_TABLE_DATABASE_MISMATCH");
+        }
+        args.push(table.table_name().to_owned());
+    }
+    Ok(args)
+}
+
 /// mysqldump가 덤프 도중 DDL을 만났을 때 남기는 전형적 stderr 메시지(§2.1 DDL 이슈).
 /// exit code가 0으로 보이는 경계 케이스까지 잡기 위해 S05 PipelineCfg.fatal_patterns에 병합한다
 /// (부분 스키마 덤프를 "부분 성공"이 아니라 전체 실패로 강등, R9).
@@ -58,6 +82,7 @@ pub const DDL_RACE_FATAL_PATTERNS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dbbackup_core::{BackupScopeSelection, SelectedTable};
 
     fn server(kind: ServerKind, major: u32) -> ServerVersionInfo {
         ServerVersionInfo {
@@ -173,5 +198,67 @@ mod tests {
         assert!(a
             .iter()
             .all(|f| f != "--source-data=2" && f != "--master-data=2"));
+    }
+
+    #[test]
+    fn explicit_tables_are_separate_positional_arguments_after_options() {
+        let selection = BackupScopeSelection::explicit_tables(vec![
+            SelectedTable::new("app", "orders").expect("selected table"),
+            SelectedTable::new("app", "--audit-log").expect("selected table"),
+        ])
+        .expect("explicit selection");
+
+        let args = build_dump_args(
+            &server(ServerKind::OracleMySql, 8),
+            ClientKind::OracleMySql,
+            false,
+            "app",
+            &selection,
+        )
+        .expect("dump args");
+
+        assert!(has(&args, "--single-transaction"));
+        assert!(has(&args, "--triggers"));
+        assert!(!has(&args, "--routines"));
+        assert!(!has(&args, "--events"));
+        let separator = args.iter().position(|arg| arg == "--").expect("separator");
+        assert_eq!(&args[separator..], ["--", "app", "--audit-log", "orders"]);
+    }
+
+    #[test]
+    fn whole_database_keeps_database_wide_objects_without_table_arguments() {
+        let args = build_dump_args(
+            &server(ServerKind::MariaDb, 11),
+            ClientKind::MariaDb,
+            false,
+            "app",
+            &BackupScopeSelection::whole_database(),
+        )
+        .expect("dump args");
+
+        assert!(has(&args, "--routines"));
+        assert!(has(&args, "--events"));
+        let separator = args.iter().position(|arg| arg == "--").expect("separator");
+        assert_eq!(&args[separator..], ["--", "app"]);
+    }
+
+    #[test]
+    fn explicit_table_must_belong_to_the_dump_database() {
+        let selection =
+            BackupScopeSelection::explicit_tables(vec![
+                SelectedTable::new("other", "orders").expect("selected table")
+            ])
+            .expect("explicit selection");
+
+        let error = build_dump_args(
+            &server(ServerKind::OracleMySql, 8),
+            ClientKind::OracleMySql,
+            false,
+            "app",
+            &selection,
+        )
+        .expect_err("cross-database table must fail");
+
+        assert_eq!(error.to_string(), "MYSQL_SCOPE_TABLE_DATABASE_MISMATCH");
     }
 }

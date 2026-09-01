@@ -25,10 +25,14 @@ pub enum ValidationError {
     UnknownDestinationTunnelRef { dest: String, tunnel: String },
     #[error("destination '{0}' (s3) is missing required field '{1}'")]
     MissingS3Field(String, &'static str),
+    #[error("destination '{0}'.reader (s3) is missing required field '{1}'")]
+    MissingS3ReaderField(String, &'static str),
     #[error("destination '{0}' has object_lock set but no checksum_algo (S3 requires a checksum when Object Lock is enabled)")]
     S3ChecksumRequiredForObjectLock(String),
     #[error("destination '{0}' (ssh) is missing required field '{1}'")]
     MissingSshField(String, &'static str),
+    #[error("destination '{0}'.reader (ssh) is missing required field '{1}'")]
+    MissingSshReaderField(String, &'static str),
     #[error("destination '{0}' (local) is missing required field 'path'")]
     MissingLocalPath(String),
     #[error("job '{0}' verify.level must be 1, 2 or 3")]
@@ -99,6 +103,20 @@ pub fn validate(config: &Config) -> Result<(), Vec<ValidationError>> {
                         dest.name.clone(),
                     ));
                 }
+                if let Some(reader) = &dest.reader {
+                    if reader.access_key_id.is_none() {
+                        errors.push(ValidationError::MissingS3ReaderField(
+                            dest.name.clone(),
+                            "access_key_id",
+                        ));
+                    }
+                    if reader.secret_access_key.is_none() {
+                        errors.push(ValidationError::MissingS3ReaderField(
+                            dest.name.clone(),
+                            "secret_access_key",
+                        ));
+                    }
+                }
             }
             DestKind::Ssh => {
                 if let Some(tunnel) = &dest.tunnel {
@@ -120,6 +138,27 @@ pub fn validate(config: &Config) -> Result<(), Vec<ValidationError>> {
                         dest.name.clone(),
                         "host_key_fingerprint",
                     ));
+                }
+                if let Some(reader) = &dest.reader {
+                    if reader.user.is_none() {
+                        errors.push(ValidationError::MissingSshReaderField(
+                            dest.name.clone(),
+                            "user",
+                        ));
+                    }
+                    if reader.private_key_path.is_none() && reader.password.is_none() {
+                        errors.push(ValidationError::MissingSshReaderField(
+                            dest.name.clone(),
+                            "private_key_path or password",
+                        ));
+                    }
+                    if reader.private_key_passphrase.is_some() && reader.private_key_path.is_none()
+                    {
+                        errors.push(ValidationError::MissingSshReaderField(
+                            dest.name.clone(),
+                            "private_key_path (required with private_key_passphrase)",
+                        ));
+                    }
                 }
             }
             DestKind::Local => {

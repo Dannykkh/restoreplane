@@ -125,19 +125,7 @@ impl<'a> Verifier<'a> {
         let (pass, notes) = if is_pg && m.dump_format == "custom" {
             pg_restore_list_ok(&plain)
         } else {
-            // MySQL 등가물 부재(도메인 §4.2): 최소 헤더 검사(약한 L2).
-            let head = String::from_utf8_lossy(&plain[..plain.len().min(256)]);
-            let ok = head.contains("-- MySQL dump")
-                || head.contains("-- MariaDB")
-                || head.contains("PostgreSQL database dump");
-            (
-                ok,
-                if ok {
-                    "덤프 헤더 확인(약한 L2)".to_string()
-                } else {
-                    "예상 헤더 없음".to_string()
-                },
-            )
+            plain_dump_l2_result(m.engine, &plain)
         };
 
         Ok(VerifyOutcome {
@@ -167,27 +155,13 @@ impl<'a> Verifier<'a> {
 
         let raw_schema = sandbox.dump_schema_only().await?;
         let restored_schema_hash = normalize_and_hash_schema(&raw_schema);
-        let schema_pass = match &inputs.schema_hash {
-            Some(expected) => &restored_schema_hash == expected,
-            None => true, // 백업시점 값 없음 → 비교 skip, 기록만(하위호환)
-        };
-
         let restored_counts = sandbox.count_rows_per_table().await?;
-        let (rows_pass, rows_note, total_restored) =
-            compare_row_counts(&inputs.source_row_counts, &restored_counts);
-
-        let pass = schema_pass && rows_pass;
-        let mut notes = String::new();
-        if inputs.schema_hash.is_none() {
-            notes.push_str("[백업시점 schema_hash 없음 → 스키마 비교 skip] ");
-        }
-        if !schema_pass {
-            notes.push_str(&format!(
-                "스키마 해시 불일치(expected={:?} got={}) ",
-                inputs.schema_hash, restored_schema_hash
-            ));
-        }
-        notes.push_str(&rows_note);
+        let (pass, mut notes, total_restored) = evaluate_restore_oracle(
+            inputs.schema_hash.as_deref(),
+            &inputs.source_row_counts,
+            &restored_schema_hash,
+            &restored_counts,
+        );
         if let Some(src_ver) = &inputs.server_version {
             if version_gap(src_ver, &target_version) {
                 notes.push_str(&format!(
@@ -210,6 +184,66 @@ impl<'a> Verifier<'a> {
         })
         // sandbox는 여기서 Drop → docker rm -f(봉쇄).
     }
+}
+
+fn evaluate_restore_oracle(
+    expected_schema_hash: Option<&str>,
+    expected_row_counts: &std::collections::BTreeMap<String, u64>,
+    restored_schema_hash: &str,
+    restored_row_counts: &std::collections::BTreeMap<String, u64>,
+) -> (bool, String, u64) {
+    let total_restored = restored_row_counts.values().sum();
+    let Some(expected_schema_hash) = expected_schema_hash else {
+        return (
+            false,
+            "VERIFY_L3_ORACLE_REQUIRED: backup-time schema hash is missing".to_owned(),
+            total_restored,
+        );
+    };
+    if expected_row_counts.is_empty() {
+        return (
+            false,
+            "VERIFY_L3_ORACLE_REQUIRED: backup-time row-count oracle is missing".to_owned(),
+            total_restored,
+        );
+    }
+
+    let schema_pass = expected_schema_hash == restored_schema_hash;
+    let (rows_pass, rows_note, total_restored) =
+        compare_row_counts(expected_row_counts, restored_row_counts);
+    let schema_note = if schema_pass {
+        "schema hash matched".to_owned()
+    } else {
+        format!("schema hash mismatch: expected={expected_schema_hash} got={restored_schema_hash}")
+    };
+    (
+        schema_pass && rows_pass,
+        format!("{schema_note}; {rows_note}"),
+        total_restored,
+    )
+}
+
+fn plain_dump_l2_result(engine: Engine, plain: &[u8]) -> (bool, String) {
+    let head = String::from_utf8_lossy(&plain[..plain.len().min(256)]);
+    let header_recognized = match engine {
+        Engine::Postgresql => head.contains("PostgreSQL database dump"),
+        Engine::Mysql => head.contains("-- MySQL dump"),
+        Engine::Mariadb => head.contains("-- MariaDB dump") || head.contains("sandbox mode"),
+        Engine::Sqlserver => head.starts_with("PK"),
+        Engine::Sqlite => head.starts_with("SQLite format 3\0"),
+    };
+    let header_note = if header_recognized {
+        "header recognized"
+    } else {
+        "header not recognized"
+    };
+    (
+        false,
+        format!(
+            "VERIFY_L2_NATIVE_VALIDATOR_UNAVAILABLE: {header_note}; \
+             a header-only check is not L2 and L1 was not substituted"
+        ),
+    )
 }
 
 /// pg_restore --list를 임시 파일에 대해 실행(데이터 미전개 → 실행 위험 없음).
@@ -236,5 +270,55 @@ fn pg_restore_list_ok(custom_dump: &[u8]) -> (bool, String) {
             ),
         ),
         Err(e) => (false, format!("pg_restore 실행 불가: {e}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn mysql_header_alone_never_counts_as_native_l2() {
+        let (passed, note) = plain_dump_l2_result(
+            Engine::Mysql,
+            b"-- MySQL dump 10.13\nCREATE TABLE t(id int);",
+        );
+        assert!(!passed);
+        assert!(note.contains("VERIFY_L2_NATIVE_VALIDATOR_UNAVAILABLE"));
+    }
+
+    #[test]
+    fn mariadb_header_alone_never_counts_as_native_l2() {
+        let (passed, note) = plain_dump_l2_result(
+            Engine::Mariadb,
+            b"/*M!999999\\- enable the sandbox mode */\n-- MariaDB dump",
+        );
+        assert!(!passed);
+        assert!(note.contains("VERIFY_L2_NATIVE_VALIDATOR_UNAVAILABLE"));
+    }
+
+    #[test]
+    fn l3_without_backup_time_oracle_is_never_a_pass() {
+        let (passed, note, rows) =
+            evaluate_restore_oracle(None, &BTreeMap::new(), "restored-schema", &BTreeMap::new());
+        assert!(!passed);
+        assert_eq!(rows, 0);
+        assert!(note.contains("VERIFY_L3_ORACLE_REQUIRED"));
+    }
+
+    #[test]
+    fn l3_requires_both_schema_and_row_oracles_to_match() {
+        let expected = BTreeMap::from([("items".to_owned(), 2)]);
+        let restored = BTreeMap::from([("items".to_owned(), 2)]);
+        let (passed, note, rows) =
+            evaluate_restore_oracle(Some("schema-a"), &expected, "schema-a", &restored);
+        assert!(passed, "{note}");
+        assert_eq!(rows, 2);
+
+        let (passed, note, _) =
+            evaluate_restore_oracle(Some("schema-a"), &expected, "schema-b", &restored);
+        assert!(!passed);
+        assert!(note.contains("schema hash mismatch"));
     }
 }

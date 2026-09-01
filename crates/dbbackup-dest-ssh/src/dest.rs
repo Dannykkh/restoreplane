@@ -179,6 +179,7 @@ impl WriterBackend for SftpBackend {
         Ok(UploadReceipt {
             key: self.final_path.clone(),
             bytes: self.bytes,
+            version: None,
         })
     }
 

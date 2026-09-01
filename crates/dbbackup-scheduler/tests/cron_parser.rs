@@ -17,6 +17,14 @@ fn daily_pattern() {
 }
 
 #[test]
+fn hourly_pattern_used_by_the_console_is_supported() {
+    assert_eq!(
+        parse_cron_subset("15 * * * *").expect("hourly cron"),
+        ScheduleSpec::Hourly { minute: 15 }
+    );
+}
+
+#[test]
 fn weekly_pattern() {
     assert_eq!(
         parse_cron_subset("30 3 * * 1").unwrap(),

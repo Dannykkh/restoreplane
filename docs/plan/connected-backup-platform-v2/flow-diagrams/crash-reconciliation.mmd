@@ -1,0 +1,24 @@
+flowchart TD
+    boot([Service boot 또는 주기적 sweep]) --> scanClaims[만료 Lease와 non-terminal Work Item 조회]
+    scanClaims --> inspectProcess{기록된 프로세스가 살아 있는가?}
+    inspectProcess -- 예 --> ownerMatches{service boot ID와 owner가 일치?}
+    ownerMatches -- 예 --> resumeMonitor[heartbeat 감시 재개]
+    ownerMatches -- 아니요 --> fenceOld[새 Fencing Token 발급, 이전 owner 차단]
+    inspectProcess -- 아니요 --> inspectArtifacts[staging·Manifest·목적지 객체 조사]
+    fenceOld --> inspectArtifacts
+    inspectArtifacts --> committedElsewhere{유효한 complete Manifest가 이미 commit됐나?}
+    committedElsewhere -- 예 --> rebuildProjection[Recovery Point와 Snapshot projection 복구]
+    rebuildProjection --> markSucceeded[Work Item을 succeeded로 수렴]
+    committedElsewhere -- 아니요 --> partialFound{부분 artifact가 남았나?}
+    partialFound -- 예 --> quarantineOrRepair[격리 후 repair 또는 cleanup 예약]
+    partialFound -- 아니요 --> classifyRetry{retry budget과 오류가 재시도 가능?}
+    quarantineOrRepair --> classifyRetry
+    classifyRetry -- 예 --> requeue[새 Attempt로 requeue]
+    classifyRetry -- 아니요 --> markFailed[terminal failure와 Attention State 기록]
+    resumeMonitor --> reconciled([정상 감시 상태])
+    markSucceeded --> reconciled
+    requeue --> reconciled
+    markFailed --> reconciled
+
+    %% Runtime: startup reconciliation and periodic reconciliation
+    %% Invariant: DB 상태, 프로세스 상태, Manifest/객체 상태를 함께 비교

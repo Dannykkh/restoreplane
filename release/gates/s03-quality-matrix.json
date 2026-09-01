@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 1,
+  "gateId": "S03",
+  "commands": [
+    {
+      "id": "s03.singleton_service_authority",
+      "display": "cargo test -p dbbackup-service --test service_host singleton_host_is_gui_independent_and_pre_g1_is_rehearsal_only -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-service", "--test", "service_host",
+        "singleton_host_is_gui_independent_and_pre_g1_is_rehearsal_only",
+        "--", "--exact"
+      ],
+      "platform": "windows",
+      "minimumPassedTests": 1
+    },
+    {
+      "id": "s03.named_pipe_kernel_security",
+      "display": "cargo test -p dbbackup-service --test named_pipe_security kernel_dacl_and_impersonated_identity_match_the_local_client_token -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-service", "--test", "named_pipe_security",
+        "kernel_dacl_and_impersonated_identity_match_the_local_client_token",
+        "--", "--exact"
+      ],
+      "platform": "windows",
+      "minimumPassedTests": 1
+    },
+    {
+      "id": "s03.bounded_codec_fuzz",
+      "display": "cargo test -p dbbackup-service --test ipc_codec malformed_corpus_never_panics_or_allocates_from_untrusted_lengths -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-service", "--test", "ipc_codec",
+        "malformed_corpus_never_panics_or_allocates_from_untrusted_lengths",
+        "--", "--exact"
+      ],
+      "platform": "windows",
+      "minimumPassedTests": 1
+    },
+    {
+      "id": "s03.durable_ipc_replay",
+      "display": "cargo test -p dbbackup-service --test ipc_durable_dispatch completed_mutation_replays_after_service_restart_without_handler_reexecution -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-service", "--test", "ipc_durable_dispatch",
+        "completed_mutation_replays_after_service_restart_without_handler_reexecution",
+        "--", "--exact"
+      ],
+      "platform": "windows",
+      "minimumPassedTests": 1
+    },
+    {
+      "id": "s03.confirmation_binding",
+      "display": "cargo test -p dbbackup-service --test confirmation_service all_destructive_actions_store_only_digest_and_validate_exact_binding -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-service", "--test", "confirmation_service",
+        "all_destructive_actions_store_only_digest_and_validate_exact_binding",
+        "--", "--exact"
+      ],
+      "platform": "windows",
+      "minimumPassedTests": 1
+    },
+    {
+      "id": "s03.dpapi_secret_custody",
+      "display": "cargo test -p dbbackup-service --test secret_store_windows dpapi_store_survives_reopen_rotates_versions_and_never_leaks_plaintext -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-service", "--test", "secret_store_windows",
+        "dpapi_store_survives_reopen_rotates_versions_and_never_leaks_plaintext",
+        "--", "--exact"
+      ],
+      "platform": "windows",
+      "minimumPassedTests": 1
+    },
+    {
+      "id": "s03.typed_config_cutover",
+      "display": "cargo test -p dbbackup-service --test config_cutover_readiness typed_prepare_and_cutover_are_redacted_reverified_atomic_and_replay_safe -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-service", "--test", "config_cutover_readiness",
+        "typed_prepare_and_cutover_are_redacted_reverified_atomic_and_replay_safe",
+        "--", "--exact"
+      ],
+      "platform": "windows",
+      "minimumPassedTests": 1
+    },
+    {
+      "id": "s03.clean_rollback_boundary",
+      "display": "cargo test -p dbbackup-catalog --test config_cutover_repository clean_cutover_rollback_is_atomic_audited_idempotent_and_allows_a_new_cutover -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-catalog", "--test", "config_cutover_repository",
+        "clean_cutover_rollback_is_atomic_audited_idempotent_and_allows_a_new_cutover",
+        "--", "--exact"
+      ],
+      "platform": "windows",
+      "minimumPassedTests": 1
+    },
+    {
+      "id": "s03.offline_cutover_recovery",
+      "display": "cargo test -p dbbackup-service --test offline_cutover_recovery",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-service", "--test", "offline_cutover_recovery"
+      ],
+      "platform": "windows",
+      "minimumPassedTests": 5
+    },
+    {
+      "id": "s03.real_scheduler_recovery",
+      "display": "cargo test -p dbbackup-service --test offline_cutover_recovery real_windows_scheduler_controller_restores_a_throwaway_dbbackup_task -- --ignored --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-service", "--test", "offline_cutover_recovery",
+        "real_windows_scheduler_controller_restores_a_throwaway_dbbackup_task",
+        "--", "--ignored", "--exact"
+      ],
+      "platform": "windows",
+      "minimumPassedTests": 1
+    },
+    {
+      "id": "s03.real_scm_verifier_wiring",
+      "display": "cargo test -p dbbackup-service --lib scm::tests::scm_bootstrap_loads_protected_identity_and_publishes_pipe_before_returning -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-service", "--lib",
+        "scm::tests::scm_bootstrap_loads_protected_identity_and_publishes_pipe_before_returning",
+        "--", "--exact"
+      ],
+      "platform": "windows",
+      "minimumPassedTests": 1
+    },
+    {
+      "id": "s03.shutdown_drain_order",
+      "display": "cargo test -p dbbackup-service --test service_pipe_runtime host_runtime_publishes_ipc_before_ready_and_drains_it_before_checkpoint -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-service", "--test", "service_pipe_runtime",
+        "host_runtime_publishes_ipc_before_ready_and_drains_it_before_checkpoint",
+        "--", "--exact"
+      ],
+      "platform": "windows",
+      "minimumPassedTests": 1
+    },
+    {
+      "id": "s03.real_pipe_roundtrip",
+      "display": "cargo test -p dbbackup-service --test named_pipe_transport real_pipe_roundtrip_is_authorized_bounded_durable_and_drains -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-service", "--test", "named_pipe_transport",
+        "real_pipe_roundtrip_is_authorized_bounded_durable_and_drains",
+        "--", "--exact"
+      ],
+      "platform": "windows",
+      "minimumPassedTests": 1
+    },
+    {
+      "id": "s03.legacy_direct_guard",
+      "display": "cargo test -p dbbackup-cli commands::direct_execution_guard::tests::production_authority_blocks_legacy_execution -- --exact",
+      "executable": "cargo",
+      "arguments": [
+        "test", "-p", "dbbackup-cli",
+        "commands::direct_execution_guard::tests::production_authority_blocks_legacy_execution",
+        "--", "--exact"
+      ],
+      "platform": "windows",
+      "minimumPassedTests": 1
+    }
+  ]
+}

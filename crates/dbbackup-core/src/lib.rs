@@ -1,8 +1,30 @@
 // crates/dbbackup-core/src/lib.rs
+mod artifact;
+mod backup_scope;
+mod provider;
+mod verification_policy;
+
 use std::{fmt, str::FromStr};
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::{de::Error as DeError, Deserialize, Deserializer, Serialize, Serializer};
+
+pub use artifact::{
+    ArtifactContractError, ArtifactPartRole, ArtifactSpec, ConsistencyGrade, PartSpec,
+};
+pub use backup_scope::{
+    BackupScopeMode, BackupScopeSelection, BackupScopeSelectionError, SelectedTable,
+    MAX_SELECTED_IDENTIFIER_BYTES, MAX_SELECTED_TABLES, MAX_SELECTION_IDENTIFIER_BYTES,
+};
+pub use provider::{
+    CapabilityEvidence, CapabilityOutcome, CertificationIdentity, NativeToolIdentity,
+    ProviderCapability, ProviderCertification, ProviderContractError, ProviderLimitation,
+    RestoreMode, RestoreSafetyError, RestoreSafetyPolicy, RestoreTargetSnapshot, SupportStatus,
+    ToolTrust,
+};
+pub use verification_policy::{
+    RequestedVerificationLevel, VerificationPolicy, VerificationPolicyError, VerificationSchedule,
+};
 
 // ---------------------------------------------------------------------
 // EncField — config에 저장되는 암호화 필드의 와이어 포맷.
@@ -120,6 +142,8 @@ pub enum Engine {
     Postgresql,
     Mysql,
     Mariadb,
+    Sqlserver,
+    Sqlite,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

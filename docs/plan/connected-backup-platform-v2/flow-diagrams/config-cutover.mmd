@@ -1,0 +1,23 @@
+flowchart TD
+    start([v2 전환 시작]) --> exportLegacy[legacy TOML과 scheduler 상태 recovery bundle 생성]
+    exportLegacy --> shadowImport[shadow Operational Store로 import]
+    shadowImport --> validateDiff{stable ID·관계·Secret Ref diff 통과?}
+    validateDiff -- 아니요 --> discardShadow[shadow DB 폐기, legacy 실행 유지]
+    discardShadow --> stopped([수정 후 재시도])
+    validateDiff -- 예 --> durableGate{Durable Core G1 통과?}
+    durableGate -- 아니요 --> rehearsalOnly[cutover rehearsal 결과만 보존]
+    rehearsalOnly --> stopped
+    durableGate -- 예 --> freezeLegacy[legacy scheduler freeze]
+    freezeLegacy --> serviceHealthy{새 service와 queue health 정상?}
+    serviceHealthy -- 아니요 --> unfreezeLegacy[service 중지 후 legacy scheduler 재개]
+    unfreezeLegacy --> stopped
+    serviceHealthy -- 예 --> writeMarker[Operational Store와 cutover marker 원자 기록]
+    writeMarker --> disableOldPath[구 binary와 직접 run_job 경로 guard 활성화]
+    disableOldPath --> newData{새 Operational Store 데이터 생성 전 장애?}
+    newData -- 예 --> rollbackBundle[marker 복구와 rehearsal한 bundle로 원복]
+    rollbackBundle --> stopped
+    newData -- 아니요 --> forwardFix[service queue로 실행권 유지, forward-fix만 허용]
+    forwardFix --> complete([v2 execution authority 확정])
+
+    %% IPC: migration.preview, migration.cutover, service.status
+    %% Invariant: scheduler dual-run 금지, cutover 이후 old binary 실행 금지

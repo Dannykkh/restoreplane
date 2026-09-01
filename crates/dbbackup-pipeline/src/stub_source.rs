@@ -55,6 +55,8 @@ impl StubSource {
             pairs_with_globals_backup_id: None,
             dump_tool: "stub",
             dump_tool_path: std::path::PathBuf::from("stub"),
+            dump_tool_sha256: None,
+            dump_tool_dependencies: Vec::new(),
             dump_tool_version: "stub 0.0.0".to_string(),
             dump_format: "custom",
             dump_flags: "stub --deterministic".to_string(),
@@ -91,6 +93,7 @@ impl BackupSource for StubSource {
         Ok(DumpArtifact::Stream(DumpStream {
             reader: Box::new(reader),
             wait,
+            abort: None,
         }))
     }
 }

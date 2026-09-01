@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "localV2NetworkBoundary": "authenticated_local_ipc_only",
+  "providers": [
+    {
+      "id": "mongodb",
+      "status": "candidate_not_implemented",
+      "promotionRequires": [
+        "vendor_tool_identity",
+        "backup_fixture",
+        "restore_fixture",
+        "reader_fixture",
+        "provider_conformance"
+      ]
+    },
+    {
+      "id": "firebird",
+      "status": "candidate_not_implemented",
+      "promotionRequires": [
+        "vendor_tool_identity",
+        "backup_fixture",
+        "restore_fixture",
+        "reader_fixture",
+        "provider_conformance"
+      ]
+    },
+    {
+      "id": "redis",
+      "status": "experimental_not_implemented",
+      "promotionRequires": [
+        "consistency_semantics",
+        "restore_runbook",
+        "live_restore_testbed"
+      ]
+    },
+    {
+      "id": "valkey",
+      "status": "experimental_not_implemented",
+      "promotionRequires": [
+        "consistency_semantics",
+        "restore_runbook",
+        "live_restore_testbed"
+      ]
+    }
+  ],
+  "destinations": [
+    {
+      "id": "azure_blob",
+      "status": "not_implemented"
+    },
+    {
+      "id": "smb",
+      "status": "not_implemented"
+    },
+    {
+      "id": "rclone",
+      "status": "not_implemented"
+    }
+  ],
+  "remoteFeatures": [
+    {
+      "id": "public_http_api",
+      "status": "deferred_requires_adr"
+    },
+    {
+      "id": "organization_rbac",
+      "status": "deferred_requires_adr"
+    },
+    {
+      "id": "remote_agent",
+      "status": "deferred_requires_protocol_and_threat_model"
+    },
+    {
+      "id": "backup_content_browser",
+      "status": "deferred_requires_data_access_model"
+    }
+  ]
+}

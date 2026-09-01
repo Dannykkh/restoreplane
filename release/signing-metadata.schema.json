@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dbbackupsystem.local/schemas/signing-metadata-v1.json",
+  "title": "DbBackup production signing metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "version",
+    "sourceRevision",
+    "sourceTreeDigest",
+    "buildId",
+    "artifactId",
+    "signerThumbprint",
+    "signerSubject",
+    "nativeToolAuditSha256",
+    "timestampUrl",
+    "packageManifestSha256",
+    "serviceBinarySha256",
+    "cliBinarySha256"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "sourceRevision": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "sourceTreeDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "buildId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "artifactId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "signerThumbprint": {
+      "type": "string",
+      "pattern": "^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$"
+    },
+    "signerSubject": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "nativeToolAuditSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestampUrl": {
+      "type": "string",
+      "pattern": "^https://[^\\s]+$"
+    },
+    "packageManifestSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "serviceBinarySha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "cliBinarySha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

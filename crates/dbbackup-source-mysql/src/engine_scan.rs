@@ -6,6 +6,8 @@
 //! MyISAM 등 비-InnoDB 테이블은 덤프 도중 변경되면 **에러 없이 조용히** 비일관 데이터가 들어가고,
 //! 사후엔 알 방법이 없다(§2.1). 그래서 덤프 실행 전에 반드시 스캔해 매니페스트에 기록해야 한다.
 
+use dbbackup_core::BackupScopeSelection;
+
 use crate::MySqlSourceError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,6 +58,22 @@ pub fn classify_non_transactional(
         .collect()
 }
 
+pub fn classify_non_transactional_for_selection(
+    rows: impl IntoIterator<Item = (String, String, String)>,
+    selection: &BackupScopeSelection,
+) -> Vec<NonTransactionalTable> {
+    let mut tables = classify_non_transactional(rows);
+    if !selection.is_whole_database() {
+        tables.retain(|candidate| {
+            selection.tables().iter().any(|selected| {
+                selected.schema_name() == candidate.schema
+                    && selected.table_name() == candidate.table
+            })
+        });
+    }
+    tables
+}
+
 /// information_schema.tables 스캔 쿼리(대상 DB만, 시스템 스키마 이중 제외). meta.rs가 실행한다.
 pub const SCAN_TABLES_SQL: &str = "SELECT table_schema, table_name, engine \
      FROM information_schema.tables \
@@ -72,6 +90,7 @@ pub const FETCH_CHARSET_SQL: &str = "SELECT DEFAULT_CHARACTER_SET_NAME, DEFAULT_
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dbbackup_core::{BackupScopeSelection, SelectedTable};
 
     fn row(schema: &str, table: &str, engine: &str) -> (String, String, String) {
         (schema.to_string(), table.to_string(), engine.to_string())
@@ -125,5 +144,26 @@ mod tests {
             Err(MySqlSourceError::SystemSchemaRejected(_))
         ));
         assert!(ensure_not_system_schema("app").is_ok());
+    }
+
+    #[test]
+    fn explicit_scope_reports_only_selected_non_transactional_tables() {
+        let selection = BackupScopeSelection::explicit_tables(vec![SelectedTable::new(
+            "app",
+            "selected_legacy",
+        )
+        .expect("selected table")])
+        .expect("explicit selection");
+
+        let out = classify_non_transactional_for_selection(
+            vec![
+                row("app", "selected_legacy", "MyISAM"),
+                row("app", "unselected_legacy", "MyISAM"),
+            ],
+            &selection,
+        );
+
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].table, "selected_legacy");
     }
 }

@@ -1,17 +1,18 @@
 // S08 8.4 — ManifestSource. S08은 S06/S07를 직접 의존하면 순환이 생기므로 자체적으로 작은
 // 트레이트를 정의하고, 로컬 파일시스템 구현체(LocalManifestSource)만 여기서 제공한다.
-// S6/S7 완성 시 S3Dest/SshDest가 같은 트레이트를 구현하면 rebuild 로직을 그대로 재사용한다.
-//
-// 섹션 원본은 async_trait이지만 카탈로그/rebuild 경로는 동기로 충분하므로 동기 트레이트로 둔다.
+// S6/S7의 원격 소스도 같은 트레이트를 구현해 rebuild/restore/verify가 전송 계층에 독립적이다.
 
 use std::path::PathBuf;
 
+use async_trait::async_trait;
+
 /// 목적지에서 매니페스트/객체 바이트를 읽는 최소 계약. key는 목적지 상대 경로.
+#[async_trait]
 pub trait ManifestSource: Send + Sync {
     /// job_filter가 Some이면 해당 job 접두 키만, None이면 전부. 반환은 `*.manifest.json` 상대 키.
-    fn list_manifests(&self, job_filter: Option<&str>) -> anyhow::Result<Vec<String>>;
+    async fn list_manifests(&self, job_filter: Option<&str>) -> anyhow::Result<Vec<String>>;
     /// 임의 객체(매니페스트 JSON 또는 스풀 암호문) 바이트를 읽는다.
-    fn read_bytes(&self, key: &str) -> anyhow::Result<Vec<u8>>;
+    async fn read_bytes(&self, key: &str) -> anyhow::Result<Vec<u8>>;
 }
 
 /// 1차 walking skeleton(PG→Local)용 구현. root 아래를 재귀 탐색한다.
@@ -39,35 +40,42 @@ impl LocalManifestSource {
     }
 }
 
+#[async_trait]
 impl ManifestSource for LocalManifestSource {
-    fn list_manifests(&self, job_filter: Option<&str>) -> anyhow::Result<Vec<String>> {
-        let mut files = Vec::new();
-        if self.root.exists() {
-            Self::collect(&self.root, &mut files)?;
-        }
-        let mut out = Vec::new();
-        for p in files {
-            let name = p.to_string_lossy();
-            if !name.ends_with(".manifest.json") {
-                continue;
+    async fn list_manifests(&self, job_filter: Option<&str>) -> anyhow::Result<Vec<String>> {
+        let root = self.root.clone();
+        let job_filter = job_filter.map(str::to_owned);
+        tokio::task::spawn_blocking(move || {
+            let mut files = Vec::new();
+            if root.exists() {
+                Self::collect(&root, &mut files)?;
             }
-            let rel = p
-                .strip_prefix(&self.root)
-                .unwrap_or(&p)
-                .to_string_lossy()
-                .replace('\\', "/");
-            if let Some(job) = job_filter {
-                if !rel.starts_with(job) {
+            let mut out = Vec::new();
+            for p in files {
+                let name = p.to_string_lossy();
+                if !name.ends_with(".manifest.json") && !name.ends_with("set-manifest.json") {
                     continue;
                 }
+                let rel = p
+                    .strip_prefix(&root)
+                    .unwrap_or(&p)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                if let Some(job) = job_filter.as_deref() {
+                    if !rel.starts_with(job) {
+                        continue;
+                    }
+                }
+                out.push(rel);
             }
-            out.push(rel);
-        }
-        out.sort();
-        Ok(out)
+            out.sort();
+            Ok(out)
+        })
+        .await?
     }
 
-    fn read_bytes(&self, key: &str) -> anyhow::Result<Vec<u8>> {
-        Ok(std::fs::read(self.root.join(key))?)
+    async fn read_bytes(&self, key: &str) -> anyhow::Result<Vec<u8>> {
+        let path = self.root.join(key);
+        tokio::task::spawn_blocking(move || Ok(std::fs::read(path)?)).await?
     }
 }

@@ -2,6 +2,9 @@
 name = "dbbackup-secrets"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
 
 # S02 — SecretManager: 봉투암호화(DEK/KEK) + ed25519 서명 + 복구코드.
 # 보안 핵심 크레이트는 정확 버전(=)으로 핀해 공급망 드리프트를 막는다(S11 정합).

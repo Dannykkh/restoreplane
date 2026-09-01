@@ -1,0 +1,135 @@
+flowchart TD
+    A["User runs: verify<br/>or restore --backup-id X"]
+
+    B["Phase 1: Fetch"]
+    B1["Query catalog or<br/>manifest reference"]
+    B2["Fetch encrypted object<br/>from destination"]
+    B3["Fetch manifest JSON<br/>from destination"]
+
+    C["Phase 2: Signature Verify"]
+    C1["Extract signature block<br/>from manifest"]
+    C2["Load ed25519 pubkey"]
+    C3["Verify signature:<br/>manifest body"]
+    C3_fail["REJECT: signature invalid<br/>or missing"]
+    C3_ok["Signature valid"]
+
+    D["Phase 3: DEK Unwrap"]
+    D1["Prompt user for<br/>unwrap path choice"]
+    D2a["Path 1: Master password<br/>Argon2id derive KEK<br/>unwrap DEK"]
+    D2b["Path 2: Recovery code<br/>validate code<br/>unwrap DEK"]
+    D2c["Path 3: DPAPI<br/>retrieve KEK from OS<br/>unwrap DEK"]
+    D3["DEK obtained"]
+
+    E["Phase 4: Decrypt"]
+    E1["age decrypt:<br/>ciphertext → plaintext"]
+    E2["zstd decode:<br/>plaintext dump"]
+    E3["Untar if needed:<br/>Directory artifact"]
+    E4["Raw dump ready"]
+
+    F["Phase 5: Sandbox Setup"]
+    F1["Spawn ephemeral container<br/>or isolated temp env"]
+    F2["Apply restrictions:<br/>no outbound network<br/>non-privileged user<br/>local_infile=0<br/>COPY PROGRAM blocked<br/>pg_restore --no-privileges"]
+    F3["Restore globals first<br/>if PG, then databases"]
+
+    G["Phase 6: Restore"]
+    G1["Execute restore tool<br/>pg_restore or mysql"]
+    G2["Monitor for errors"]
+    G2_fail["Restore failed"]
+    G2_ok["Restore succeeded"]
+
+    H["Phase 7: L1 Verify"]
+    H1["Plaintext hash tee<br/>during restore"]
+    H2["Compare to manifest<br/>plaintext_blake3"]
+    H2_fail["Hash mismatch<br/>data corrupted"]
+    H2_ok["Hash match"]
+
+    I["Phase 8: L2 Verify"]
+    I1["pg_restore --list"]
+    I2["Parse schema objects"]
+    I2_ok["Format valid"]
+    I2_fail["Format invalid"]
+
+    J["Phase 9: L3 Verify<br/>Full Restore Check"]
+    J1["Row count query"]
+    J2["Compare to manifest<br/>row_counts table"]
+    J2_ok["Rows match"]
+    J2_fail["Row count mismatch"]
+
+    K["Calculate restored<br/>schema hash"]
+    K_vs["Compare to manifest<br/>schema_hash"]
+    K_match["Schema match"]
+    K_nomatch["Schema hash differs<br/>DDL divergence"]
+
+    L["All L1/L2/L3 pass"]
+    L_partial["Partial: some L2/L3 warn"]
+    L_fail["Fail: reject"]
+
+    M["Teardown sandbox"]
+
+    N["Record verification<br/>to catalog:<br/>level, result, timestamp"]
+
+    O["Success: verified"]
+    O_warn["Success with warnings"]
+    O_fail["Fail: unverified"]
+
+    A --> B
+    B --> B1 --> B2 --> B3
+    B3 --> C
+    C --> C1 --> C2 --> C3
+    C3 -->|Invalid| C3_fail
+    C3 -->|Valid| C3_ok
+
+    C3_ok --> D
+    D --> D1
+    D1 --> D2a
+    D1 --> D2b
+    D1 --> D2c
+    D2a --> D3
+    D2b --> D3
+    D2c --> D3
+
+    D3 --> E1 --> E2 --> E3 --> E4
+    E4 --> F1 --> F2 --> F3
+    F3 --> G1 --> G2
+    G2 -->|Failed| G2_fail
+    G2 -->|OK| G2_ok
+
+    G2_ok --> H1 --> H2
+    H2 -->|Mismatch| H2_fail
+    H2 -->|Match| H2_ok
+
+    H2_ok --> I1 --> I2
+    I2 -->|Valid| I2_ok
+    I2 -->|Invalid| I2_fail
+
+    I2_ok --> J1 --> J2
+    J2 -->|Match| J2_ok
+    J2 -->|Mismatch| J2_fail
+
+    J2_ok --> K --> K_vs
+    K_vs -->|Match| K_match
+    K_vs -->|Differ| K_nomatch
+
+    K_match --> L
+    K_nomatch --> L_partial
+    G2_fail --> L_fail
+    H2_fail --> L_fail
+    I2_fail --> L_fail
+    J2_fail --> L_partial
+
+    L --> M
+    L_partial --> M
+    L_fail --> M
+
+    M --> N
+    N --> O
+    N --> O_warn
+    N --> O_fail
+
+    style A fill:#e1f5ff
+    style O fill:#c8e6c9
+    style O_warn fill:#fff9c4
+    style O_fail fill:#ffcdd2
+    style C3_fail fill:#ffcdd2
+    style G2_fail fill:#ffcdd2
+    style H2_fail fill:#ffcdd2

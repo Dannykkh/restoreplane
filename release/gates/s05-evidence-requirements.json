@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "gateId": "S05",
+  "sameSourceRevision": true,
+  "sameSourceTree": true,
+  "sameBuildId": true,
+  "allRequired": true,
+  "requiredEvidenceIds": [
+    "s05.signature_boundary",
+    "s05.manifest_part_truth",
+    "s05.occurrence_target_uniqueness",
+    "s05.replica_truth",
+    "s05.credential_role_separation",
+    "s05.checkpoint_crash_rebuild",
+    "s05.catalog_rebuild_isolation",
+    "s05.durable_replica_repair",
+    "s05.retention_policy",
+    "s05.retention_settlement",
+    "s05.retention_worker",
+    "s05.retention_ipc",
+    "s05.l1_reader_roundtrip",
+    "s05.large_stream_bounded_resources"
+  ],
+  "qualityGateMapping": {
+    "no_false_snapshot": [
+      "s05.signature_boundary",
+      "s05.manifest_part_truth"
+    ],
+    "one_complete_recovery_point": [
+      "s05.occurrence_target_uniqueness",
+      "s05.checkpoint_crash_rebuild"
+    ],
+    "required_replica_truth": [
+      "s05.replica_truth"
+    ],
+    "credential_separation": [
+      "s05.credential_role_separation"
+    ],
+    "manifest_crash_rebuild": [
+      "s05.checkpoint_crash_rebuild"
+    ],
+    "catalog_control_isolation": [
+      "s05.catalog_rebuild_isolation"
+    ],
+    "encoded_artifact_repair": [
+      "s05.durable_replica_repair"
+    ],
+    "retention_safety": [
+      "s05.retention_policy",
+      "s05.retention_settlement",
+      "s05.retention_worker",
+      "s05.retention_ipc"
+    ],
+    "l1_reader_roundtrip": [
+      "s05.l1_reader_roundtrip"
+    ],
+    "large_payload_bounded_resources": [
+      "s05.large_stream_bounded_resources"
+    ]
+  }
+}

@@ -1,0 +1,232 @@
+{
+  "schemaVersion": 1,
+  "productVersion": "0.1.0",
+  "executionAuthority": "legacy_direct",
+  "cutoverMode": "rehearsal_only",
+  "capabilities": [
+    {
+      "id": "connection.probe",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "not_applicable",
+      "publicSummary": "서비스 소유의 PostgreSQL, MySQL, MariaDB, SQLite 연결 점검과 구조화된 진단을 지원함",
+      "ownerSection": "section-06"
+    },
+    {
+      "id": "database.discovery_ui",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "not_applicable",
+      "publicSummary": "서비스 검색 결과에서 사용자가 백업 대상을 명시적으로 선택하는 UI를 지원함",
+      "ownerSection": "section-06,section-07"
+    },
+    {
+      "id": "backup.postgresql",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "managed_pass",
+      "publicSummary": "고정 도구와 실제 fixture 왕복 검증 범위에서 PostgreSQL 논리 백업을 지원함",
+      "ownerSection": "section-06"
+    },
+    {
+      "id": "backup.mysql",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "managed_pass",
+      "publicSummary": "고정 도구와 실제 fixture 왕복 검증 범위에서 MySQL 논리 백업을 지원함",
+      "ownerSection": "section-06"
+    },
+    {
+      "id": "backup.mariadb",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "managed_pass",
+      "publicSummary": "고정 도구와 실제 fixture 왕복 검증 범위에서 MariaDB 논리 백업을 지원함",
+      "ownerSection": "section-06"
+    },
+    {
+      "id": "destination.local",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "managed_pass",
+      "publicSummary": "실제 파일시스템에서 writer/reader와 암호화 Replica 왕복이 검증된 로컬 목적지를 지원함",
+      "ownerSection": "section-05,section-06"
+    },
+    {
+      "id": "destination.s3",
+      "claim": "experimental",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "not_run",
+      "publicSummary": "S3 저장과 읽기 경로는 구현됐으며 승인된 운영 testbed 증거가 아직 없음",
+      "ownerSection": "section-05,section-06"
+    },
+    {
+      "id": "destination.ssh",
+      "claim": "experimental",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "not_run",
+      "publicSummary": "SSH 저장과 읽기 경로는 구현됐으며 승인된 운영 testbed 증거가 아직 없음",
+      "ownerSection": "section-05,section-06"
+    },
+    {
+      "id": "verification.l1",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "not_applicable",
+      "publicSummary": "서명 확인과 복호화 및 해시 대조로 구성된 L1 검증을 지원함",
+      "ownerSection": "section-06"
+    },
+    {
+      "id": "verification.l2",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "managed_pass",
+      "publicSummary": "인증된 native restore와 content oracle로 구성된 L2 검증을 지원함",
+      "ownerSection": "section-06"
+    },
+    {
+      "id": "verification.l3",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "managed_pass",
+      "publicSummary": "등록된 restore-test target에서 격리 복원과 content oracle을 수행하는 L3를 지원함",
+      "ownerSection": "section-06"
+    },
+    {
+      "id": "verification.automatic",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "not_applicable",
+      "publicSummary": "백업 commit 뒤 정책 수준을 낮추지 않는 자동 검증 작업 생성을 지원함",
+      "ownerSection": "section-06"
+    },
+    {
+      "id": "restore.decrypt_only",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "managed_pass",
+      "publicSummary": "서명·Manifest·Replica reader를 확인한 뒤 암호화 artifact를 복호화하고 해시를 대조함",
+      "ownerSection": "section-06"
+    },
+    {
+      "id": "restore.database_target",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "managed_pass",
+      "publicSummary": "preflight와 create-new 기본값, 별도 overwrite 확인, native restore와 validation을 지원함",
+      "ownerSection": "section-06,section-08"
+    },
+    {
+      "id": "retention.policy",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "not_applicable",
+      "publicSummary": "복구 지점 단위 보존 계획과 required Replica 안전 조건을 지원함",
+      "ownerSection": "section-06"
+    },
+    {
+      "id": "retention.execution",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "not_applicable",
+      "publicSummary": "확인 토큰, tombstone, 역할 분리, 멱등 settlement를 포함한 영속 삭제 실행을 지원함",
+      "ownerSection": "section-06"
+    },
+    {
+      "id": "scheduler.legacy_task",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "managed_pass",
+      "publicSummary": "서비스 cutover 전 복구 가능한 legacy Task Scheduler 등록·복원 경계를 지원함",
+      "ownerSection": "section-03,section-04"
+    },
+    {
+      "id": "dispatcher.durable",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "managed_pass",
+      "publicSummary": "영속 queue, lease/fence, checkpoint, crash reconciliation을 갖춘 서비스 dispatcher를 지원함",
+      "ownerSection": "section-04"
+    },
+    {
+      "id": "concurrency.max_parallel_dumps",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "managed_pass",
+      "publicSummary": "전역·엔진·호스트·spool resource permit과 예약량으로 동시 실행 무게를 제한함",
+      "ownerSection": "section-04"
+    },
+    {
+      "id": "dashboard.protection_compliance",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "not_applicable",
+      "publicSummary": "완전성·Replica 내구성·RPO·검증 신선도를 근거로 Protection Compliance를 표시함",
+      "ownerSection": "section-05,section-08"
+    },
+    {
+      "id": "notification.durable_delivery",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "not_applicable",
+      "publicSummary": "outbox, lease, retry, dedupe와 전달 결과를 갖춘 영속 알림 처리를 지원함",
+      "ownerSection": "section-06"
+    },
+    {
+      "id": "tauri.release_bundle",
+      "claim": "experimental",
+      "automatedEvidence": "known_gap",
+      "managedEvidence": "not_run",
+      "publicSummary": "Tauri 앱은 개발 빌드되며 서명된 설치 번들 증거는 아직 없음",
+      "ownerSection": "section-10"
+    },
+    {
+      "id": "service.diagnostics",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "not_applicable",
+      "publicSummary": "queue, lease, permit, spool, WAL, tool, Destination, notification 상태의 bounded 로컬 진단을 지원함",
+      "ownerSection": "section-10"
+    },
+    {
+      "id": "support.bundle",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "not_applicable",
+      "publicSummary": "allowlist와 redaction manifest를 사용하는 bounded support bundle을 durable Operation Run으로 생성함",
+      "ownerSection": "section-10"
+    },
+    {
+      "id": "telemetry.archive",
+      "claim": "supported",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "not_applicable",
+      "publicSummary": "Activity와 terminal notification outbox를 작은 batch로 비밀 없이 보관하며 open Attention과 ledger를 유지함",
+      "ownerSection": "section-10"
+    },
+    {
+      "id": "windows.install_update",
+      "claim": "experimental",
+      "automatedEvidence": "automated_pass",
+      "managedEvidence": "not_run",
+      "publicSummary": "hash, Authenticode, service SID, ACL, drain, control backup, minimum-reader update 계약은 구현됐으나 production 서명 및 clean Windows fixture 증거는 아직 없음",
+      "ownerSection": "section-10"
+    },
+      {
+        "id": "engine.sqlserver",
+        "claim": "experimental",
+        "automatedEvidence": "automated_pass",
+        "managedEvidence": "not_run",
+        "publicSummary": "SQL Server BACPAC은 후보 계약만 구현됐으며 실제 export/import 인증 전에는 Plan 게시 불가",
+        "ownerSection": "section-09"
+      },
+      {
+        "id": "engine.sqlite",
+        "claim": "supported",
+        "automatedEvidence": "automated_pass",
+        "managedEvidence": "managed_pass",
+        "publicSummary": "일반 로컬 SQLite 파일의 online backup과 검증된 create-new/원자적 overwrite 복구 지원",
+        "ownerSection": "section-09"
+      }
+  ]
+}

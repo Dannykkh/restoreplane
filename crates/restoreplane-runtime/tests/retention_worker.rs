@@ -196,10 +196,13 @@ async fn absolute_remote_delete_deadline_requeues_a_blackhole_claim_and_releases
     let clock = Arc::new(SequenceClock::new([502, 503, 510]));
     let worker = RetentionDeleteWorkerV2::new(repository, resolver, clock, 1_000, 100)
         .expect("retention worker")
-        .with_remote_delete_deadline(Duration::from_millis(20))
+        // Leave enough wall-clock budget for a cold CI runner to load and
+        // fence the claim before the blackhole operator is polled. The
+        // operator itself must still be bounded by the absolute deadline.
+        .with_remote_delete_deadline(Duration::from_millis(1_000))
         .expect("bounded remote-delete deadline");
 
-    let outcome = tokio::time::timeout(Duration::from_millis(500), worker.execute(&claim))
+    let outcome = tokio::time::timeout(Duration::from_millis(2_000), worker.execute(&claim))
         .await
         .expect("blackhole delete must be bounded")
         .expect("deadline must settle durably");

@@ -1,0 +1,36 @@
+title = "RestorePlane Gitleaks policy"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Typed idempotency UUID fixtures are public request identifiers"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
+paths = ['''^crates/(dbbackup|restoreplane)-cli/tests/cli_parsing\.rs$''']
+regexes = ['''idempotency_key\s*=\s*"323e4567-e89b-(42d3|12d3)-a456-426614174000"''']
+
+[[allowlists]]
+description = "Capacity fixture resource keys identify destinations and are not credentials"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
+paths = ['''^apps/console/src/lib/fixtures\.ts$''']
+regexes = ['''resourceKey:\s*"destination-s3-worm"''']
+
+[[allowlists]]
+description = "The historical public verification-key fixture contains no private key material"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
+paths = ['''^apps/console/src/lib/api\.ts$''']
+regexes = ['''verifyingKeyHex:\s*"a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00"''']
+
+[[allowlists]]
+description = "The redaction test intentionally contains a synthetic API-key-shaped value"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
+paths = ['''^crates/(dbbackup|restoreplane)-scheduler/tests/redact\.rs$''']
+regexes = ['''api_key=sk-live-1234567890abcdef''']

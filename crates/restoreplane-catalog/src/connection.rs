@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 
 use crossbeam_channel::{bounded, select_biased, unbounded, Sender, TrySendError};
-use rusqlite::{Connection, DatabaseName, OpenFlags};
+use rusqlite::{Connection, OpenFlags};
 use thiserror::Error;
 
 use crate::{apply_operational_store_migrations, MigrationError};
@@ -217,7 +217,7 @@ impl OperationalReader {
 
     pub fn is_read_only(&self) -> Result<bool, OperationalStoreError> {
         self.connection
-            .is_readonly(DatabaseName::Main)
+            .is_readonly("main")
             .map_err(OperationalStoreError::from)
     }
 

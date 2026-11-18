@@ -20,6 +20,18 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 serde_json = "1"
+serde = { workspace = true }
+async-trait = "0.1"
+uuid = { version = "=1.11.0", features = ["v4"] }
+zeroize = "=1.9.0"
+blake3 = "=1.5.5"
+tokio = { version = "=1.53.3", features = ["sync", "rt"] }
 
 restoreplane-application = { path = "../../../crates/restoreplane-application" }
 restoreplane-ipc-client = { path = "../../../crates/restoreplane-ipc-client" }
+restoreplane-domain = { path = "../../../crates/restoreplane-domain" }
+restoreplane-workbench = { path = "../../../crates/restoreplane-workbench" }
+restoreplane-service = { path = "../../../crates/restoreplane-service" }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "=0.58.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Threading", "Win32_System_Com", "Win32_UI_Shell"] }

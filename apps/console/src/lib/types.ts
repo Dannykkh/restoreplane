@@ -3,6 +3,7 @@ export type PageId =
   | "overview"
   | "connections"
   | "databases"
+  | "workbench"
   | "destinations"
   | "backup-plans"
   | "activity"
@@ -168,6 +169,8 @@ export interface RetentionPolicy {
 }
 
 export interface BackupScope {
+  sourceFingerprint?: string | null;
+  selectorHashBlake3?: string | null;
   id: string;
   databaseTargetId: string;
   databaseName: string;
@@ -250,6 +253,7 @@ export interface BackupScopeSaveRequest {
   discoveryRunId?: string;
   engineObjectIds: string[];
   replacesScopeId?: string;
+  expectedWorkbenchSelectionDigest?: string;
 }
 
 export interface BackupScopeSaveResult {
@@ -444,6 +448,7 @@ export interface BackupEnqueueResult {
 }
 
 export interface WorkItemStatus extends WorkItemRef {
+  workbenchRestoreProof?: import("./workbenchTypes").WorkbenchRestoreProof | null;
   kind: string;
   currentAttemptNo: number;
   fencingToken: number;

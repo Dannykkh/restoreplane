@@ -30,18 +30,19 @@ sha2 = "=0.10.8"
 serde = { workspace = true }
 serde_json = "1"
 semver = { workspace = true }
-rand = "=0.8.5"
+rand = "=0.8.6"
 subtle = "=2.6.1"
 tar = "=0.4.45"
 thiserror = { workspace = true }
 tracing = { workspace = true }
 uuid = { version = "=1.11.0", features = ["v4"] }
 zeroize = { version = "=1.9.0", features = ["derive"] }
-zstd = "=0.13.3"
-tokio = { version = "=1.52.3", features = ["io-util", "net", "rt-multi-thread", "macros", "sync", "time"] }
+zstd = "=0.13.4"
+tokio = { version = "=1.53.3", features = ["io-util", "net", "rt-multi-thread", "macros", "sync", "time"] }
 
 [dev-dependencies]
 restoreplane-config = { path = "../restoreplane-config" }
+restoreplane-workbench = { path = "../restoreplane-workbench" }
 tempfile = "=3.14.0"
 
 [target.'cfg(windows)'.dependencies]

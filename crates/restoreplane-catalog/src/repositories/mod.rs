@@ -21,7 +21,9 @@ mod shadow_import;
 mod snapshot_detail;
 mod telemetry_maintenance;
 mod verification;
+mod workbench;
 mod workspace;
+pub use workbench::{WorkbenchBindingRepository, WorkbenchBindingSnapshot};
 
 pub(super) fn server_identity_from_capabilities(
     engine: &str,

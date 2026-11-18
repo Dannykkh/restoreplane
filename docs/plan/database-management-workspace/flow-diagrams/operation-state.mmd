@@ -1,0 +1,26 @@
+stateDiagram-v2
+    [*] --> accepted: desktop_owner explicit intent
+    accepted --> dispatching: engine persists dispatch marker
+    accepted --> failed: engine proves unsent refusal
+    dispatching --> running: engine sends target operation
+    dispatching --> outcome_unknown: engine restarts without outcome proof
+    running --> commit_requested: engine persists commit intent
+    running --> rolled_back: target confirms rollback
+    running --> completed: engine confirms complete read or export
+    running --> partial: engine records import parent partial result
+    running --> interrupted: engine proves readonly run interrupted
+    accepted --> cancelled: engine proves operation never sent
+    running --> outcome_unknown: connection loses evidence
+    commit_requested --> committed: target confirms COMMIT
+    commit_requested --> rolled_back: target proves rollback
+    commit_requested --> outcome_unknown: reply lost
+    outcome_unknown --> outcome_unknown: desktop_owner acknowledgment only
+    outcome_unknown --> committed: decisive target commit evidence
+    outcome_unknown --> rolled_back: decisive target rollback evidence
+    committed --> [*]
+    rolled_back --> [*]
+    failed --> [*]
+    completed --> [*]
+    partial --> [*]
+    interrupted --> [*]
+    cancelled --> [*]

@@ -1,0 +1,13 @@
+flowchart TD
+    %% commands: backup_scope.save, backup.enqueue, restore.preflight, existing restore commands
+    start([Selected target or tables]) --> action{Protect or inspect restore}
+    action -->|Protect| identity[[Service revalidate exact Scope identity]]
+    identity --> valid{Workspace target and schema valid}
+    valid -->|No| denied([Reject stale or foreign target])
+    valid -->|Yes| plan[[Existing Backup Plan workflow]]
+    plan --> separate([Evidence shown SQL remains explicit])
+    action -->|Inspect restore| proof[[Existing completed restore proof]]
+    proof --> actual{Actual restored target identity matches}
+    actual -->|No| mismatch([Reject no original fallback])
+    actual -->|Yes| open[[New Read-only Workbench session]]
+    open --> result([Inspect data without semantic equality claim])

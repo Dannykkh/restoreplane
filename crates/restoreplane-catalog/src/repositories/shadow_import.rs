@@ -728,19 +728,24 @@ fn imported_row_counts(transaction: &Transaction<'_>) -> Result<ImportedRows, Re
             [],
             |row| {
                 Ok(ImportedRows {
-                    connections: row.get(0)?,
-                    targets: row.get(1)?,
-                    destinations: row.get(2)?,
-                    plans: row.get(3)?,
-                    revisions: row.get(4)?,
-                    target_memberships: row.get(5)?,
-                    destination_memberships: row.get(6)?,
-                    secret_refs: row.get(7)?,
-                    secret_bindings: row.get(8)?,
+                    connections: checked_count(row, 0)?,
+                    targets: checked_count(row, 1)?,
+                    destinations: checked_count(row, 2)?,
+                    plans: checked_count(row, 3)?,
+                    revisions: checked_count(row, 4)?,
+                    target_memberships: checked_count(row, 5)?,
+                    destination_memberships: checked_count(row, 6)?,
+                    secret_refs: checked_count(row, 7)?,
+                    secret_bindings: checked_count(row, 8)?,
                 })
             },
         )
         .map_err(RepositoryError::from)
+}
+
+fn checked_count(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<usize> {
+    let value: i64 = row.get(index)?;
+    usize::try_from(value).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(index, value))
 }
 
 fn relation_digest(transaction: &Transaction<'_>) -> Result<String, RepositoryError> {

@@ -10,6 +10,7 @@ export const NAVIGATION: readonly NavigationItem[] = [
   { id: "overview", label: "Overview", shortLabel: "OV" },
   { id: "connections", label: "Connections", shortLabel: "CN" },
   { id: "databases", label: "Databases", shortLabel: "DB" },
+  { id: "workbench", label: "데이터베이스 작업", shortLabel: "WB" },
   { id: "destinations", label: "Destinations", shortLabel: "DS" },
   { id: "backup-plans", label: "Backup Plans", shortLabel: "PL" },
   { id: "activity", label: "Activity", shortLabel: "AC" },

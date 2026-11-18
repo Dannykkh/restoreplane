@@ -1,14 +1,14 @@
 // crates/restoreplane-dest-ssh/src/handler.rs
 //! S07 §2 — client::Handler 구현. accept-any 금지(H6).
 //!
-//! russh 0.62는 저수준이라 Handler를 직접 구현해 host key 수용 여부를 스스로 결정해야 한다. 기본값에
+//! russh 0.65는 저수준이라 Handler를 직접 구현해 host key 수용 여부를 스스로 결정해야 한다. 기본값에
 //! 의존하거나 무조건 Ok(true)를 반환하면 accept-any = MITM. 유일한 보안 책임 = host key 핀 검증.
 //!
-//! [편차/실측] russh 0.62 Handler는 async-trait이 아니라 **native async fn in trait**(RPITIT)이다.
+//! [편차/실측] russh 0.65 Handler는 async-trait이 아니라 **native async fn in trait**(RPITIT)이다.
 //! 따라서 이 impl에는 `#[async_trait]`를 붙이지 않는다(붙이면 시그니처 불일치로 컴파일 실패).
 
 use russh::client::{self, Session};
-use russh::keys::ssh_key::PublicKey;
+use russh::keys::PublicKeyOrCertificate;
 use russh::ChannelId;
 
 use crate::hostkey::HostKeyPolicy;
@@ -31,9 +31,14 @@ impl client::Handler for PinnedClientHandler {
     /// `Ok(false)`면 russh가 연결을 거부한다(R1/R11).
     async fn check_server_key(
         &mut self,
-        server_public_key: &PublicKey,
+        server_public_key: &PublicKeyOrCertificate,
     ) -> Result<bool, Self::Error> {
-        match self.policy.verify(server_public_key) {
+        let PublicKeyOrCertificate::PublicKey { key, .. } = server_public_key else {
+            // 원래 핀 정책은 공개키만 승인한다. 인증서 CA 신뢰를 암묵적으로 추가하지 않는다.
+            tracing::error!(label = %self.policy.label, "SSH 호스트 인증서 신뢰 정책 없음 — 연결 거부");
+            return Ok(false);
+        };
+        match self.policy.verify(key) {
             Ok(()) => Ok(true),
             Err(e) => {
                 tracing::error!("{e}"); // 요란히 로깅 후 거부(시크릿 없음)
@@ -50,5 +55,50 @@ impl client::Handler for PinnedClientHandler {
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use russh::client::Handler;
+    use russh::keys::ssh_key::{certificate, private::Ed25519Keypair, HashAlg, PrivateKey};
+
+    #[tokio::test]
+    async fn pinned_callback_accepts_only_matching_raw_key() {
+        let private: PrivateKey = Ed25519Keypair::from_seed(&[7; 32]).into();
+        let key = private.public_key().clone();
+        let pin = key.fingerprint(HashAlg::Sha256).to_string();
+        let mut handler = PinnedClientHandler::new(HostKeyPolicy::new(pin, "fixture:22"));
+        assert!(handler.check_server_key(&key.into()).await.unwrap());
+
+        let changed: PrivateKey = Ed25519Keypair::from_seed(&[9; 32]).into();
+        assert!(!handler
+            .check_server_key(&changed.public_key().clone().into())
+            .await
+            .unwrap());
+    }
+
+    #[tokio::test]
+    async fn host_certificate_does_not_gain_trust_from_its_leaf_pin() {
+        let private: PrivateKey = Ed25519Keypair::from_seed(&[7; 32]).into();
+        let ca: PrivateKey = Ed25519Keypair::from_seed(&[9; 32]).into();
+        let pin = private
+            .public_key()
+            .fingerprint(HashAlg::Sha256)
+            .to_string();
+        let mut certificate = certificate::Builder::new(
+            vec![17; 16],
+            private.public_key().key_data().clone(),
+            0,
+            u64::MAX,
+        )
+        .unwrap();
+        certificate.cert_type(certificate::CertType::Host).unwrap();
+        certificate.valid_principal("fixture.local").unwrap();
+        let certificate = certificate.sign(&ca).unwrap();
+        let mut handler = PinnedClientHandler::new(HostKeyPolicy::new(pin, "fixture:22"));
+
+        assert!(!handler.check_server_key(&certificate.into()).await.unwrap());
     }
 }

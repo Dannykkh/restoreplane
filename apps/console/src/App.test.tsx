@@ -34,7 +34,7 @@ describe("application shell", () => {
     ).toHaveValue("00000000-0000-4000-8000-000000000001");
     expect(screen.getByRole("option", { name: "Default Workspace" })).toBeInTheDocument();
     expect(screen.getByText("브라우저 검증 데이터")).toBeInTheDocument();
-    expect(navigation.querySelectorAll("a")).toHaveLength(9);
+    expect(navigation.querySelectorAll("a")).toHaveLength(10);
     expect(
       screen.getByRole("link", { name: /Overview/ }),
     ).toHaveAttribute("aria-current", "page");

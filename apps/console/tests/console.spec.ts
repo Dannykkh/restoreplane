@@ -5,6 +5,7 @@ const navigationLabels = [
   "Overview",
   "Connections",
   "Databases",
+  "데이터베이스 작업",
   "Destinations",
   "Backup Plans",
   "Activity",
@@ -64,7 +65,7 @@ test("fleet dashboard filters, creates and opens an operational scope on desktop
   await expectNoDocumentOverflow(page);
 });
 
-test("nine-route shell preserves filter and selection through browser history", async ({
+test("extended route shell preserves filter and selection through browser history", async ({
   page,
 }) => {
   await page.goto(
@@ -73,7 +74,7 @@ test("nine-route shell preserves filter and selection through browser history", 
   await expect(page.getByRole("heading", { name: "Connections", exact: true })).toBeVisible();
 
   const navigation = page.getByRole("navigation", { name: "Primary" });
-  await expect(navigation.getByRole("link")).toHaveCount(9);
+  await expect(navigation.getByRole("link")).toHaveCount(10);
   await expect(navigation.getByRole("link").allTextContents()).resolves.toEqual(
     navigationLabels.map((label) => expect.stringContaining(label)),
   );

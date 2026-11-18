@@ -79,6 +79,99 @@ fn complete_recovery_point_uses_actual_parts_and_preserves_four_snapshot_axes() 
         )
         .expect("read stored object version");
     assert_eq!(object_version.as_deref(), Some("version-17"));
+    let plaintext: Option<i64> = direct
+        .query_row(
+            "SELECT plaintext_bytes FROM catalog_recovery_points WHERE id=?1",
+            [recovery_point_id.as_str()],
+            |row| row.get(0),
+        )
+        .expect("verified plaintext aggregate");
+    assert_eq!(plaintext, Some(128));
+}
+
+#[test]
+fn signed_part_plaintext_sizes_are_aggregated_and_reingest_keeps_the_same_projection() {
+    let fixture = Fixture::new();
+    let repository = fixture.store.catalog_projection();
+    let id = RecoveryPointId::new();
+    let spec = signed_projection_spec_with_sizes(
+        id.clone(),
+        "target:aggregate",
+        1000,
+        1010,
+        ProjectionFixture::Healthy,
+        None,
+        &[128, 256],
+    )
+    .expect("verified signed multipart specification");
+    repository
+        .ingest_complete(spec.clone())
+        .expect("ingest signed aggregate");
+    repository
+        .ingest_complete(spec)
+        .expect("same signed projection is idempotent");
+    let direct = Connection::open(&fixture.db_path).unwrap();
+    let actual: (Option<i64>, i64) = direct.query_row(
+        "SELECT plaintext_bytes,(SELECT SUM(plaintext_bytes) FROM catalog_artifact_parts WHERE recovery_point_id=?1) FROM catalog_recovery_points WHERE id=?1",
+        [id.as_str()], |row| Ok((row.get(0)?,row.get(1)?))).unwrap();
+    assert_eq!(actual, (Some(384), 384));
+    let incompatible = signed_projection_spec_with_sizes(
+        id.clone(),
+        "target:aggregate",
+        1000,
+        1010,
+        ProjectionFixture::Healthy,
+        None,
+        &[512],
+    )
+    .unwrap();
+    assert!(matches!(
+        repository.ingest_complete(incompatible),
+        Err(RepositoryError::CatalogProjectionInputInvalid)
+    ));
+    let after: Option<i64> = direct
+        .query_row(
+            "SELECT plaintext_bytes FROM catalog_recovery_points WHERE id=?1",
+            [id.as_str()],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        after,
+        Some(384),
+        "a different signed manifest cannot rewrite completed metadata"
+    );
+}
+
+#[test]
+fn signed_plaintext_aggregate_overflow_refuses_the_entire_ingest() {
+    let fixture = Fixture::new();
+    let repository = fixture.store.catalog_projection();
+    let spec = signed_projection_spec_with_sizes(
+        RecoveryPointId::new(),
+        "target:overflow",
+        1000,
+        1010,
+        ProjectionFixture::Healthy,
+        None,
+        &[i64::MAX as u64, 1],
+    )
+    .expect("each signed part fits i64");
+    assert!(matches!(
+        repository.ingest_complete(spec),
+        Err(RepositoryError::CatalogProjectionInputInvalid)
+    ));
+    assert_eq!(repository.recovery_point_count().unwrap(), 0);
+    let direct = Connection::open(&fixture.db_path).unwrap();
+    let parts: i64 = direct
+        .query_row("SELECT COUNT(*) FROM catalog_artifact_parts", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(
+        parts, 0,
+        "aggregate overflow leaves no incomplete recovery point or parts"
+    );
 }
 
 #[test]
@@ -254,35 +347,73 @@ fn signed_projection_spec(
     fixture: ProjectionFixture,
     payload_version: Option<&str>,
 ) -> Result<CompleteRecoveryPointSpec, RepositoryError> {
+    signed_projection_spec_with_sizes(
+        recovery_point_id,
+        source_identity,
+        committed_at_ms,
+        ingested_at_ms,
+        fixture,
+        payload_version,
+        &[128],
+    )
+}
+
+fn signed_projection_spec_with_sizes(
+    recovery_point_id: RecoveryPointId,
+    source_identity: &str,
+    committed_at_ms: i64,
+    ingested_at_ms: i64,
+    fixture: ProjectionFixture,
+    payload_version: Option<&str>,
+    plaintext_sizes: &[u64],
+) -> Result<CompleteRecoveryPointSpec, RepositoryError> {
     let occurrence_id = Uuid::new_v4();
     let target_id = Uuid::new_v4();
     let prefix = format!(
         "v2/{occurrence_id}/{target_id}/{}",
         recovery_point_id.as_str()
     );
-    let part_id = Uuid::new_v4();
-    let part = ManifestPartV2::encoded(
-        PartSpec::new(
-            part_id,
-            ArtifactPartRole::DatabaseDump,
-            "orders.dump",
-            true,
-            "custom",
-        )
-        .expect("part contract"),
-        EncodingEvidenceV2::new(
-            "a".repeat(64),
-            "b".repeat(64),
-            128,
-            96,
-            "zstd",
-            "chacha20poly1305-stream",
-            1,
-        )
-        .expect("encoding evidence"),
-        format!("{prefix}/parts/orders.dump.enc"),
-    )
-    .expect("Manifest part");
+    let parts = plaintext_sizes
+        .iter()
+        .enumerate()
+        .map(|(index, plaintext_bytes)| {
+            let logical_name = if index == 0 {
+                "orders.dump".to_string()
+            } else {
+                format!("orders-{index}.dump")
+            };
+            ManifestPartV2::encoded(
+                PartSpec::new(
+                    Uuid::new_v4(),
+                    ArtifactPartRole::DatabaseDump,
+                    &logical_name,
+                    true,
+                    "custom",
+                )
+                .expect("part contract"),
+                EncodingEvidenceV2::new(
+                    "a".repeat(64),
+                    "b".repeat(64),
+                    *plaintext_bytes,
+                    96,
+                    "zstd",
+                    "chacha20poly1305-stream",
+                    1,
+                )
+                .expect("encoding evidence"),
+                format!("{prefix}/parts/{logical_name}.enc"),
+            )
+            .expect("Manifest part")
+        })
+        .collect::<Vec<_>>();
+    let payload_receipts = parts
+        .iter()
+        .map(|part| UploadReceipt {
+            key: part.object_key.clone(),
+            bytes: part.ciphertext_bytes,
+            version: payload_version.map(str::to_owned),
+        })
+        .collect::<Vec<_>>();
     let manifest_key = format!("{prefix}/set-manifest.json");
     let mut replicas = vec![ReplicaCommitmentV2::new(
         "local:vault-a",
@@ -328,7 +459,7 @@ fn signed_projection_spec(
         "signing-key-01",
         NativeToolIdentityV2::new("pg_dump", "17.4", "c".repeat(64)).expect("native tool"),
         BTreeMap::new(),
-        vec![part],
+        parts,
         replicas,
     )
     .expect("set Manifest");
@@ -356,11 +487,7 @@ fn signed_projection_spec(
             destination_fingerprint: "local:vault-a".to_owned(),
             requirement: local_requirement,
             reader_status: ReaderStatusV2::Eligible,
-            payload_receipts: vec![UploadReceipt {
-                key: format!("{prefix}/parts/orders.dump.enc"),
-                bytes: 96,
-                version: payload_version.map(str::to_owned),
-            }],
+            payload_receipts,
             manifest_receipt: Some(UploadReceipt {
                 key: manifest_key,
                 bytes: manifest_bytes,

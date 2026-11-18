@@ -42,6 +42,8 @@ pub enum PgSourceError {
     VersionParseFailed(String),
     #[error("카탈로그 조회 실패: {0}")]
     CatalogQueryFailed(#[source] tokio_postgres::Error),
+    #[error("PG_SELECTED_STRUCTURE_UNAVAILABLE")]
+    SelectedStructureUnavailable,
     #[error("서버 메이저 버전 {server_major}을(를) 지원하는 번들 클라이언트가 없음(PG14~18 확인)")]
     NoBundledClientForServer { server_major: u32 },
     #[error(
@@ -185,6 +187,107 @@ pub async fn probe_tables(
             }
         })
         .collect())
+}
+
+/// Fixed catalog-only selection verification. A dedicated connection fixes the
+/// lookup path; names are protocol-bound values and never SQL identifiers.
+pub struct PgSelectedStructure {
+    pub items: Vec<restoreplane_domain::workbench_protection::WorkbenchSelectionItem>,
+    pub server_identity: String,
+}
+pub async fn probe_selected_structure(
+    conn: &PgConnCfg,
+    database: &str,
+    tls_mode: &str,
+    items: &[restoreplane_domain::workbench_protection::WorkbenchSelectionItem],
+) -> Result<PgSelectedStructure, PgSourceError> {
+    use restoreplane_domain::workbench_protection::{WorkbenchSelectionItem, MAX_SELECTED_TABLES};
+    if items.is_empty()
+        || items.len() > MAX_SELECTED_TABLES
+        || !items.iter().all(WorkbenchSelectionItem::is_well_formed)
+    {
+        return Err(PgSourceError::SelectedStructureUnavailable);
+    }
+    let mut cfg = tokio_postgres::Config::new();
+    cfg.host(&conn.host)
+        .port(conn.port)
+        .user(&conn.user)
+        .password(conn.password.as_str())
+        .dbname(database)
+        .application_name("restoreplane-selected-structure");
+    let client = connect_client(cfg, database, tls_mode).await?;
+    selected_structure_on_client(&client, items).await
+}
+
+async fn selected_structure_on_client(
+    client: &Client,
+    items: &[restoreplane_domain::workbench_protection::WorkbenchSelectionItem],
+) -> Result<PgSelectedStructure, PgSourceError> {
+    use restoreplane_domain::workbench_protection::{WorkbenchSelectionItem, MAX_SELECTED_TABLES};
+    use restoreplane_domain::workbench_structure::{
+        postgresql_relation_signature, PgRelationAlias,
+    };
+    if items.is_empty()
+        || items.len() > MAX_SELECTED_TABLES
+        || !items.iter().all(WorkbenchSelectionItem::is_well_formed)
+    {
+        return Err(PgSourceError::SelectedStructureUnavailable);
+    }
+    client
+        .batch_execute(
+            "SET search_path=pg_catalog; SET statement_timeout=15000; SET lock_timeout=2000",
+        )
+        .await
+        .map_err(PgSourceError::CatalogQueryFailed)?;
+    let server = client
+        .query_one(
+            "SELECT system_identifier::pg_catalog.text FROM pg_catalog.pg_control_system()",
+            &[],
+        )
+        .await
+        .map_err(PgSourceError::CatalogQueryFailed)?
+        .get::<_, String>(0);
+    if server
+        .parse::<u64>()
+        .ok()
+        .is_none_or(|value| value == 0 || value.to_string() != server)
+    {
+        return Err(PgSourceError::SelectedStructureUnavailable);
+    }
+    let schemas = items
+        .iter()
+        .map(|item| item.schema_name.clone())
+        .collect::<Vec<_>>();
+    let names = items
+        .iter()
+        .map(|item| item.object_name.clone())
+        .collect::<Vec<_>>();
+    let sql = format!("SELECT c.oid::pg_catalog.text,n.nspname::pg_catalog.text,c.relname::pg_catalog.text,{} FROM ROWS FROM(pg_catalog.unnest($1::pg_catalog.text[]),pg_catalog.unnest($2::pg_catalog.text[])) AS selected(schema_name,object_name) JOIN pg_catalog.pg_namespace n ON n.nspname=selected.schema_name JOIN pg_catalog.pg_class c ON c.relnamespace=n.oid AND c.relname=selected.object_name WHERE c.relkind='r' ORDER BY n.nspname,c.relname,c.oid", postgresql_relation_signature(PgRelationAlias::Relation));
+    let rows = client
+        .query(&sql, &[&schemas, &names])
+        .await
+        .map_err(PgSourceError::CatalogQueryFailed)?;
+    if rows.len() != items.len() {
+        return Err(PgSourceError::SelectedStructureUnavailable);
+    }
+    let mut result = Vec::with_capacity(rows.len());
+    for row in rows {
+        let object = WorkbenchSelectionItem {
+            engine_object_id: format!("relation:{}", row.get::<_, String>(0)),
+            schema_name: row.get(1),
+            object_name: row.get(2),
+            structure_signature: row.get(3),
+        };
+        if !object.is_well_formed() {
+            return Err(PgSourceError::SelectedStructureUnavailable);
+        }
+        result.push(object);
+    }
+    result.sort();
+    Ok(PgSelectedStructure {
+        items: result,
+        server_identity: format!("postgresql-system-id:{server}"),
+    })
 }
 
 fn native_tls_connector(tls_mode: &str) -> Result<native_tls::TlsConnector, PgSourceError> {
@@ -549,5 +652,96 @@ mod backup_scope_tests {
         assert!(canonical_pg_server_identity("").is_none());
         assert!(canonical_pg_server_identity("-1").is_none());
         assert!(canonical_pg_server_identity("system-a").is_none());
+    }
+
+    #[tokio::test]
+    #[ignore = "explicit owned TLS fixture; cfg(test) CA injection only, no OS trust changes"]
+    async fn owned_selected_probe_uses_fixed_sql_and_system_roots_reject_the_fixture_ca() {
+        use restoreplane_domain::workbench_protection::WorkbenchSelectionItem;
+        use zeroize::Zeroizing;
+        let path = std::env::var_os("WORKBENCH_LIVE_FIXTURES").expect("owned fixture required");
+        let bytes = Zeroizing::new(std::fs::read(path).unwrap());
+        let fixtures: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let row = &fixtures["postgresql"];
+        let config = super::PgConnCfg {
+            host: row["host"].as_str().unwrap().into(),
+            port: u16::try_from(row["port"].as_u64().unwrap()).unwrap(),
+            user: row["username"].as_str().unwrap().into(),
+            password: Zeroizing::new(row["password"].as_str().unwrap().into()),
+            admin_database: row["database"].as_str().unwrap().into(),
+            tls_mode: "verify_full".into(),
+        };
+        let name = format!("wb_selected_{}", uuid::Uuid::new_v4().simple());
+        let requested = [WorkbenchSelectionItem {
+            engine_object_id: "relation:1".into(),
+            schema_name: "public".into(),
+            object_name: name.clone(),
+            structure_signature: "0".repeat(64),
+        }];
+        let denied = super::probe_selected_structure(
+            &config,
+            &config.admin_database,
+            "verify_full",
+            &requested,
+        )
+        .await;
+        assert!(
+            matches!(
+                denied,
+                Err(super::PgSourceError::TlsConnectionFailed { .. })
+            ),
+            "production System roots must reject the untrusted fixture CA"
+        );
+        let mut pg = tokio_postgres::Config::new();
+        pg.host(&config.host)
+            .port(config.port)
+            .user(&config.user)
+            .password(config.password.as_str())
+            .dbname(&config.admin_database);
+        let ca = native_tls::Certificate::from_pem(
+            &std::fs::read(row["ca_file"].as_str().unwrap()).unwrap(),
+        )
+        .unwrap();
+        let mut builder = native_tls::TlsConnector::builder();
+        builder.add_root_certificate(ca);
+        let client = super::connect_with_tls(pg, builder.build().unwrap(), &config.admin_database)
+            .await
+            .expect("owned TLS connection");
+        client
+            .batch_execute(&format!(
+                "CREATE TABLE public.{name}(id bigint PRIMARY KEY,value text)"
+            ))
+            .await
+            .expect("owned table create");
+        let first = super::selected_structure_on_client(&client, &requested)
+            .await
+            .expect("fixed selected probe");
+        assert_eq!(first.items.len(), 1);
+        assert_eq!(first.items[0].object_name, name);
+        assert_ne!(first.items[0].engine_object_id, "relation:1");
+        assert_ne!(first.items[0].structure_signature, "0".repeat(64));
+        assert!(first.server_identity.starts_with("postgresql-system-id:"));
+        client
+            .batch_execute(&format!(
+                "ALTER TABLE public.{name} ADD COLUMN added numeric(30,8)"
+            ))
+            .await
+            .expect("owned DDL");
+        let changed = super::selected_structure_on_client(&client, &first.items)
+            .await
+            .expect("fixed changed probe");
+        assert_eq!(
+            first.items[0].engine_object_id,
+            changed.items[0].engine_object_id
+        );
+        assert_ne!(
+            first.items[0].structure_signature,
+            changed.items[0].structure_signature
+        );
+        client
+            .batch_execute(&format!("DROP TABLE public.{name}"))
+            .await
+            .expect("owned table cleanup");
+        println!("08 selected fixed-probe TLS PASS; production untrusted-CA rejected; structure drift detected");
     }
 }

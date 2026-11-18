@@ -90,9 +90,13 @@ pub struct AuthenticatedPrincipal {
     sid_hash: String,
     session_id: u32,
     max_access: AccessClass,
+    elevated_admin: bool,
 }
 
 impl AuthenticatedPrincipal {
+    pub const fn elevated_admin(&self) -> bool {
+        self.elevated_admin
+    }
     pub const fn kind(&self) -> PrincipalKind {
         self.kind
     }
@@ -208,6 +212,7 @@ impl AuthorizationPolicy {
                 .to_string(),
             session_id: identity.session_id,
             max_access: AccessClass::Admin,
+            elevated_admin: identity.elevated_admin,
         })
     }
 

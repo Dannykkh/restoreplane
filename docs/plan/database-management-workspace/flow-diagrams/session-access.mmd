@@ -1,0 +1,16 @@
+flowchart TD
+    %% commands: workbench.binding.authorize, session.open, credential.save
+    start([Open target]) --> integrity{Standard integrity}
+    integrity -->|No| refused([Workbench disabled before file creation])
+    integrity -->|Yes| authorize[[Service authorize current target]]
+    authorize --> active{Owner and revision valid}
+    active -->|No| denied([Reject without secret or data])
+    active -->|Yes| credential{User credential available}
+    credential -->|No| prompt[Explicit user credential entry]
+    prompt --> protect[[CurrentUser DPAPI before persistence]]
+    protect --> opened[[Open certified driver]]
+    credential -->|Yes| opened
+    opened --> valid{TLS and target identity match}
+    valid -->|No| closed([Close and report mismatch])
+    valid -->|Yes| session[Bind owner window target generation]
+    session --> ready([Read-only session ready])

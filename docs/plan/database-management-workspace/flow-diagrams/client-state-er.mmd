@@ -1,0 +1,54 @@
+erDiagram
+    JOURNAL_HEADER ||--o{ TARGET_BINDINGS : owns
+    TARGET_BINDINGS ||--o{ OPERATIONS : scopes
+    TARGET_BINDINGS ||--o{ SAVED_QUERIES : scopes
+    OPERATIONS o|--o{ OPERATIONS : optional_import_parent
+    OPERATIONS ||--o{ STATEMENTS : records
+    OPERATIONS o|--o{ STATEMENTS : containing_manual_transaction
+    JOURNAL_HEADER {
+        integer singleton PK
+        string owner_id UK
+        string journal_epoch UK
+        integer schema_version
+        integer storage_revision
+    }
+    TARGET_BINDINGS {
+        string owner_id PK,FK
+        string workspace_id PK
+        string target_id PK
+        string binding_id PK
+        string descriptor_revision
+    }
+    OPERATIONS {
+        string movement_metadata_json
+        string owner_id PK,FK
+        string workspace_id PK,FK
+        string target_id PK,FK
+        string operation_id PK
+        string binding_id FK
+        string transaction_operation_id FK
+        string parent_operation_id FK
+        string journal_epoch
+        string idempotency_key
+        integer version
+        string state
+    }
+    STATEMENTS {
+        string owner_id PK,FK
+        string workspace_id PK,FK
+        string target_id PK,FK
+        string operation_id PK,FK
+        string transaction_operation_id FK
+        integer ordinal PK
+        string outcome
+        integer version
+    }
+    SAVED_QUERIES {
+        string owner_id PK,FK
+        string workspace_id PK,FK
+        string target_id PK,FK
+        string query_id PK
+        string binding_id FK
+        blob encrypted_content
+        integer version
+    }

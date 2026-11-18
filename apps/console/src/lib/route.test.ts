@@ -7,11 +7,12 @@ describe("route state", () => {
     expect(parseRoute("#/")).toEqual({ page: "workspaces" });
   });
 
-  it("keeps the required nine-item information architecture in exact order", () => {
+  it("adds Workbench while preserving the existing navigation order", () => {
     expect(NAVIGATION.map((item) => item.label)).toEqual([
       "Overview",
       "Connections",
       "Databases",
+      "데이터베이스 작업",
       "Destinations",
       "Backup Plans",
       "Activity",

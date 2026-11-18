@@ -41,6 +41,8 @@ apps/console/playwright-report/
 /artifacts/
 /*.png
 # Raw agent review transcripts and prompts are local generation inputs.
+/docs/plan/database-management-workspace/reviews/*.log
+/docs/plan/database-management-workspace/team-reviews/*.log
 docs/**/*.stdout.log
 docs/**/*.stderr.log
 docs/**/reviews/*prompt.txt

@@ -65,6 +65,25 @@ pub trait ConnectionInspector: Send + Sync + 'static {
             "Choose PostgreSQL, MySQL, or MariaDB for table-level backup scope discovery.",
         ))
     }
+
+    fn inspect_selected_structure(
+        &self,
+        _profile: &ConnectionExecutionBinding,
+        _credentials: Option<&DatabaseCredentials>,
+        _target: &SelectedDatabaseTarget,
+        _items: &[restoreplane_domain::workbench_protection::WorkbenchSelectionItem],
+    ) -> Result<SelectedStructureInspection, ConnectionOperationError> {
+        Err(ConnectionOperationError::terminal(
+            "WORKBENCH_STRUCTURE_UNSUPPORTED",
+            "unsupported_version",
+            "이 엔진의 선택 구조 검사를 지원하지 않습니다.",
+        ))
+    }
+}
+
+pub struct SelectedStructureInspection {
+    pub items: Vec<restoreplane_domain::workbench_protection::WorkbenchSelectionItem>,
+    pub server_identity: String,
 }
 
 pub struct DatabaseCredentials {
@@ -115,6 +134,7 @@ pub struct DiscoveredDatabase {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DatabaseObjectInspection {
     objects: Vec<DiscoveredDatabaseObject>,
+    workbench_selection: Option<restoreplane_domain::workbench_protection::WorkbenchSelectionProof>,
 }
 
 impl DatabaseObjectInspection {
@@ -126,7 +146,10 @@ impl DatabaseObjectInspection {
                 &right.engine_object_id,
             ))
         });
-        Self { objects }
+        Self {
+            objects,
+            workbench_selection: None,
+        }
     }
 }
 
@@ -816,9 +839,126 @@ impl<I: ConnectionInspector> ServiceOperationWorker<I> {
                     "Refresh Connections and retry with an active profile.",
                 )
             })?;
+        let authority = if let Some(selection) = &request.workbench_selection {
+            use crate::application::workbench_protection::SelectionAuthority;
+            if request.inventory_coverage.as_deref() != Some("selected")
+                || !selection.is_well_formed()
+                || serde_json::to_vec(selection)
+                    .map_err(|_| invalid_scope_request())?
+                    .len()
+                    > restoreplane_domain::workbench_protection::MAX_SELECTION_BYTES
+            {
+                return Err(invalid_scope_request());
+            }
+            let authority: SelectionAuthority = request
+                .workbench_authority
+                .clone()
+                .ok_or_else(invalid_scope_request)?;
+            if authority.scope.database_target_id != target_id
+                || authority.scope.connection_profile_id != *target.connection_profile_id()
+            {
+                return Err(invalid_scope_request());
+            }
+            let observed = self
+                .store
+                .workbench_binding()
+                .snapshot(&authority.scope, &authority.owner_sid_hash)
+                .map_err(|_| invalid_scope_request())?;
+            if crate::application::ServiceApplication::workbench_descriptor_revision(
+                observed.revision_input,
+            )
+            .map_err(|_| invalid_scope_request())?
+                != selection.expected_descriptor_revision
+            {
+                return Err(invalid_scope_request());
+            }
+            Some((
+                authority,
+                observed
+                    .descriptor
+                    .expected_server_identity
+                    .ok_or_else(invalid_scope_request)?,
+            ))
+        } else {
+            if request.workbench_authority.is_some()
+                || request
+                    .inventory_coverage
+                    .as_deref()
+                    .is_some_and(|coverage| coverage != "full")
+            {
+                return Err(invalid_scope_request());
+            }
+            None
+        };
         let credentials = self.resolve_credentials(&profile)?;
-        self.inspector
-            .inspect_database_objects(&profile, credentials.as_ref(), &target)
+        let mut inspection = if authority.is_some() {
+            DatabaseObjectInspection::new(Vec::new())
+        } else {
+            self.inspector
+                .inspect_database_objects(&profile, credentials.as_ref(), &target)?
+        };
+        if let Some((authority, expected_server)) = authority {
+            let selection = request
+                .workbench_selection
+                .as_ref()
+                .ok_or_else(invalid_scope_request)?;
+            let mut observed = self.inspector.inspect_selected_structure(
+                &profile,
+                credentials.as_ref(),
+                &target,
+                &selection.items,
+            )?;
+            observed.items.sort();
+            if observed.server_identity != expected_server
+                || observed.items != selection.canonical_items()
+            {
+                return Err(ConnectionOperationError::terminal(
+                    "WORKBENCH_STRUCTURE_CHANGED",
+                    "authorization",
+                    "선택한 테이블의 실제 대상이나 구조가 변경되었습니다. 다시 선택하세요.",
+                ));
+            }
+            let latest = self
+                .store
+                .workbench_binding()
+                .snapshot(&authority.scope, &authority.owner_sid_hash)
+                .map_err(|_| invalid_scope_request())?;
+            if crate::application::ServiceApplication::workbench_descriptor_revision(
+                latest.revision_input,
+            )
+            .map_err(|_| invalid_scope_request())?
+                != selection.expected_descriptor_revision
+            {
+                return Err(invalid_scope_request());
+            }
+            let now = (self.clock)();
+            let verified_at_ms = u64::try_from(now)
+                .map_err(|_| invalid_scope_request())?
+                .into();
+            inspection.objects = observed
+                .items
+                .iter()
+                .map(|item| {
+                    DiscoveredDatabaseObject::eligible_table(
+                        &item.engine_object_id,
+                        &item.schema_name,
+                        &item.object_name,
+                    )
+                })
+                .collect();
+            inspection.workbench_selection = Some(
+                restoreplane_domain::workbench_protection::WorkbenchSelectionProof {
+                    selection_digest: crate::application::workbench_protection::selection_digest(
+                        &authority, selection,
+                    )
+                    .map_err(|_| invalid_scope_request())?,
+                    descriptor_revision: selection.expected_descriptor_revision.clone(),
+                    items: observed.items,
+                    verified_at_ms,
+                },
+            );
+        }
+        Ok(inspection)
     }
 
     fn execute_destination_operation(
@@ -1087,23 +1227,34 @@ impl<I: ConnectionInspector> ServiceOperationWorker<I> {
             .iter()
             .filter(|item| item.eligible)
             .count();
+        let discovery = DatabaseObjectDiscoverySpec::new(
+            context.operation_run_id().clone(),
+            target_id,
+            &inventory_hash,
+            records,
+            completed_at_ms,
+        );
+        let discovery = if inspection.workbench_selection.is_some() {
+            discovery.with_selected_coverage()
+        } else {
+            discovery
+        };
         self.store
             .backup_scopes()
-            .record_object_discovery(DatabaseObjectDiscoverySpec::new(
-                context.operation_run_id().clone(),
-                target_id,
-                &inventory_hash,
-                records,
-                completed_at_ms,
-            ))?;
-        serde_json::to_string(&json!({
+            .record_object_discovery(discovery)?;
+        let mut result = json!({
             "kind": "backup_scope_object_discovery",
             "inventoryHashBlake3": inventory_hash,
             "totalCount": inspection.objects.len(),
             "eligibleCount": eligible_count,
             "observedAtMs": completed_at_ms,
-        }))
-        .map_err(|_| OperationWorkerError::ResultEncoding)
+        });
+        if let Some(proof) = &inspection.workbench_selection {
+            result["inventoryCoverage"] = json!("selected");
+            result["workbenchSelection"] =
+                serde_json::to_value(proof).map_err(|_| OperationWorkerError::ResultEncoding)?;
+        }
+        serde_json::to_string(&result).map_err(|_| OperationWorkerError::ResultEncoding)
     }
 
     fn persist_connection_result(
@@ -1399,6 +1550,12 @@ struct DatabaseObjectOperationRequest {
     schema_version: u32,
     kind: String,
     database_target_id: String,
+    #[serde(default)]
+    inventory_coverage: Option<String>,
+    #[serde(default)]
+    workbench_selection: Option<restoreplane_domain::workbench_protection::WorkbenchSelection>,
+    #[serde(default)]
+    workbench_authority: Option<crate::application::workbench_protection::SelectionAuthority>,
 }
 
 #[derive(Deserialize)]

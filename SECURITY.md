@@ -18,6 +18,14 @@ CI의 시크릿 스캐너(gitleaks)가 2차 차단한다.
 > 코드만 공개하고 개인 자산은 로컬에 둔다. 암호화된 wrap을 공개 리포에 올리면 오프라인
 > 무제한 비번 브루트포스가 가능해진다(C4) — 그래서 wrap조차 커밋하지 않는다.
 
+## 사용자 소유 Database Workbench
+
+개발 중인 Workbench의 일반 SQL과 interactive credentials는 현재 사용자 런타임에서 처리한다. privileged backup service는 닫힌 대상 바인딩/메타데이터 및 기존 백업·복원 명령을 담당한다. 관리자 권한 Workbench는 사용자 파일/DPAPI 초기화 전에 거부하며, 사용자 자격증명과 명시적 저장 쿼리는 CurrentUser DPAPI로 보호한다.
+
+실행 저널에는 SQL·매개변수·행 값 대신 범위·digest·상태/version·확인 근거를 기록한다. 확인되지 않은 효과는 자동 replay하지 않는다. 중지/연결 종료/운영자 확인은 rollback 증거가 아니며, arbitrary SQL의 target exactly-once·XA/2PC·외부 함수 효과의 롤백을 보장하지 않는다. 부분 내보내기 파일에는 사용자 데이터가 들어가므로 위치와 정리 선택을 표시한다.
+
+별도 dirty/clean anchor와 잠금은 DB만 삭제/되돌린 경우를 감지하지만, 악의적인 같은 owner가 DB와 anchor 전체를 함께 바꾸는 위협까지 막지 않는다. 지원 범위와 실제 검증은 [사용 안내](docs/runbooks/workbench.md)와 [검증 장부](docs/plan/database-management-workspace/checklist-status.md)에 따른다. 이 CurrentUser 경계와 아래 무인 백업용 Machine-scope 경계는 별개다.
+
 ## 암호화 신뢰 근원
 
 - 마스터 비밀번호 → Argon2id → KEK. 백업별 랜덤 DEK를 KEK로 wrap.

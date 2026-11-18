@@ -19,6 +19,7 @@ pub mod overlap;
 pub mod query;
 pub mod rebuild;
 pub mod repositories;
+pub use repositories::{WorkbenchBindingRepository, WorkbenchBindingSnapshot};
 pub mod source;
 pub mod upsert;
 pub mod writer;

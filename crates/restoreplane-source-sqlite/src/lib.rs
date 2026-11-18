@@ -19,7 +19,9 @@ pub use backup::{
 };
 pub use certification::{sqlite_certification, SQLITE_PROVIDER_LIMITATIONS};
 pub use error::SqliteProviderError;
-pub use probe::{probe_sqlite_file, SqliteFileProbe};
+pub use probe::{
+    opened_file_object_id, opened_handle_is_local_ntfs, probe_sqlite_file, SqliteFileProbe,
+};
 pub use restore::{
     restore_create_new, restore_create_new_observed, restore_overwrite, restore_overwrite_observed,
     restore_overwrite_with_replacer, AtomicReplacer, SystemAtomicReplacer,

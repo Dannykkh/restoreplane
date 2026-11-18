@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { StatusBadge, toneForState } from "./components/StatusBadge";
 import {
@@ -27,14 +27,29 @@ import { Recovery } from "./screens/Recovery";
 import { Settings } from "./screens/Settings";
 import { Snapshots } from "./screens/Snapshots";
 import { Workspaces } from "./screens/Workspaces";
+import { Workbench, type WorkbenchDependencies } from "./screens/Workbench";
+import { requestWorkbenchDeparture } from "./lib/workbench";
 
 type Theme = "dark" | "light";
 
-export function App() {
+export function App({ workbenchDependencies }: { workbenchDependencies?: WorkbenchDependencies } = {}) {
   const [route, setRoute] = useState<RouteState>(() =>
     parseRoute(window.location.hash),
   );
   const [theme, setTheme] = useState<Theme>(initialTheme);
+  const routeRef = useRef(route);
+  const topbarRef = useRef<HTMLElement>(null);
+  routeRef.current = route;
+  useLayoutEffect(() => {
+    const header = topbarRef.current;
+    if (!header) return;
+    const measure = () => document.documentElement.style.setProperty("--app-topbar-height", `${header.offsetHeight}px`);
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(header);
+    window.addEventListener("resize", measure);
+    return () => { observer?.disconnect(); window.removeEventListener("resize", measure); document.documentElement.style.removeProperty("--app-topbar-height"); };
+  }, []);
   const [workspaceId, setWorkspaceId] = useState(activeWorkspaceId);
   const [createdWorkspaces, setCreatedWorkspaces] = useState<Workspace[]>([]);
   const health = useServiceQuery("shell-service-health", getServiceHealth);
@@ -46,6 +61,7 @@ export function App() {
   }, [createdWorkspaces, workspaces.data]);
 
   const openWorkspace = (nextId: string) => {
+    if (!requestWorkbenchDeparture(() => openWorkspace(nextId))) return;
     setActiveWorkspaceId(nextId);
     setWorkspaceId(nextId);
     transitionTo({ page: "overview" });
@@ -72,7 +88,15 @@ export function App() {
   }, [knownWorkspaces, workspaceId]);
 
   useEffect(() => {
-    const syncRoute = () => setRoute(parseRoute(window.location.hash));
+    const syncRoute = () => {
+      const next = parseRoute(window.location.hash);
+      const proceed = () => { window.history.replaceState(null, "", serializeRoute(next)); setRoute(next); };
+      if (routeRef.current.page === "workbench" && serializeRoute(next) !== serializeRoute(routeRef.current) && !requestWorkbenchDeparture(proceed)) {
+        window.history.replaceState(null, "", serializeRoute(routeRef.current));
+        return;
+      }
+      setRoute(next);
+    };
     window.addEventListener("hashchange", syncRoute);
     window.addEventListener("popstate", syncRoute);
 
@@ -140,7 +164,7 @@ export function App() {
       </aside>
 
       <div className="app-stage">
-        <header className="topbar">
+        <header className="topbar" ref={topbarRef}>
           <div className="topbar-context">
             <span className="eyebrow">
               {route.page === "workspaces"
@@ -194,6 +218,7 @@ export function App() {
               onRefreshWorkspaces={workspaces.refresh}
               onOpenWorkspace={openWorkspace}
               onCreatedWorkspace={addWorkspace}
+              workbenchDependencies={workbenchDependencies}
             />
           </div>
         </main>
@@ -260,6 +285,7 @@ function Page({
   onRefreshWorkspaces,
   onOpenWorkspace,
   onCreatedWorkspace,
+  workbenchDependencies,
 }: {
   route: RouteState;
   workspaces: Workspace[];
@@ -269,6 +295,7 @@ function Page({
   onRefreshWorkspaces: () => void;
   onOpenWorkspace: (workspaceId: string) => void;
   onCreatedWorkspace: (workspace: Workspace) => void;
+  workbenchDependencies?: WorkbenchDependencies;
 }) {
   switch (route.page) {
     case "workspaces":
@@ -289,6 +316,8 @@ function Page({
       return <Connections route={route} />;
     case "databases":
       return <Databases route={route} />;
+    case "workbench":
+      return <Workbench route={route} {...workbenchDependencies} />;
     case "destinations":
       return <Destinations route={route} />;
     case "backup-plans":

@@ -1109,12 +1109,68 @@ impl ConsoleQueryRepository {
                  WHERE operation.operation_kind = 'connection_discovery'
                    AND operation.subject_type = 'database_target'
                    AND json_extract(operation.result_json, '$.kind') = 'backup_scope_object_discovery'
+                   AND operation.state = 'succeeded'
+                   AND COALESCE(json_extract(operation.result_json, '$.inventoryCoverage'),'full')='full'
+                   AND operation.subject_id IN (
+                       SELECT target.id FROM database_targets target
+                       JOIN workspace_connection_profiles ownership ON ownership.connection_profile_id=target.connection_profile_id
+                       WHERE ownership.workspace_id=?1 AND (?2 IS NULL OR target.id=?2)
+                         AND (?4 IS NULL OR target.connection_profile_id IN (SELECT value FROM json_each(?4)))
+                   )
                    AND (?5 IS NULL OR operation.subject_id IN (SELECT value FROM json_each(?5)))
              ),
              latest_discovery AS (
                  SELECT discovery_run_id, database_target_id, inventory_hash, observed_at_ms
                  FROM ranked_discovery
                  WHERE rank = 1
+             ),
+             bound_scope_discovery AS (
+                 SELECT scope.id AS backup_scope_id, operation.id AS discovery_run_id,
+                        json_extract(operation.result_json,'$.inventoryHashBlake3') AS inventory_hash,
+                        json_extract(operation.result_json,'$.observedAtMs') AS observed_at_ms
+                 FROM backup_scopes scope
+                 JOIN operation_runs operation ON operation.id=scope.id
+                 JOIN database_targets target ON target.id=scope.database_target_id
+                 JOIN workspace_connection_profiles ownership ON ownership.connection_profile_id=target.connection_profile_id
+                 WHERE ownership.workspace_id=?1
+                   AND (?2 IS NULL OR target.id=?2)
+                   AND (?4 IS NULL OR target.connection_profile_id IN (SELECT value FROM json_each(?4)))
+                   AND (?5 IS NULL OR target.id IN (SELECT value FROM json_each(?5)))
+                   AND scope.mode='explicit_tables'
+                   AND operation.operation_kind='connection_discovery'
+                   AND operation.subject_type='database_target'
+                   AND operation.subject_id=scope.database_target_id
+                   AND operation.state='succeeded'
+                   AND length(operation.result_json)<=1048576
+                   AND json_extract(operation.result_json,'$.kind')='backup_scope_object_discovery'
+                   AND json_extract(operation.result_json,'$.inventoryCoverage')='selected'
+                   AND json_extract(operation.request_json,'$.workbenchAuthority.scope.workspaceId')=?1
+                   AND json_extract(operation.request_json,'$.workbenchAuthority.scope.databaseTargetId')=target.id
+                   AND json_extract(operation.request_json,'$.workbenchAuthority.scope.connectionProfileId')=target.connection_profile_id
+                   AND json_extract(operation.result_json,'$.observedAtMs')=scope.last_resolved_at_ms
+                   AND json_array_length(operation.result_json,'$.workbenchScopeLinks') BETWEEN 1 AND 100
+                   AND (SELECT COUNT(*) FROM json_each(operation.result_json,'$.workbenchScopeLinks') link
+                        WHERE json_extract(link.value,'$.scopeId')=scope.id)=1
+                   AND EXISTS (
+                       SELECT 1 FROM json_each(operation.result_json,'$.workbenchScopeLinks') link
+                       WHERE json_extract(link.value,'$.scopeId')=scope.id
+                         AND json_extract(link.value,'$.scopeFingerprint')=scope.source_fingerprint
+                         AND json_extract(link.value,'$.selectorHash')=scope.selector_hash_blake3
+                         AND json_extract(link.value,'$.selectionDigest')=json_extract(operation.result_json,'$.workbenchSelection.selectionDigest')
+                         AND length(json_extract(link.value,'$.selectionDigest'))=64
+                   )
+             ),
+             scope_discovery AS (
+                 SELECT scope.id AS backup_scope_id,
+                        COALESCE(newest.discovery_run_id,bound.discovery_run_id) AS discovery_run_id,
+                        COALESCE(newest.inventory_hash,bound.inventory_hash) AS inventory_hash,
+                        COALESCE(newest.observed_at_ms,bound.observed_at_ms) AS observed_at_ms,
+                        newest.discovery_run_id IS NULL AND bound.discovery_run_id IS NOT NULL AS selected_coverage
+                 FROM backup_scopes scope
+                 LEFT JOIN bound_scope_discovery bound ON bound.backup_scope_id=scope.id
+                 LEFT JOIN latest_discovery newest ON newest.database_target_id=scope.database_target_id
+                  AND (scope.last_resolved_at_ms IS NULL OR newest.observed_at_ms>scope.last_resolved_at_ms
+                       OR (bound.discovery_run_id IS NULL AND newest.observed_at_ms=scope.last_resolved_at_ms))
              ),
              ranked_scope_baseline AS (
                  SELECT scope.id AS backup_scope_id,
@@ -1131,9 +1187,17 @@ impl ConsoleQueryRepository {
                   AND operation.operation_kind = 'connection_discovery'
                   AND operation.subject_type = 'database_target'
                   AND json_extract(operation.result_json, '$.kind') = 'backup_scope_object_discovery'
+                  AND operation.state='succeeded'
+                  AND COALESCE(json_extract(operation.result_json, '$.inventoryCoverage'),'full')='full'
                   AND json_extract(operation.result_json, '$.observedAtMs') <= scope.last_resolved_at_ms
                  WHERE scope.mode = 'explicit_tables'
                    AND scope.last_resolved_at_ms IS NOT NULL
+                   AND scope.database_target_id IN (
+                       SELECT target.id FROM database_targets target
+                       JOIN workspace_connection_profiles ownership ON ownership.connection_profile_id=target.connection_profile_id
+                       WHERE ownership.workspace_id=?1 AND (?2 IS NULL OR target.id=?2)
+                         AND (?4 IS NULL OR target.connection_profile_id IN (SELECT value FROM json_each(?4)))
+                   )
                    AND (?5 IS NULL OR scope.database_target_id IN (SELECT value FROM json_each(?5)))
              ),
              scope_baseline AS (
@@ -1277,6 +1341,7 @@ impl ConsoleQueryRepository {
                     CASE
                         WHEN discovery.discovery_run_id IS NULL THEN NULL
                         WHEN scope.mode = 'whole_database' THEN 0
+                        WHEN discovery.selected_coverage THEN 0
                         WHEN baseline.discovery_run_id IS NULL THEN NULL
                         ELSE (
                             SELECT COUNT(*) FROM discovered_database_objects AS observed
@@ -1429,8 +1494,8 @@ impl ConsoleQueryRepository {
              JOIN connection_profiles AS connection ON connection.id = target.connection_profile_id
              JOIN workspace_connection_profiles AS ownership
                ON ownership.connection_profile_id = connection.id
-             LEFT JOIN latest_discovery AS discovery
-               ON discovery.database_target_id = target.id
+             LEFT JOIN scope_discovery AS discovery
+               ON discovery.backup_scope_id = scope.id
              LEFT JOIN scope_baseline AS baseline
                ON baseline.backup_scope_id = scope.id
              LEFT JOIN scope_plan ON scope_plan.backup_scope_id = scope.id
@@ -2545,6 +2610,53 @@ impl ConsoleQueryRepository {
             next_cursor,
             total_count,
         })
+    }
+
+    /// A bounded primary-key lookup of completed native restore evidence.
+    /// Source identities, names, and unfinished work cannot manufacture proof.
+    pub fn workbench_restore_proof(
+        &self,
+        workspace_id: &str,
+        work_item_id: &str,
+    ) -> Result<
+        Option<restoreplane_domain::workbench_protection::WorkbenchRestoreProof>,
+        RepositoryError,
+    > {
+        if !valid_workspace_id(workspace_id) || !valid_filter_text(work_item_id) {
+            return Err(RepositoryError::RuntimeStateInvalid);
+        }
+        let reader = self.store.open_reader()?;
+        let row:Option<(String,String,String,String,i64,String)>=reader.connection().query_row(
+            "SELECT restore.id,restore.target_connection_profile_id,restore.target_database_name,profile.engine,restore.completed_at_ms,restore.validation_result_json FROM work_items work JOIN workspace_work_items ownership ON ownership.work_item_id=work.id JOIN restore_runs restore ON restore.id=work.restore_run_id JOIN connection_profiles profile ON profile.id=restore.target_connection_profile_id JOIN workspace_connection_profiles profile_owner ON profile_owner.connection_profile_id=restore.target_connection_profile_id AND profile_owner.workspace_id=ownership.workspace_id WHERE work.id=?1 AND ownership.workspace_id=?2 AND work.kind='restore' AND work.state='succeeded' AND restore.state='succeeded' AND restore.completed_at_ms IS NOT NULL AND length(restore.validation_result_json)<=1048576",
+            params![work_item_id,workspace_id],|row|Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?,row.get(5)?)),
+        ).optional()?;
+        let Some((run, profile, database, engine, completed, raw)) = row else {
+            return Ok(None);
+        };
+        let evidence: serde_json::Value =
+            serde_json::from_str(&raw).map_err(|_| RepositoryError::RuntimeStateInvalid)?;
+        if evidence["phase"] != "completed"
+            || evidence["restore"]["nativeExitCode"] != 0
+            || evidence["restore"]["targetCreated"] != true
+            || evidence["validation"]["status"] != "passed"
+            || evidence["cleanup"]["required"] != false
+        {
+            return Ok(None);
+        }
+        let identity = &evidence["restore"]["evidence"]["workbenchRestoreIdentity"];
+        if identity["signatureVersion"] != 1
+            || identity["connectionProfileId"] != profile
+            || identity["databaseName"] != database
+            || identity["engine"] != engine
+        {
+            return Ok(None);
+        }
+        let proof=serde_json::from_value::<restoreplane_domain::workbench_protection::WorkbenchRestoreProof>(serde_json::json!({
+            "restoreWorkItemId":work_item_id,"restoreRunId":run,"connectionProfileId":profile,
+            "databaseName":database,"engine":engine,"serverIdentity":identity["serverIdentity"],
+            "actualDatabaseIdentity":identity["actualDatabaseIdentity"],"completedAtMs":completed.to_string(),
+        })).map_err(|_|RepositoryError::RuntimeStateInvalid)?;
+        Ok(proof.is_well_formed().then_some(proof))
     }
 
     pub fn work_item_in_workspace(

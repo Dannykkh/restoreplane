@@ -1,5 +1,9 @@
 # Domain Dictionary — Connected RestorePlane (v4, 확정)
 
+## 추가 bounded context
+
+- [Database Management Context](domain-dictionary-database-management.md) — Workbench/session/typed result/verified apply 용어. 기존 Workspace·Backup 용어를 보존하며 확장 설계의 상태는 연결된 문서가 정본이다.
+
 > 코드(변수/함수/타입), config 키, CLI 명령, UI, 문서는 이 규범 용어를 따른다.
 > v1~v3의 보안·아티팩트 용어는 보존하고 Connected Backup Platform v2의 운영 용어를
 > 별도 bounded context로 확장한다.

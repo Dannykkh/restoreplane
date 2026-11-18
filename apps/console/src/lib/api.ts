@@ -311,9 +311,11 @@ export async function listBackupScopes(
 export async function runBackupScopeDiscovery(
   databaseTargetId: string,
   idempotencyKey?: string,
+  workbenchSelection?: import("./workbenchTypes").WorkbenchSelection,
 ): Promise<BackupScopeDiscoveryRun> {
   const result = await serviceMutation<unknown>("backup_scope.discovery_run", {
     databaseTargetId,
+    ...(workbenchSelection ? { workbenchSelection } : {}),
   }, idempotencyKey);
   return normalizeBackupScopeDiscoveryResult(result);
 }
@@ -341,6 +343,7 @@ export async function saveBackupScope(
         mode: request.mode,
         discoveryRunId: request.discoveryRunId,
         engineObjectIds: request.engineObjectIds,
+        ...(request.expectedWorkbenchSelectionDigest ? { expectedWorkbenchSelectionDigest: request.expectedWorkbenchSelectionDigest } : {}),
       }
     : request;
   return normalizeBackupScopeSaveResult(
@@ -469,6 +472,10 @@ export async function publishPlan(
 
 export async function getWorkItem(workItemId: string): Promise<WorkItemStatus> {
   return serviceRequest("work.get", { workItemId });
+}
+
+export async function getWorkbenchRestoreWorkItem(workItemId: string): Promise<WorkItemStatus> {
+  return serviceRequest("work.get", { workItemId, includeWorkbenchRestoreProof: true });
 }
 
 export async function enqueueBackup(
@@ -802,6 +809,8 @@ function normalizeBackupScope(value: unknown): BackupScope {
   return {
     id,
     databaseTargetId,
+    sourceFingerprint: stringOrNull(record.sourceFingerprint),
+    selectorHashBlake3: stringOrNull(record.selectorHashBlake3),
     databaseName: stringOrNull(record.databaseName) ?? "",
     connectionId: stringOrNull(record.connectionId) ?? "",
     connectionName: stringOrNull(record.connectionName) ?? "",

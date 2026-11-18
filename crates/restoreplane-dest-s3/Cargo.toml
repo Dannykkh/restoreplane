@@ -37,10 +37,10 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 serde_json = "1"
-tokio = { version = "=1.52.3", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "=1.53.3", features = ["rt-multi-thread", "macros"] }
 zeroize = "=1.9.0"
 
 [dev-dependencies]
-tokio = { version = "=1.52.3", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "=1.53.3", features = ["rt-multi-thread", "macros"] }
 tempfile = "=3.14.0"
 opendal = { git = "https://github.com/apache/opendal.git", rev = "13fb8bea0e29ad024540b35d4c834530b89976a1", package = "opendal", default-features = false, features = ["services-memory"] }

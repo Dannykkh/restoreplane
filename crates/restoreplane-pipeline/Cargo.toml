@@ -19,12 +19,12 @@ restoreplane-core = { path = "../restoreplane-core" }
 restoreplane-secrets = { path = "../restoreplane-secrets" }
 
 # --- 인코딩 체인(핀) ---
-zstd = "=0.13.3"
+zstd = "=0.13.4"
 blake3 = "=1.5.5"
 chacha20poly1305 = { version = "=0.10.1", features = ["stream", "alloc"] }
 
 # --- 런타임/IO ---
-tokio = { version = "=1.52.3", features = ["rt-multi-thread", "process", "io-util", "fs", "macros", "sync", "time"] }
+tokio = { version = "=1.53.3", features = ["rt-multi-thread", "process", "io-util", "fs", "macros", "sync", "time"] }
 tokio-util = { version = "=0.7.18", features = ["io", "io-util"] }
 futures = "=0.3.31"
 tempfile = "=3.14.0"

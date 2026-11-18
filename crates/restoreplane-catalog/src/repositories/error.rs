@@ -5,6 +5,8 @@ use crate::OperationalStoreError;
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
+    #[error("WB_BINDING_UNPROVEN")]
+    WorkbenchBindingUnproven,
     #[error("{0}")]
     Domain(#[from] DomainError),
     #[error("OPERATIONAL_REPOSITORY_NOT_FOUND")]
@@ -114,6 +116,7 @@ pub enum RepositoryError {
 impl RepositoryError {
     pub fn code(&self) -> &'static str {
         match self {
+            Self::WorkbenchBindingUnproven => "WB_BINDING_UNPROVEN",
             Self::Domain(error) => error.code(),
             Self::NotFound => "OPERATIONAL_REPOSITORY_NOT_FOUND",
             Self::WorkspaceInputInvalid => "WORKSPACE_INPUT_INVALID",

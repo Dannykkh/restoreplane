@@ -14,6 +14,7 @@ use crate::trusted_tool::verify_trusted_bundled_tool;
 use super::{
     ConnectionInspection, ConnectionInspector, ConnectionOperationError, DatabaseCredentials,
     DatabaseObjectInspection, DiscoveredDatabase, DiscoveredDatabaseObject,
+    SelectedStructureInspection,
 };
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -328,6 +329,50 @@ impl NativeConnectionInspector {
 }
 
 impl ConnectionInspector for NativeConnectionInspector {
+    fn inspect_selected_structure(
+        &self,
+        profile: &ConnectionExecutionBinding,
+        credentials: Option<&DatabaseCredentials>,
+        target: &SelectedDatabaseTarget,
+        items: &[restoreplane_domain::workbench_protection::WorkbenchSelectionItem],
+    ) -> Result<SelectedStructureInspection, ConnectionOperationError> {
+        if profile.engine() != "postgresql" {
+            return Err(ConnectionOperationError::terminal(
+                "WORKBENCH_STRUCTURE_UNSUPPORTED",
+                "unsupported_version",
+                "현재 서비스의 TLS 경계에서 이 엔진의 선택 구조 검사를 지원하지 않습니다.",
+            ));
+        }
+        let credentials = credentials.ok_or_else(missing_credentials)?;
+        let config = PgConnCfg {
+            host: profile.host().ok_or_else(invalid_endpoint)?.into(),
+            port: profile.port().ok_or_else(invalid_endpoint)?,
+            user: credentials.username().into(),
+            password: Zeroizing::new(credentials.password().into()),
+            admin_database: target.display_name().into(),
+            tls_mode: profile.tls_mode().into(),
+        };
+        let observations = self.runtime()?.block_on(async {
+            tokio::time::timeout(
+                self.timeout,
+                restoreplane_source_pg::probe_selected_structure(
+                    &config,
+                    target.display_name(),
+                    profile.tls_mode(),
+                    items,
+                ),
+            )
+            .await
+        });
+        match observations {
+            Ok(Ok(observed)) => Ok(SelectedStructureInspection {
+                items: observed.items,
+                server_identity: observed.server_identity,
+            }),
+            Ok(Err(error)) => Err(classify_postgres_error(&error)),
+            Err(_) => Err(scope_timeout()),
+        }
+    }
     fn inspect(
         &self,
         profile: &ConnectionExecutionBinding,
@@ -566,13 +611,13 @@ fn classify_postgres_error(error: &PgSourceError) -> ConnectionOperationError {
                 "Review the TLS mode and trusted certificate chain, then retry.",
             )
         }
-        PgSourceError::VersionQueryFailed(_) | PgSourceError::CatalogQueryFailed(_) => {
-            ConnectionOperationError::terminal(
-                "CONNECTION_AUTHORIZATION_FAILED",
-                "authorization",
-                "Grant catalog discovery permissions to the database identity and retry.",
-            )
-        }
+        PgSourceError::VersionQueryFailed(_)
+        | PgSourceError::CatalogQueryFailed(_)
+        | PgSourceError::SelectedStructureUnavailable => ConnectionOperationError::terminal(
+            "CONNECTION_AUTHORIZATION_FAILED",
+            "authorization",
+            "Grant catalog discovery permissions to the database identity and retry.",
+        ),
         PgSourceError::VersionParseFailed(_)
         | PgSourceError::NoBundledClientForServer { .. }
         | PgSourceError::ClientTooOld { .. } => ConnectionOperationError::terminal(

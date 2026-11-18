@@ -234,6 +234,91 @@ impl MysqlCliMetaConn {
             })
             .collect())
     }
+
+    /// Closed selected-catalog API. Hex-encoded UTF-8 values avoid dependence
+    /// on backslash/quote SQL modes; the existing trusted supervisor/TLS gate
+    /// remains authoritative. This never exposes run_sql to callers.
+    pub async fn selected_structure(
+        &self,
+        items: &[restoreplane_domain::workbench_protection::WorkbenchSelectionItem],
+    ) -> anyhow::Result<Vec<(String, String, String)>> {
+        use restoreplane_domain::workbench_protection::{
+            WorkbenchSelectionItem, MAX_SELECTED_TABLES,
+        };
+        if items.is_empty()
+            || items.len() > MAX_SELECTED_TABLES
+            || !items.iter().all(WorkbenchSelectionItem::is_well_formed)
+        {
+            anyhow::bail!("WORKBENCH_SELECTION_INVALID");
+        }
+        let conditions = items.iter().map(|item| format!("(BINARY t.TABLE_SCHEMA=BINARY CONVERT(0x{} USING utf8mb4) AND BINARY t.TABLE_NAME=BINARY CONVERT(0x{} USING utf8mb4))", utf8_hex(&item.schema_name), utf8_hex(&item.object_name))).collect::<Vec<_>>().join(" OR ");
+        let sql = format!("SET SESSION group_concat_max_len=1048576; SELECT HEX(t.TABLE_SCHEMA),HEX(t.TABLE_NAME),{} FROM information_schema.TABLES t WHERE t.TABLE_TYPE='BASE TABLE' AND ({conditions}) ORDER BY BINARY t.TABLE_SCHEMA,BINARY t.TABLE_NAME LIMIT 101", restoreplane_domain::workbench_structure::mysql_relation_signature());
+        let output = self.run_sql(&sql).await?;
+        let mut result = Vec::new();
+        for line in output.lines().filter(|line| !line.is_empty()) {
+            if result.len() >= MAX_SELECTED_TABLES {
+                anyhow::bail!("WORKBENCH_SELECTION_LIMIT");
+            }
+            let fields = line.split('\t').collect::<Vec<_>>();
+            if fields.len() != 3 {
+                anyhow::bail!("WORKBENCH_STRUCTURE_UNAVAILABLE");
+            }
+            let schema = decode_utf8_hex(fields[0])?;
+            let table = decode_utf8_hex(fields[1])?;
+            let (signature, length) = fields[2]
+                .split_once(':')
+                .ok_or_else(|| anyhow::anyhow!("WORKBENCH_STRUCTURE_UNAVAILABLE"))?;
+            if length
+                .parse::<usize>()
+                .ok()
+                .is_none_or(|size| size > 1024 * 1024)
+            {
+                anyhow::bail!("WORKBENCH_STRUCTURE_UNAVAILABLE");
+            }
+            let mut item = items
+                .iter()
+                .find(|item| item.schema_name == schema && item.object_name == table)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("WORKBENCH_STRUCTURE_UNAVAILABLE"))?;
+            item.structure_signature = signature.to_ascii_lowercase();
+            if !item.is_well_formed() {
+                anyhow::bail!("WORKBENCH_STRUCTURE_UNAVAILABLE");
+            }
+            result.push((schema, table, item.structure_signature));
+        }
+        if result.len() != items.len() {
+            anyhow::bail!("WORKBENCH_STRUCTURE_UNAVAILABLE");
+        }
+        result.sort();
+        Ok(result)
+    }
+}
+
+fn utf8_hex(value: &str) -> String {
+    value
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02X}"))
+        .collect()
+}
+fn decode_utf8_hex(value: &str) -> anyhow::Result<String> {
+    if value.len() > 2048
+        || !value.len().is_multiple_of(2)
+        || !value.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        anyhow::bail!("WORKBENCH_STRUCTURE_UNAVAILABLE");
+    }
+    let bytes = value
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|part| {
+            std::str::from_utf8(part)
+                .ok()
+                .and_then(|part| u8::from_str_radix(part, 16).ok())
+                .ok_or_else(|| anyhow::anyhow!("WORKBENCH_STRUCTURE_UNAVAILABLE"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    String::from_utf8(bytes).map_err(|_| anyhow::anyhow!("WORKBENCH_STRUCTURE_UNAVAILABLE"))
 }
 
 fn parse_catalog_probe_header(
@@ -314,6 +399,35 @@ impl MySqlMetaConn for MysqlCliMetaConn {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn selected_structure_never_downgrades_verify_full_to_required() {
+        let connection = MysqlCliMetaConn {
+            client: PathBuf::from("not-a-trusted-metadata-client.exe"),
+            expected_sha256: None,
+            trusted_dependencies: Vec::new(),
+            host: "127.0.0.1".into(),
+            port: 1,
+            user: "unused".into(),
+            password: Zeroizing::new("unused".into()),
+            client_kind: ClientKind::OracleMySql,
+            tls_mode: "verify_full".into(),
+        };
+        let result = connection
+            .selected_structure(&[
+                restoreplane_domain::workbench_protection::WorkbenchSelectionItem {
+                    engine_object_id: "table:test".into(),
+                    schema_name: "workbench".into(),
+                    object_name: "sample".into(),
+                    structure_signature: "a".repeat(64),
+                },
+            ])
+            .await;
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("MYSQL_TLS_CA_REQUIRED"));
+    }
 
     #[test]
     fn inline_db_substitutes_placeholder_and_escapes_quotes() {

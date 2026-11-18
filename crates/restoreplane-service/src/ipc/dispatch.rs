@@ -115,6 +115,53 @@ where
         let request = authorized.request();
         let authority = self.current_authority()?;
         enforce_authority(&authority, request.command())?;
+        let workbench_protection = (matches!(
+            request.command(),
+            ApplicationCommand::BackupScopeDiscoveryRun | ApplicationCommand::BackupScopeSave
+        ) && (request.payload().get("workbenchSelection").is_some()
+            || request
+                .payload()
+                .get("expectedWorkbenchSelectionDigest")
+                .is_some()))
+            || (request.command() == ApplicationCommand::WorkGet
+                && request
+                    .payload()
+                    .get("includeWorkbenchRestoreProof")
+                    .is_some_and(|value| value != &serde_json::Value::Bool(false)));
+        if workbench_protection
+            && (authorized.principal().kind() != super::PrincipalKind::Owner
+                || authorized.principal().elevated_admin())
+        {
+            return ResponseEnvelope::failure_with_deduplication(
+                request.request_id().clone(),
+                ApplicationFailure::from(&ApplicationError::Forbidden),
+                false,
+            )
+            .map_err(DispatchError::from);
+        }
+        if request.command() == ApplicationCommand::WorkbenchBindingAuthorize {
+            let result = if authorized.principal().kind() != super::PrincipalKind::Owner
+                || authorized.principal().elevated_admin()
+            {
+                Err(ApplicationError::Forbidden)
+            } else {
+                self.use_cases.authorize_workbench_binding(
+                    request.payload().clone(),
+                    authorized.principal().sid_hash(),
+                    authorized.accepted_at_ms(),
+                )
+            };
+            return match result {
+                Ok(response) => ResponseEnvelope::success(request.request_id().clone(), response)
+                    .map_err(DispatchError::from),
+                Err(error) => ResponseEnvelope::failure_with_deduplication(
+                    request.request_id().clone(),
+                    ApplicationFailure::from(&error),
+                    false,
+                )
+                .map_err(DispatchError::from),
+            };
+        }
         if request.command() == ApplicationCommand::RetentionControlSet {
             return self.set_retention_control(&authorized);
         }
@@ -147,6 +194,27 @@ where
         }
         let mutation = request.command().descriptor().mutation();
         if mutation == MutationClass::ReadOnly {
+            if workbench_protection {
+                return match self.use_cases.execute_workbench_protection(
+                    ApplicationRequest {
+                        command: request.command(),
+                        payload: request.payload().clone(),
+                    },
+                    authorized.principal().sid_hash(),
+                    authorized.accepted_at_ms(),
+                ) {
+                    Ok(response) => {
+                        ResponseEnvelope::success(request.request_id().clone(), response)
+                            .map_err(DispatchError::from)
+                    }
+                    Err(error) => ResponseEnvelope::failure_with_deduplication(
+                        request.request_id().clone(),
+                        ApplicationFailure::from(&error),
+                        false,
+                    )
+                    .map_err(DispatchError::from),
+                };
+            }
             return self.invoke(request, false);
         }
         if matches!(
@@ -179,10 +247,20 @@ where
 
         match reservation {
             IpcLedgerReservation::New => {
-                let outcome = match self.use_cases.execute(ApplicationRequest {
+                let input = ApplicationRequest {
                     command: request.command(),
                     payload: request.payload().clone(),
-                }) {
+                };
+                let executed = if workbench_protection {
+                    self.use_cases.execute_workbench_protection(
+                        input,
+                        authorized.principal().sid_hash(),
+                        authorized.accepted_at_ms(),
+                    )
+                } else {
+                    self.use_cases.execute(input)
+                };
+                let outcome = match executed {
                     Ok(response) => PersistedOutcome::Success(response),
                     Err(error) => PersistedOutcome::Failure(ApplicationFailure::from(&error)),
                 };

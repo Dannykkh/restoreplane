@@ -1216,6 +1216,39 @@ impl RestoreExecutor for ServiceRestoreExecutor {
         if let Err(error) = native_result {
             return Err(restore_native_error(error));
         }
+        let workbench_restore_identity = if engine == Engine::Sqlite {
+            // Optional Workbench proof does not change legacy restore support.
+            // Unknown/ReFS/remote filesystems simply provide no new authority.
+            (|| {
+                let path = profile.file_path()?;
+                let mut options = std::fs::OpenOptions::new();
+                options.read(true);
+                #[cfg(windows)]
+                {
+                    use std::os::windows::fs::OpenOptionsExt;
+                    options.share_mode(3).custom_flags(0x0020_0000);
+                }
+                let file = options.open(path).ok()?;
+                if !restoreplane_source_sqlite::opened_handle_is_local_ntfs(&file).ok()? {
+                    return None;
+                }
+                let probe = probe_sqlite_file(Path::new(path)).ok()?;
+                let actual = restoreplane_source_sqlite::opened_file_object_id(&file).ok()?;
+                if actual != probe.object_id() {
+                    return None;
+                }
+                Some(json!({
+                    "signatureVersion":1,
+                    "engine":"sqlite",
+                    "connectionProfileId":context.target_connection_profile_id(),
+                    "databaseName":context.target_database_name(),
+                    "serverIdentity":null,
+                    "actualDatabaseIdentity":format!("sqlite-file-object-id:{actual}"),
+                }))
+            })()
+        } else {
+            None
+        };
         let recovery_evidence = materialized.evidence();
         let mut pending = self
             .pending
@@ -1237,20 +1270,20 @@ impl RestoreExecutor for ServiceRestoreExecutor {
         {
             return Err(restore_error("RESTORE_INTERNAL_STATE", false, None));
         }
-        RestoreExecutionEvidence::completed(
-            0,
-            true,
-            json!({
-                "schemaVersion": 1,
-                "engine": engine_name(engine),
-                "source": recovery_evidence,
-                "nativeRestore": {
-                    "status": "passed",
-                    "bundleOnlyTool": !matches!(engine, Engine::Sqlite),
-                },
-            }),
-        )
-        .map_err(|_| restore_error("RESTORE_EXECUTION_EVIDENCE_INVALID", false, None))
+        let mut evidence = json!({
+            "schemaVersion": 1,
+            "engine": engine_name(engine),
+            "source": recovery_evidence,
+            "nativeRestore": {
+                "status": "passed",
+                "bundleOnlyTool": !matches!(engine, Engine::Sqlite),
+            },
+        });
+        if let Some(identity) = workbench_restore_identity {
+            evidence["workbenchRestoreIdentity"] = identity;
+        }
+        RestoreExecutionEvidence::completed(0, true, evidence)
+            .map_err(|_| restore_error("RESTORE_EXECUTION_EVIDENCE_INVALID", false, None))
     }
 
     async fn validate(
@@ -2412,7 +2445,7 @@ fn restore_dump_format_supported(engine: Engine, dump_format: &str) -> bool {
     match engine {
         Engine::Postgresql => dump_format == "custom",
         Engine::Mysql | Engine::Mariadb => matches!(dump_format, "plain" | "sql"),
-        Engine::Sqlite => dump_format == "sqlite-database",
+        Engine::Sqlite => matches!(dump_format, "sqlite_database" | "sqlite-database"),
         Engine::Sqlserver => false,
     }
 }
@@ -2839,6 +2872,45 @@ mod tests {
         assert!(!restore_dump_format_supported(Engine::Mariadb, "custom"));
         assert!(!restore_dump_format_supported(Engine::Sqlite, "plain"));
         assert!(!restore_dump_format_supported(Engine::Sqlserver, "native"));
+        for invalid in [
+            "SQLITE_DATABASE",
+            "sqlite__database",
+            "sqlite database",
+            "sqlite_database ",
+            "sqlite",
+            "database",
+        ] {
+            assert!(!restore_dump_format_supported(Engine::Sqlite, invalid));
+        }
+        for engine in [
+            Engine::Postgresql,
+            Engine::Mysql,
+            Engine::Mariadb,
+            Engine::Sqlserver,
+        ] {
+            assert!(!restore_dump_format_supported(engine, "sqlite_database"));
+            assert!(!restore_dump_format_supported(engine, "sqlite-database"));
+        }
+    }
+
+    #[test]
+    fn native_backup_canonical_database_formats_and_exact_sqlite_legacy_alias_are_supported() {
+        // NativeBackupExecutor signs normalize_format(plan.dump_format): the
+        // SQLite provider's sqlite-database becomes sqlite_database. Network
+        // database parts already produce custom/plain, so those stay exact.
+        assert!(restore_dump_format_supported(
+            Engine::Sqlite,
+            "sqlite_database"
+        ));
+        assert!(restore_dump_format_supported(
+            Engine::Sqlite,
+            "sqlite-database"
+        ));
+        assert!(restore_dump_format_supported(Engine::Postgresql, "custom"));
+        for engine in [Engine::Mysql, Engine::Mariadb] {
+            assert!(restore_dump_format_supported(engine, "plain"));
+            assert!(restore_dump_format_supported(engine, "sql"));
+        }
     }
 
     #[test]
@@ -3013,3 +3085,5 @@ mod tests {
         assert_eq!(verification_level_preflight_error("mysql", 1), None);
     }
 }
+#[cfg(all(test, windows))]
+mod workbench_restore_chain;

@@ -116,10 +116,11 @@ pub enum ApplicationCommand {
     ServiceUpdateCommit,
     SupportBundleCreate,
     ToolRescan,
+    WorkbenchBindingAuthorize,
 }
 
 impl ApplicationCommand {
-    pub const ALL: [Self; 55] = [
+    pub const ALL: [Self; 56] = [
         Self::ServiceHealth,
         Self::ServiceDiagnostics,
         Self::SchemaStatus,
@@ -175,10 +176,12 @@ impl ApplicationCommand {
         Self::ServiceUpdateCommit,
         Self::SupportBundleCreate,
         Self::ToolRescan,
+        Self::WorkbenchBindingAuthorize,
     ];
 
     pub const fn descriptor(self) -> CommandDescriptor {
         match self {
+            Self::WorkbenchBindingAuthorize => read("workbench.binding.authorize"),
             Self::ServiceHealth => read("service.health"),
             Self::ServiceDiagnostics => read("service.diagnostics"),
             Self::SchemaStatus => read("schema.status"),

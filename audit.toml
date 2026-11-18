@@ -1,11 +1,6 @@
 # cargo-audit 설정. 실행: cargo audit
-# 아래 ignore는 "억제"가 아니라 "수정본 없음 + 우리 사용 경로에 비해당"을 문서화한 판정이다.
-# 새 수정본이 나오면 제거하고 업그레이드한다.
+# rand 0.8.6의 수정본을 적용했으므로 권고 예외를 사용하지 않는다.
+# cargo-audit 0.22 기본 호출도 --ignore 없이 검사한다. -c는 config가 아닌 color 옵션이다.
 
 [advisories]
-ignore = [
-    # rand 0.8.5 — 'rand::rng()' + 커스텀 로거 조합에서만 unsound.
-    # 우리는 OsRng를 직접 쓰며 해당 조합을 쓰지 않는다. ed25519-dalek 2.x가
-    # rand_core 0.6(=rand 0.8)을 요구해 0.9 상향 불가. 경고 등급.
-    "RUSTSEC-2026-0097",
-]
+ignore = []

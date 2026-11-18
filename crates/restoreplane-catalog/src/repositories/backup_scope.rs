@@ -180,6 +180,7 @@ pub struct DatabaseObjectDiscoverySpec {
     inventory_hash_blake3: String,
     objects: Vec<DiscoveredDatabaseObjectSpec>,
     observed_at_ms: i64,
+    selected_coverage: bool,
 }
 
 impl DatabaseObjectDiscoverySpec {
@@ -196,7 +197,13 @@ impl DatabaseObjectDiscoverySpec {
             inventory_hash_blake3: inventory_hash_blake3.into(),
             objects,
             observed_at_ms,
+            selected_coverage: false,
         }
+    }
+
+    pub fn with_selected_coverage(mut self) -> Self {
+        self.selected_coverage = true;
+        self
     }
 
     fn validate(&self) -> Result<(), RepositoryError> {
@@ -226,6 +233,7 @@ pub struct ExplicitBackupScopeSpec {
     discovery_operation_run_id: OperationRunId,
     engine_object_ids: Vec<String>,
     created_at_ms: i64,
+    workbench_selection_proof: bool,
 }
 
 impl ExplicitBackupScopeSpec {
@@ -244,7 +252,15 @@ impl ExplicitBackupScopeSpec {
             discovery_operation_run_id,
             engine_object_ids,
             created_at_ms,
+            workbench_selection_proof: false,
         }
+    }
+
+    /// Only the service's owner-validated, same-transaction proof guard may
+    /// enable selected inventory. This does not widen the selected objects.
+    pub fn with_workbench_selection_proof(mut self) -> Self {
+        self.workbench_selection_proof = true;
+        self
     }
 
     fn validate(&self) -> Result<(), RepositoryError> {
@@ -445,14 +461,17 @@ impl BackupScopeRepository {
                         ],
                     )?;
                 }
-                let result_json = json!({
+                let mut result = json!({
                     "kind": "backup_scope_object_discovery",
                     "inventoryHashBlake3": spec.inventory_hash_blake3,
                     "totalCount": spec.objects.len(),
                     "eligibleCount": eligible_count,
                     "observedAtMs": spec.observed_at_ms,
-                })
-                .to_string();
+                });
+                if spec.selected_coverage {
+                    result["inventoryCoverage"] = json!("selected");
+                }
+                let result_json = result.to_string();
                 transaction.execute(
                     "UPDATE operation_runs
                      SET result_json = ?2, updated_at_ms = MAX(updated_at_ms, ?3)
@@ -501,6 +520,7 @@ impl BackupScopeRepository {
                    AND operation.subject_type = 'database_target'
                    AND operation.subject_id = ?1
                    AND json_extract(operation.result_json, '$.kind') = 'backup_scope_object_discovery'
+                   AND COALESCE(json_extract(operation.result_json, '$.inventoryCoverage'),'full')='full'
                  ORDER BY json_extract(operation.result_json, '$.observedAtMs') DESC,
                           operation.created_at_ms DESC
                  LIMIT 1",
@@ -693,12 +713,35 @@ impl BackupScopeRepository {
         &self,
         spec: ExplicitBackupScopeSpec,
     ) -> Result<BackupScopeRecord, RepositoryError> {
+        self.create_explicit_checked(spec, |_| Ok(()), |_, _, _, _| Ok(()))
+    }
+
+    /// The optional guard is trusted Rust metadata validation in the same
+    /// local transaction as Scope creation. It accepts no remote/user SQL.
+    pub fn create_explicit_checked<F, G>(
+        &self,
+        spec: ExplicitBackupScopeSpec,
+        guard: F,
+        record: G,
+    ) -> Result<BackupScopeRecord, RepositoryError>
+    where
+        F: FnOnce(&rusqlite::Transaction<'_>) -> Result<(), RepositoryError> + Send + 'static,
+        G: FnOnce(
+                &rusqlite::Transaction<'_>,
+                &BackupScopeId,
+                &str,
+                &str,
+            ) -> Result<(), RepositoryError>
+            + Send
+            + 'static,
+    {
         spec.validate()?;
         let scope_id = spec.id.clone();
         self.store
             .run_write(move |connection| {
                 let transaction =
                     connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+                guard(&transaction)?;
                 let discovery_valid: bool = transaction.query_row(
                     "SELECT EXISTS(
                          SELECT 1 FROM operation_runs
@@ -707,10 +750,16 @@ impl BackupScopeRepository {
                            AND subject_type = 'database_target'
                            AND subject_id = ?2
                            AND json_extract(result_json, '$.kind') = 'backup_scope_object_discovery'
+                           AND (
+                               (COALESCE(json_extract(result_json, '$.inventoryCoverage'),'full')='full' AND ?3=0)
+                               OR (json_extract(result_json, '$.inventoryCoverage')='selected' AND ?3=1 AND id=?4 AND state='succeeded')
+                           )
                      )",
                     params![
                         spec.discovery_operation_run_id.as_str(),
-                        spec.database_target_id.as_str()
+                        spec.database_target_id.as_str(),
+                        spec.workbench_selection_proof,
+                        spec.id.as_str()
                     ],
                     |row| row.get(0),
                 )?;
@@ -858,6 +907,7 @@ impl BackupScopeRepository {
                         ],
                     )?;
                 }
+                record(&transaction, &spec.id, &source_fingerprint, &selector_hash)?;
                 transaction.commit()?;
                 Ok(())
             })

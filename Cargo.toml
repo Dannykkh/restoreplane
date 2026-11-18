@@ -15,6 +15,7 @@ members = [
   "crates/restoreplane-source-sqlite",
   "crates/restoreplane-catalog",
   "crates/restoreplane-domain",
+  "crates/restoreplane-workbench",
   "crates/restoreplane-application",
   "crates/restoreplane-runtime",
   "crates/restoreplane-service",

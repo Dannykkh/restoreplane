@@ -1,0 +1,39 @@
+[package]
+name = "restoreplane-workbench"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait = "0.1"
+base64 = { workspace = true }
+blake3 = "=1.5.5"
+bytes = "1"
+chrono = "0.4"
+csv-core = "=0.1.13"
+fs2 = "=0.4.3"
+futures = "=0.3.31"
+mysql_async = { version = "=0.37.1", default-features = false, features = ["minimal-rust", "native-tls-tls"] }
+native-tls = "=0.2.14"
+postgres-native-tls = "=0.5.1"
+restoreplane-domain = { path = "../restoreplane-domain" }
+restoreplane-secrets = { path = "../restoreplane-secrets" }
+restoreplane-source-sqlite = { path = "../restoreplane-source-sqlite" }
+rusqlite = { version = "=0.41.0", default-features = false, features = ["cache", "bundled", "hooks", "limits"] }
+serde = { workspace = true }
+serde_json = { version = "1", features = ["raw_value"] }
+sqlparser = { version = "=0.64.0", features = ["visitor"] }
+thiserror = { workspace = true }
+tokio = { version = "=1.53.3", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "net", "io-util"] }
+tokio-postgres = "0.7"
+uuid = { version = "=1.11.0", features = ["v4", "serde"] }
+zeroize = { version = "=1.9.0", features = ["derive"] }
+
+[dev-dependencies]
+restoreplane-catalog = { path = "../restoreplane-catalog" }
+tempfile = "=3.14.0"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "=0.58.0", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }

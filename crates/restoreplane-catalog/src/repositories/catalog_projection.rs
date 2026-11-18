@@ -1354,6 +1354,7 @@ pub(super) fn ingest_complete_projection(
     spec: &CompleteRecoveryPointSpec,
 ) -> Result<bool, RepositoryError> {
     spec.validate()?;
+    let plaintext_bytes = spec.plaintext_bytes()?;
     let calculated_axes = spec.snapshot_axes()?;
     let existing: Option<ExistingRecoveryPoint> = transaction
         .query_row(
@@ -1400,14 +1401,14 @@ pub(super) fn ingest_complete_projection(
              engine, state, consistency_grade, committed_at_ms,
              manifest_schema_version, set_manifest_checksum_blake3, signing_key_id,
              signature_status, required_part_count, present_part_count,
-             engine_metadata_json, first_ingested_at_ms, last_ingested_at_ms
+             engine_metadata_json, plaintext_bytes, first_ingested_at_ms, last_ingested_at_ms
          ) VALUES (
              ?1, ?2, ?3, ?4,
              ?5, ?6,
              ?7, 'incomplete', ?8, ?9,
              1, ?10, ?11,
              'valid', 0, 0,
-             '{}', ?12, ?12
+             '{}', ?13, ?12, ?12
          )",
         params![
             spec.id.as_str(),
@@ -1423,7 +1424,8 @@ pub(super) fn ingest_complete_projection(
             spec.committed_at_ms,
             spec.set_manifest_checksum_blake3.as_str(),
             spec.signing_key_id.as_str(),
-            spec.ingested_at_ms
+            spec.ingested_at_ms,
+            plaintext_bytes
         ],
     )?;
     transaction.execute(
@@ -1540,7 +1542,8 @@ pub(super) fn ingest_complete_projection(
          SET state = 'complete',
              required_part_count = ?2,
              present_part_count = ?3,
-             last_ingested_at_ms = ?4
+             last_ingested_at_ms = ?4,
+             plaintext_bytes = ?5
          WHERE id = ?1
            AND state = 'incomplete'
            AND signature_status = 'valid'",
@@ -1548,7 +1551,8 @@ pub(super) fn ingest_complete_projection(
             spec.id.as_str(),
             required_count,
             present_count,
-            spec.ingested_at_ms
+            spec.ingested_at_ms,
+            plaintext_bytes
         ],
     )?;
     if completed != 1 {

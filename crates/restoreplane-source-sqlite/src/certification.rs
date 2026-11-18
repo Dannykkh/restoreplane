@@ -30,13 +30,13 @@ pub fn sqlite_certification(
     )?;
     let tool = NativeToolIdentity::new(
         "sqlite-online-backup",
-        "embedded://rusqlite/0.31.0",
-        format!("rusqlite 0.31.0 / SQLite {}", rusqlite::version()),
+        "embedded://rusqlite/0.41.0",
+        format!("rusqlite 0.41.0 / SQLite {}", rusqlite::version()),
         build_id,
         ToolTrust::LockedDependency {
             package: "rusqlite".to_owned(),
-            version: "0.31.0".to_owned(),
-            registry_checksum: "b838eba278d213a8beaf485bd313fd580ca4505a00d5871caeb1457c55322cae"
+            version: "0.41.0".to_owned(),
+            registry_checksum: "9c026b4444579e8d754556c6c75d040d69c4a44283cdb648ab8a8d5965c2cfa8"
                 .to_owned(),
         },
     )?;

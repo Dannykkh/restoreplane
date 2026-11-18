@@ -20,9 +20,10 @@ publish.workspace = true
 [dependencies]
 restoreplane-pipeline = { path = "../restoreplane-pipeline" }
 restoreplane-core = { path = "../restoreplane-core" }
+restoreplane-domain = { path = "../restoreplane-domain" }
 restoreplane-runtime = { path = "../restoreplane-runtime" }
 
-tokio = { version = "=1.52.3", features = ["process", "io-util", "fs", "rt-multi-thread", "macros"] }
+tokio = { version = "=1.53.3", features = ["process", "io-util", "fs", "rt-multi-thread", "macros"] }
 async-trait = "0.1"
 uuid = { version = "=1.11.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }

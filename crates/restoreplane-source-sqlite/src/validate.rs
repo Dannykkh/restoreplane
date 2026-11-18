@@ -77,7 +77,7 @@ pub fn validate_database_observed(
     if control() {
         return Err(SqliteProviderError::Cancelled);
     }
-    let connection = Connection::open_with_flags(
+    let mut connection = Connection::open_with_flags(
         path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )?;
@@ -93,7 +93,7 @@ pub fn validate_database_observed(
             }
             should_interrupt
         }),
-    );
+    )?;
     let result = (|| {
         let mut integrity = connection.prepare("PRAGMA integrity_check")?;
         let messages = integrity

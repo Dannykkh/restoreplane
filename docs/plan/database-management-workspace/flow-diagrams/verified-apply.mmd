@@ -1,0 +1,31 @@
+flowchart TD
+    %% commands: edit.prepare, edit.apply, operation.get
+    start([Reviewed insert update or delete draft]) --> eligible{Type provenance and standalone transaction certified}
+    eligible -->|No| reject([Reject with reason keep draft])
+    eligible -->|Yes| auth[[Fresh authority and schema identity]]
+    auth -->|Rejected or manual transaction active| reject
+    auth -->|Authorized| admit{Journal admission new intent}
+    admit -->|Duplicate| prior([Return existing operation])
+    admit -->|Refused| reject
+    admit -->|New dispatch intent persisted| tx[Begin standalone transaction]
+    tx -->|BEGIN refused without effects| reject
+    tx -->|BEGIN disposition unproven| unknown([Outcome unknown no replay])
+    tx -->|Opened| next[Next reviewed change]
+    next -->|Update or delete| compare[[Lock read and typed original compare]]
+    next -->|Insert without existing rowHandle| write[[Bound mutation or proven no-op]]
+    compare --> match{Exactly one original match}
+    match -->|No| rollback[[Request rollback preserve draft]]
+    match -->|Yes| write
+    write --> effect{Certified insert effect one or existing-row match one}
+    effect -->|No or ambiguous| rollback
+    effect -->|Yes including proven matched-one changed-zero| more{More reviewed changes}
+    more -->|Yes| next
+    more -->|No| commitAuth{Fresh COMMIT authority valid}
+    commitAuth -->|No| rollback
+    commitAuth -->|Yes| commit[[Persist commit intent and request COMMIT]]
+    commit --> confirmed{Observed COMMIT outcome}
+    confirmed -->|Unknown| unknown
+    confirmed -->|Rollback proved| rolledBack([Supported effects rolled back keep draft])
+    confirmed -->|Commit proved| done([Transactional effects committed])
+    rollback -->|Rollback confirmed| rolledBack
+    rollback -->|Unproven| unknown

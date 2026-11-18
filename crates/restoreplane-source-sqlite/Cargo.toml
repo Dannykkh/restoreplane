@@ -14,11 +14,11 @@ restoreplane-core = { path = "../restoreplane-core" }
 restoreplane-pipeline = { path = "../restoreplane-pipeline" }
 fs2 = "=0.4.3"
 futures = "=0.3.31"
-rusqlite = { version = "=0.31.0", features = ["backup", "bundled", "hooks"] }
+rusqlite = { version = "=0.41.0", default-features = false, features = ["cache", "backup", "bundled", "hooks"] }
 serde = { workspace = true }
 tempfile = "=3.14.0"
 thiserror = { workspace = true }
-tokio = { version = "=1.52.3", features = ["fs", "io-util", "rt", "sync"] }
+tokio = { version = "=1.53.3", features = ["fs", "io-util", "rt", "sync"] }
 uuid = { version = "=1.11.0", features = ["v4"] }
 
 [target.'cfg(windows)'.dependencies]

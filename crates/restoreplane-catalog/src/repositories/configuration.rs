@@ -2619,9 +2619,11 @@ impl ConfigurationRepository {
                  WHERE id = ?1 AND status = 'running'",
                 params![
                     spec.id,
-                    added_count,
-                    missing_count,
-                    changed_count,
+                    i64::try_from(added_count).map_err(|_| RepositoryError::RuntimeStateInvalid)?,
+                    i64::try_from(missing_count)
+                        .map_err(|_| RepositoryError::RuntimeStateInvalid)?,
+                    i64::try_from(changed_count)
+                        .map_err(|_| RepositoryError::RuntimeStateInvalid)?,
                     spec.completed_at_ms
                 ],
             )?;

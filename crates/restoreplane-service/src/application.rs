@@ -30,6 +30,8 @@ use crate::host::{HostPhase, ServiceHealthProbe};
 use crate::operations::ServiceOperationWorkerHandle;
 use crate::repair::ServiceCatalogRebuildPreviewer;
 use crate::secrets::{SecretBuffer, SecretPurpose, ServiceSecretStore};
+mod workbench;
+pub(crate) mod workbench_protection;
 
 pub struct ServiceApplication {
     health: ServiceHealthProbe,
@@ -1536,16 +1538,34 @@ impl ServiceApplication {
         })))
     }
 
-    fn work_get(&self, payload: &Value) -> Result<ApplicationResponse, ApplicationError> {
+    fn work_get(
+        &self,
+        payload: &Value,
+        owner: Option<&str>,
+    ) -> Result<ApplicationResponse, ApplicationError> {
         let input: WorkGetPayload = serde_json::from_value(payload.clone())
             .map_err(|_| ApplicationError::InvalidPayload)?;
+        if input.include_workbench_restore_proof && owner.is_none() {
+            return Err(ApplicationError::Forbidden);
+        }
         WorkItemId::from_str(&input.work_item_id).map_err(|_| ApplicationError::InvalidPayload)?;
         let workspace_id = parse_workspace_id(&input.workspace_id)?;
         let work = self
             .console_query()?
             .work_item_in_workspace(workspace_id.as_str(), &input.work_item_id)
             .map_err(query_error)?;
-        serialize_response(work)
+        if input.include_workbench_restore_proof {
+            let proof = self
+                .console_query()?
+                .workbench_restore_proof(workspace_id.as_str(), &input.work_item_id)
+                .map_err(query_error)?;
+            let mut body = serde_json::to_value(work).map_err(|_| ApplicationError::Internal)?;
+            body["workbenchRestoreProof"] =
+                serde_json::to_value(proof).map_err(|_| ApplicationError::Internal)?;
+            Ok(response(body))
+        } else {
+            serialize_response(work)
+        }
     }
 
     fn discovery_result_list(
@@ -1635,10 +1655,17 @@ impl ServiceApplication {
         serialize_response(page)
     }
 
-    fn backup_scope_save(&self, payload: &Value) -> Result<ApplicationResponse, ApplicationError> {
+    fn backup_scope_save(
+        &self,
+        payload: &Value,
+        owner: Option<&str>,
+    ) -> Result<ApplicationResponse, ApplicationError> {
         let input: BackupScopeSavePayload = serde_json::from_value(payload.clone())
             .map_err(|_| ApplicationError::InvalidPayload)?;
         input.validate()?;
+        if input.expected_workbench_selection_digest.is_some() && owner.is_none() {
+            return Err(ApplicationError::Forbidden);
+        }
         let workspace_id = parse_workspace_id(&input.workspace_id)?;
         let target_id = DatabaseTargetId::from_str(&input.database_target_id)
             .map_err(|_| ApplicationError::InvalidPayload)?;
@@ -1666,17 +1693,60 @@ impl ServiceApplication {
                 if now_ms < 0 {
                     return Err(ApplicationError::Internal);
                 }
-                store
-                    .backup_scopes()
-                    .create_explicit(ExplicitBackupScopeSpec::new(
-                        BackupScopeId::new(),
-                        target_id,
-                        input.display_name,
-                        discovery_id,
-                        input.engine_object_ids,
-                        now_ms,
-                    ))
-                    .map_err(query_error)?
+                let scope_id = if input.expected_workbench_selection_digest.is_some() {
+                    BackupScopeId::from_str(discovery_id.as_str())
+                        .map_err(|_| ApplicationError::InvalidPayload)?
+                } else {
+                    BackupScopeId::new()
+                };
+                let spec = ExplicitBackupScopeSpec::new(
+                    scope_id,
+                    target_id.clone(),
+                    input.display_name,
+                    discovery_id.clone(),
+                    input.engine_object_ids.clone(),
+                    now_ms,
+                );
+                if let Some(expected) = input.expected_workbench_selection_digest {
+                    let owner = owner.ok_or(ApplicationError::Forbidden)?.to_owned();
+                    let guard = workbench_protection::SelectionSaveGuard {
+                        owner,
+                        workspace: workspace_id,
+                        target: target_id,
+                        discovery: discovery_id,
+                        expected,
+                        selected_ids: input.engine_object_ids,
+                        now: now_ms,
+                    };
+                    let recording = guard.clone();
+                    store
+                        .backup_scopes()
+                        .create_explicit_checked(
+                            spec.with_workbench_selection_proof(),
+                            move |tx| workbench_protection::validate_selection_save(tx, &guard),
+                            move |tx, scope, fingerprint, selector_hash| {
+                                workbench_protection::record_scope_link(
+                                    tx,
+                                    &recording,
+                                    scope,
+                                    fingerprint,
+                                    selector_hash,
+                                )
+                            },
+                        )
+                        .map_err(|error| match error {
+                            RepositoryError::BackupScopeDiscoveryInvalid
+                            | RepositoryError::WorkbenchBindingUnproven => {
+                                ApplicationError::WorkbenchBindingStale
+                            }
+                            other => query_error(other),
+                        })?
+                } else {
+                    store
+                        .backup_scopes()
+                        .create_explicit(spec)
+                        .map_err(query_error)?
+                }
             }
             _ => return Err(ApplicationError::InvalidPayload),
         };
@@ -1686,6 +1756,7 @@ impl ServiceApplication {
     fn backup_scope_discovery_run(
         &self,
         payload: &Value,
+        owner: Option<&str>,
     ) -> Result<ApplicationResponse, ApplicationError> {
         let input: BackupScopeTargetPayload = serde_json::from_value(payload.clone())
             .map_err(|_| ApplicationError::InvalidPayload)?;
@@ -1701,6 +1772,20 @@ impl ServiceApplication {
         if now_ms < 0 {
             return Err(ApplicationError::Internal);
         }
+        let authority = input
+            .workbench_selection
+            .as_ref()
+            .map(|selection| self.selection_authority(owner, &workspace_id, &target_id, selection))
+            .transpose()?;
+        let mut operation_payload = json!({"schemaVersion":2,"kind":"backup_scope_object_discovery","databaseTargetId":target_id.as_str()});
+        if let Some(selection) = input.workbench_selection {
+            operation_payload["inventoryCoverage"] = json!("selected");
+            operation_payload["workbenchSelection"] =
+                serde_json::to_value(selection).map_err(|_| ApplicationError::InvalidPayload)?;
+            operation_payload["workbenchAuthority"] =
+                serde_json::to_value(authority.ok_or(ApplicationError::Forbidden)?)
+                    .map_err(|_| ApplicationError::Internal)?;
+        }
         let operation_run_id = OperationRunId::new();
         let work_item_id = WorkItemId::new();
         store
@@ -1711,12 +1796,7 @@ impl ServiceApplication {
                 "connection_discovery",
                 "database_target",
                 target_id.as_str(),
-                json!({
-                    "schemaVersion": 2,
-                    "kind": "backup_scope_object_discovery",
-                    "databaseTargetId": target_id.as_str(),
-                })
-                .to_string(),
+                operation_payload.to_string(),
                 now_ms,
             ))
             .map_err(query_error)?;
@@ -1886,6 +1966,42 @@ impl ServiceApplication {
 }
 
 impl ApplicationUseCases for ServiceApplication {
+    fn execute_workbench_protection(
+        &self,
+        request: ApplicationRequest,
+        owner_sid_hash: &str,
+        accepted_at_ms: i64,
+    ) -> Result<ApplicationResponse, ApplicationError> {
+        if accepted_at_ms < 0
+            || owner_sid_hash.len() != 64
+            || !owner_sid_hash
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(ApplicationError::Forbidden);
+        }
+        if self.health.snapshot().phase() == HostPhase::Draining {
+            return Err(ApplicationError::RehearsalOnly);
+        }
+        match request.command {
+            ApplicationCommand::BackupScopeDiscoveryRun => {
+                self.backup_scope_discovery_run(&request.payload, Some(owner_sid_hash))
+            }
+            ApplicationCommand::BackupScopeSave => {
+                self.backup_scope_save(&request.payload, Some(owner_sid_hash))
+            }
+            ApplicationCommand::WorkGet => self.work_get(&request.payload, Some(owner_sid_hash)),
+            _ => Err(ApplicationError::Forbidden),
+        }
+    }
+    fn authorize_workbench_binding(
+        &self,
+        payload: Value,
+        owner_sid_hash: &str,
+        accepted_at_ms: i64,
+    ) -> Result<ApplicationResponse, ApplicationError> {
+        self.workbench_authorize_owner(payload, owner_sid_hash, accepted_at_ms)
+    }
     fn execute(
         &self,
         request: ApplicationRequest,
@@ -1936,12 +2052,12 @@ impl ApplicationUseCases for ServiceApplication {
             ApplicationCommand::TargetSelect => self.target_select(&request.payload),
             ApplicationCommand::BackupScopeList => self.backup_scope_list(&request.payload),
             ApplicationCommand::BackupScopeDiscoveryRun => {
-                self.backup_scope_discovery_run(&request.payload)
+                self.backup_scope_discovery_run(&request.payload, None)
             }
             ApplicationCommand::BackupScopeObjectList => {
                 self.backup_scope_object_list(&request.payload)
             }
-            ApplicationCommand::BackupScopeSave => self.backup_scope_save(&request.payload),
+            ApplicationCommand::BackupScopeSave => self.backup_scope_save(&request.payload, None),
             ApplicationCommand::DestinationSave => self.destination_save(&request.payload),
             ApplicationCommand::DestinationProbe => self.destination_probe(&request.payload),
             ApplicationCommand::SupportBundleCreate => self.support_bundle_create(&request.payload),
@@ -1953,7 +2069,7 @@ impl ApplicationUseCases for ServiceApplication {
             ApplicationCommand::VerificationEnqueue => self.verification_enqueue(&request.payload),
             ApplicationCommand::RestorePreflight => self.restore_preflight(&request.payload),
             ApplicationCommand::RestoreEnqueueSafe => self.restore_enqueue_safe(&request.payload),
-            ApplicationCommand::WorkGet => self.work_get(&request.payload),
+            ApplicationCommand::WorkGet => self.work_get(&request.payload, None),
             ApplicationCommand::WorkCancel => self.work_cancel(&request.payload),
             ApplicationCommand::RetentionDryRun => self.retention_dry_run(&request.payload),
             _ => Err(ApplicationError::UnknownCommand),
@@ -2225,6 +2341,8 @@ struct WorkGetPayload {
     #[serde(default = "default_workspace_id_string")]
     workspace_id: String,
     work_item_id: String,
+    #[serde(default)]
+    include_workbench_restore_proof: bool,
 }
 
 #[derive(Deserialize)]
@@ -2415,6 +2533,8 @@ struct BackupScopeTargetPayload {
     #[serde(default = "default_workspace_id_string")]
     workspace_id: String,
     database_target_id: String,
+    #[serde(default)]
+    workbench_selection: Option<restoreplane_domain::workbench_protection::WorkbenchSelection>,
 }
 
 #[derive(Deserialize)]
@@ -2447,6 +2567,8 @@ struct BackupScopeSavePayload {
     discovery_run_id: Option<String>,
     #[serde(default)]
     engine_object_ids: Vec<String>,
+    #[serde(default)]
+    expected_workbench_selection_digest: Option<String>,
 }
 
 impl BackupScopeSavePayload {
@@ -2465,7 +2587,17 @@ impl BackupScopeSavePayload {
             }
             _ => false,
         };
-        if name_valid && mode_valid {
+        let proof_valid = self
+            .expected_workbench_selection_digest
+            .as_ref()
+            .is_none_or(|digest| {
+                self.mode == "explicit_tables"
+                    && digest.len() == 64
+                    && digest
+                        .bytes()
+                        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            });
+        if name_valid && mode_valid && proof_valid {
             Ok(())
         } else {
             Err(ApplicationError::InvalidPayload)

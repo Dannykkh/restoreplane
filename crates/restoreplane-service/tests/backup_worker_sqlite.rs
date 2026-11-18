@@ -79,7 +79,7 @@ fn sqlite_work_item_publishes_recoverable_signed_recovery_point() {
     configuration
         .insert_target(DatabaseTargetSpec::new(
             target_id.clone(),
-            connection_id,
+            connection_id.clone(),
             "file:source.sqlite",
             "source.sqlite",
             "source.sqlite",
@@ -162,10 +162,12 @@ fn sqlite_work_item_publishes_recoverable_signed_recovery_point() {
         "sqlite-worker-boot",
         fixed_now,
     );
+    let slow_query = SlowWorkbenchQuery::start(&source_path, connection_id, target_id.clone());
     assert_eq!(
         worker.run_once().expect("run one Backup Work Item"),
         BackupWorkerTick::Completed(work_item_id.clone())
     );
+    slow_query.finish();
 
     let operational =
         Connection::open(temp.path().join("operational.db")).expect("open operational probe");
@@ -378,6 +380,183 @@ fn sqlite_work_item_publishes_recoverable_signed_recovery_point() {
         blocked.1
     );
     assert_eq!((blocked.2, blocked.3), (0, 0));
+}
+
+/// Real user-driver/physical SQLite execution with a paused consumer while the
+/// real service worker signs/publishes its backup. The principal/authorizer are
+/// test seams; this is not an OS medium-token or named-pipe E2E claim.
+struct SlowWorkbenchQuery {
+    runtime: tokio::runtime::Runtime,
+    release: Arc<tokio::sync::Notify>,
+    task: tokio::task::JoinHandle<Result<(), restoreplane_workbench::WorkbenchError>>,
+}
+impl SlowWorkbenchQuery {
+    fn start(
+        path: &std::path::Path,
+        profile: ConnectionProfileId,
+        target: DatabaseTargetId,
+    ) -> Self {
+        use restoreplane_domain::workbench::*;
+        use restoreplane_workbench::{
+            IntegrityLevel, InvocationContext, NativePrincipal, WorkbenchState,
+        };
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap();
+        let identity = restoreplane_source_sqlite::probe_sqlite_file(path)
+            .unwrap()
+            .object_id()
+            .to_owned();
+        let scope = Scope {
+            workspace_id: restoreplane_domain::WorkspaceId::from_str(DEFAULT_WORKSPACE_ID).unwrap(),
+            connection_profile_id: profile,
+            database_target_id: target,
+        };
+        let descriptor = ConnectDescriptor {
+            engine: Engine::Sqlite,
+            route: Route::File {
+                canonical_path: path.to_string_lossy().into_owned(),
+            },
+            database: DatabaseIdentity {
+                engine_object_id: format!("file:{identity}"),
+                name: "source.sqlite".into(),
+                source_fingerprint: "source-fingerprint".into(),
+            },
+            tls: Tls {
+                mode: "disable".into(),
+                server_name: None,
+                root_trust: None,
+            },
+            transport_options: Default::default(),
+            expected_server_identity: None,
+        };
+        let principal = NativePrincipal::new("a".repeat(64), 1, IntegrityLevel::Standard).unwrap();
+        let context = InvocationContext::new(principal.clone(), Uuid::new_v4());
+        let state = Arc::new(
+            WorkbenchState::new(
+                principal,
+                Arc::new(SlowAuthority {
+                    scope: scope.clone(),
+                    descriptor,
+                }),
+                Arc::new(SlowCredentials),
+                Arc::new(restoreplane_workbench::driver::NativeDriverFactory::default()),
+                restoreplane_workbench::session::RuntimeLimits::default(),
+            )
+            .unwrap(),
+        );
+        let session = runtime
+            .block_on(state.open(&context, scope, Uuid::new_v4(), None, Mode::ReadOnly))
+            .unwrap();
+        let session = session.session;
+        let started = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let task=runtime.spawn({let started=started.clone();let release=release.clone();async move{
+            let result=state.with_connection(&context,session,AuthorizePurpose::Read,move |connection|Box::pin(async move{
+                let mut sink=SlowRows{started,release,paused:false};
+                connection.execute("WITH RECURSIVE seq(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n<100000) SELECT orders.value,seq.n FROM orders,seq",restoreplane_workbench::driver::QueryLimits{max_rows:100000,max_bytes:8*1024*1024,timeout:std::time::Duration::from_secs(30)},&mut sink).await.map(|_|())
+            })).await;
+            let _=state.close(&context,session).await;result
+        }});
+        runtime.block_on(async {
+            tokio::time::timeout(std::time::Duration::from_secs(10), started.notified())
+                .await
+                .unwrap();
+        });
+        assert!(
+            !task.is_finished(),
+            "slow consumer holds an actual Workbench execution active"
+        );
+        Self {
+            runtime,
+            release,
+            task,
+        }
+    }
+    fn finish(self) {
+        self.release.notify_one();
+        self.runtime.block_on(async {
+            tokio::time::timeout(std::time::Duration::from_secs(10), self.task)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+        });
+        println!("08 actual SQLite backup/signature/recovery while Workbench consumer paused PASS (synthetic principal seam)");
+    }
+}
+struct SlowAuthority {
+    scope: restoreplane_domain::workbench::Scope,
+    descriptor: restoreplane_domain::workbench::ConnectDescriptor,
+}
+#[async_trait::async_trait]
+impl restoreplane_workbench::BindingAuthorizer for SlowAuthority {
+    async fn authorize(
+        &self,
+        _: &restoreplane_workbench::InvocationContext,
+        scope: &restoreplane_domain::workbench::Scope,
+        _: restoreplane_domain::workbench::AuthorizePurpose,
+        revision: Option<&str>,
+    ) -> Result<
+        restoreplane_domain::workbench::BindingReceipt,
+        restoreplane_workbench::WorkbenchError,
+    > {
+        if scope != &self.scope || revision.is_some_and(|value| value != "b".repeat(64)) {
+            return Err(restoreplane_workbench::WorkbenchError::BindingStale);
+        }
+        Ok(restoreplane_domain::workbench::BindingReceipt {
+            scope: scope.clone(),
+            descriptor: self.descriptor.clone(),
+            descriptor_revision: "b".repeat(64),
+            authority_epoch: Uuid::NAMESPACE_URL.to_string(),
+            authorized_at_ms: restoreplane_workbench::types::now_ms().into(),
+            read_lease_expires_at_ms: None,
+            observed_conflicts: Vec::new(),
+        })
+    }
+}
+struct SlowCredentials;
+#[async_trait::async_trait]
+impl restoreplane_workbench::credentials::CredentialProvider for SlowCredentials {
+    async fn resolve(
+        &self,
+        _: &restoreplane_workbench::InvocationContext,
+        _: &restoreplane_domain::workbench::Scope,
+        _: Uuid,
+    ) -> Result<restoreplane_workbench::driver::DriverLogin, restoreplane_workbench::WorkbenchError>
+    {
+        Ok(restoreplane_workbench::driver::DriverLogin {
+            username: String::new(),
+            secret: zeroize::Zeroizing::new(String::new()),
+        })
+    }
+}
+struct SlowRows {
+    started: Arc<tokio::sync::Notify>,
+    release: Arc<tokio::sync::Notify>,
+    paused: bool,
+}
+#[async_trait::async_trait]
+impl restoreplane_workbench::driver::RowSink for SlowRows {
+    async fn columns(
+        &mut self,
+        _: Vec<restoreplane_domain::workbench::Column>,
+    ) -> Result<(), restoreplane_workbench::WorkbenchError> {
+        Ok(())
+    }
+    async fn row(
+        &mut self,
+        _: Vec<restoreplane_domain::workbench::TypedCell>,
+    ) -> Result<(), restoreplane_workbench::WorkbenchError> {
+        if !self.paused {
+            self.paused = true;
+            self.started.notify_one();
+            self.release.notified().await;
+        }
+        Ok(())
+    }
 }
 
 fn fixed_now() -> i64 {

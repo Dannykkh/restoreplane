@@ -4,6 +4,14 @@ mod entities;
 mod errors;
 mod ids;
 mod state;
+pub mod workbench;
+pub mod workbench_edit;
+pub mod workbench_metadata;
+pub mod workbench_movement;
+pub mod workbench_protection;
+pub mod workbench_query;
+pub mod workbench_stream;
+pub mod workbench_structure;
 
 pub use entities::{
     OccurrenceIdentity, PlanRevisionDraft, PublishedPlanRevision, RevisionDestination,

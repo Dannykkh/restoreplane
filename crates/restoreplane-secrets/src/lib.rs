@@ -6,7 +6,9 @@
 //! "payload를 암호화하는 계층"(DEK 기반 chacha20poly1305 STREAM)을 타입/코드로 분리한다.
 //! S02는 payload 데이터를 직접 스트리밍하지 않고 `Dek`와 STREAM primitive만 S05에 넘긴다.
 
+pub mod current_user;
 pub mod secret;
+pub use current_user::{protect_current_user, unprotect_current_user};
 
 pub use secret::dek::Dek;
 pub use secret::error::SecretError;

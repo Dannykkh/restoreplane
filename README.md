@@ -15,6 +15,10 @@ RestorePlane은 PostgreSQL, MySQL, MariaDB, SQLite의 논리 백업을 예약하
 >
 > 핵심 기능 구현과 저장소 내 자동 검증은 갖춰졌지만 공개 production 서명 설치 패키지는 아직 없습니다. macOS와 Linux는 지원하지 않습니다. 실제 배포 승격은 Authenticode 서명, 깨끗한 Windows 환경의 exact-artifact 검증, 운영 중단 지표 승인이 끝날 때까지 `parked`입니다.
 
+## 데이터베이스 작업 확장
+
+현재 개발 소스에는 기존 Tauri/Rust 백업 Console 옆에 사용자 소유 Workbench를 추가하고 있습니다. 탐색·SQL/수동 트랜잭션·검토 편집·파일 이동·백업/복원 연계는 [사용 안내](docs/runbooks/workbench.md), 실제 검증과 미완료 항목은 [구현 장부](docs/plan/database-management-workspace/checklist-status.md)를 참고하세요. 새 기능이 기존 공개 `v0.1.0-rc.1`에 포함됐다는 의미는 아닙니다.
+
 ## Console 미리보기
 
 > 아래 이미지는 결정적 Playwright demo fixture로 렌더링한 화면입니다. 레이아웃과 상호작용을 보여주며 실제 service 실행이나 백업 성공 증거를 의미하지 않습니다.

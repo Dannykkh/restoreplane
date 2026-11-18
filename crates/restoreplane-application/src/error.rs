@@ -26,6 +26,12 @@ pub enum ApplicationError {
     PlanRevisionVerificationUnsupported,
     #[error("APPLICATION_INTERNAL")]
     Internal,
+    #[error("WB_BINDING_UNPROVEN")]
+    WorkbenchBindingUnproven,
+    #[error("WB_BINDING_STALE")]
+    WorkbenchBindingStale,
+    #[error("WB_TARGET_BUSY")]
+    WorkbenchTargetBusy,
 }
 
 impl ApplicationError {
@@ -45,6 +51,9 @@ impl ApplicationError {
             Self::PlanRevisionDestinationNotReady => "PLAN_REVISION_DESTINATION_NOT_READY",
             Self::PlanRevisionVerificationUnsupported => "PLAN_REVISION_VERIFICATION_UNSUPPORTED",
             Self::Internal => "APPLICATION_INTERNAL",
+            Self::WorkbenchBindingUnproven => "WB_BINDING_UNPROVEN",
+            Self::WorkbenchBindingStale => "WB_BINDING_STALE",
+            Self::WorkbenchTargetBusy => "WB_TARGET_BUSY",
         }
     }
 }

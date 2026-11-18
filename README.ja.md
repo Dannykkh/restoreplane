@@ -15,6 +15,10 @@ RestorePlaneはPostgreSQL、MySQL、MariaDB、SQLiteの論理バックアップ�
 >
 > 主要機能の実装とリポジトリ内の自動検証は整っていますが、一般公開されたproduction署名済みインストーラーはまだありません。macOSとLinuxはサポートしていません。実運用への昇格は、Authenticode署名、クリーンなWindows環境でのexact-artifact検証、運用停止メトリクスの承認が完了するまで`parked`です。
 
+## データベースWorkbenchの開発
+
+現在の開発ソースでは、既存のTauri/RustバックアップConsoleに、ユーザー所有のWorkbenchを追加しています。探索、SQLと手動トランザクション、変更レビュー、ファイル移動、バックアップと復元の連携が対象です。[利用手順（韓国語）](docs/runbooks/workbench.md)と[実行済み検証・未完了項目](docs/plan/database-management-workspace/checklist-status.md)を参照してください。公開済みの`v0.1.0-rc.1`に含まれているという意味ではありません。
+
 ## Consoleプレビュー
 
 > 次の画面は、決定的なPlaywright demo fixtureからレンダリングしたものです。レイアウトと操作を示すものであり、実際のservice実行やバックアップ成功の証拠ではありません。

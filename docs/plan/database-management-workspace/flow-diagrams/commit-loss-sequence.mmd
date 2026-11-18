@@ -1,0 +1,57 @@
+sequenceDiagram
+    actor desktop_owner
+    participant UI as Tauri UI
+    participant Engine as User Rust engine
+    participant Journal as User SQLite journal
+    participant Service as Existing backup service
+    participant Target as Target database
+    desktop_owner->>UI: Explicit reviewed Apply
+    UI->>Engine: edit.apply with attempt identity
+    Engine->>Service: workbench.binding.authorize
+    Service-->>Engine: Canonical descriptor revision and observed work
+    Engine->>Journal: Commit admission and dispatch intent
+    Engine->>Target: BEGIN standalone transaction
+    alt Update or delete
+        Engine->>Target: Lock read typed originals then bound conditional mutation
+        Target-->>Engine: Original match and certified matched-row effect
+    else Insert without existing rowHandle
+        Engine->>Target: Bound ordinary INSERT with reviewed defaults
+        Target-->>Engine: Certified single-row insert effect or refusal
+    end
+    alt Basis count or mutation effect rejected
+        Engine->>Target: ROLLBACK
+        alt Rollback confirmed
+            Target-->>Engine: Supported transactional effects rolled back
+            Engine->>Journal: rolled_back and preserved conflict evidence
+        else Rollback disposition unproven
+            Engine->>Journal: outcome_unknown and no automatic replay
+        end
+    else Every mutation effect certified
+        Engine->>Service: Fresh workbench.binding.authorize for COMMIT
+        alt Authority denied stale or unavailable
+            Service-->>Engine: Refuse COMMIT
+            Engine->>Target: ROLLBACK cleanup still permitted
+            alt Rollback confirmed
+                Target-->>Engine: Rollback confirmed
+                Engine->>Journal: rolled_back without sending COMMIT
+            else Rollback disposition unproven
+                Engine->>Journal: outcome_unknown and no automatic replay
+            end
+        else Fresh COMMIT authority valid
+            Service-->>Engine: Current revision and conflict validation
+            Engine->>Journal: Persist commit_requested
+            Engine->>Target: COMMIT
+            alt Positive commit evidence
+                Target-->>Engine: Commit confirmed
+                Engine->>Journal: Atomic committed and state_version
+                Engine-->>UI: Version hint
+            else Target proves rollback
+                Target-->>Engine: Rollback confirmed
+                Engine->>Journal: Atomic rolled_back and state_version
+            else Reply lost or process exits
+                Engine->>Journal: outcome_unknown on recovery
+            end
+        end
+    end
+    UI->>Engine: operation.get
+    Engine-->>UI: Observed outcome and no automatic replay

@@ -1,0 +1,22 @@
+flowchart TD
+    %% commands: catalog.page, browse.open, result.attach, result.frames, result.ack, operation.get
+    start([Browse request]) --> valid{Handle cursor schema valid}
+    valid -->|No| reject([Reject or expired result])
+    valid -->|Yes| order{Stable unique order}
+    order -->|No| preview[Explicit bounded unordered preview]
+    order -->|Yes| page[Bounded typed page]
+    preview --> credit{Credit and heap available}
+    page --> credit
+    credit -->|No| wait[Pause fetch until ACK or deadline]
+    wait --> expired{Consumer deadline reached}
+    expired -->|Yes| stop([Interrupted or capped terminal])
+    expired -->|No| credit
+    credit -->|Yes| notice[Reserve bytes and send small notice]
+    notice --> pull[Bounded frame pull with original sequence]
+    pull --> ack{ACK within sent contiguous range}
+    ack -->|No| resync[Reject ACK and pull status]
+    resync --> stop
+    ack -->|Yes| apply[Apply once and release bytes once]
+    apply --> more{More rows and budget}
+    more -->|Yes| page
+    more -->|No| finish([Honest completeness and consistency])

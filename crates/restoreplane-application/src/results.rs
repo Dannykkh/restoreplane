@@ -71,6 +71,9 @@ impl From<&ApplicationError> for ApplicationFailure {
                 "The requested verification level is not supported for every selected engine."
             }
             ApplicationError::Internal => "The service could not complete the request.",
+            ApplicationError::WorkbenchBindingUnproven => "The target connection identity is not supported or cannot be established.",
+            ApplicationError::WorkbenchBindingStale => "The target configuration changed; refresh its binding.",
+            ApplicationError::WorkbenchTargetBusy => "The target has conflicting backup or maintenance work.",
         };
         Self {
             code: error.code().to_owned(),

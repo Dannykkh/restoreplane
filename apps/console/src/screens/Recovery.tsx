@@ -1140,6 +1140,9 @@ export function Recovery({ route }: { route: RouteState }) {
               요청 접수나 native process exit 0만으로 성공을 표시하지 않습니다.
               validation과 terminal evidence가 모두 필요합니다.
             </p>
+            {workStatus?.state === "succeeded" && workStatus.operationKind === "restore" && (
+              <a className="button button-secondary" href={routeFor("workbench", { action: `restore-inspect:${trackedWorkItemId}` })}>복원 대상을 읽기 전용으로 검사</a>
+            )}
             <ol className="restore-timeline">
               {timeline.map((entry) => (
                 <li key={entry.key} data-state={entry.state}>

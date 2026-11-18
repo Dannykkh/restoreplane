@@ -1,0 +1,27 @@
+stateDiagram-v2
+    [*] --> idle
+    idle --> opening: fresh authority and durable BEGIN intent
+    opening --> active: target confirms transaction opened
+    opening --> idle: target proves BEGIN refused without transaction
+    opening --> outcome_unknown: BEGIN disposition unproven retire connection
+    active --> commit_requested: desktop_owner COMMIT and fresh authority
+    active --> active: COMMIT authority denied cleanup remains available
+    active --> rollback_requested: desktop_owner rollback or expiry cleanup
+    active --> outcome_unknown: engine loses write-bearing connection
+    active --> failed_needs_rollback: target reports aborted transaction
+    failed_needs_rollback --> rollback_requested: explicit rollback or expiry cleanup
+    failed_needs_rollback --> failed_needs_rollback: refuse further SQL or COMMIT
+    failed_needs_rollback --> outcome_unknown: rollback disposition lost
+    rollback_requested --> rolled_back: target confirms rollback
+    rollback_requested --> outcome_unknown: evidence lost
+    commit_requested --> committed: target confirms commit
+    commit_requested --> rolled_back: target proves transaction rolled back
+    commit_requested --> outcome_unknown: reply lost or cancel unsettled
+    active --> active: statement outcome recorded and transaction still active
+    active --> committed: target proves implicit commit ended this transaction
+    active --> outcome_unknown: implicit commit effects unproven
+    committed --> [*]
+    rolled_back --> [*]
+    outcome_unknown --> outcome_unknown: operator acknowledges uncertainty
+    outcome_unknown --> committed: decisive target commit evidence
+    outcome_unknown --> rolled_back: decisive target rollback evidence

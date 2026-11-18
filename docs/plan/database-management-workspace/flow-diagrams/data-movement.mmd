@@ -1,0 +1,20 @@
+flowchart TD
+    %% commands: import.preview, import.start, import.continue, import.cancel, export.start, export.cancel, operation.get
+    start([Reviewed import or export]) --> kind{Import}
+    kind -->|Yes| batch[Bounded parse typed batch and child intent]
+    batch --> write[[Fresh batch and COMMIT authority with bound INSERT transaction]]
+    write --> known{Observed child batch outcome}
+    known -->|Unknown| unknown([Stop job unknown batch no replay])
+    known -->|Rolled back failed or cancelled| stopped([Stop partial job preserve earlier commits])
+    known -->|Committed| more{More source batches}
+    more -->|Yes| batch
+    more -->|No| imported([Report confirmed batch outcomes])
+    kind -->|No| read{Shown result or approved safe new read}
+    read -->|No| denied([Reject unapproved reexecution])
+    read -->|Yes| partial[Stream into partial file]
+    partial --> complete{Complete source terminal and flush sync succeeded}
+    complete -->|No| unfinished([Keep partial status])
+    complete -->|Yes| rename[[Atomic finalize]]
+    rename --> finalized{Atomic finalize confirmed}
+    finalized -->|No| unfinished
+    finalized -->|Yes| exported([Export complete with consistency scope])

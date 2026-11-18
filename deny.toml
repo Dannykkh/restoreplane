@@ -7,10 +7,8 @@ version = 2
 yanked = "deny"
 unmaintained = "none"
 unsound = "workspace"
-# 근거는 audit.toml 참조(수정본 없음 + 우리 경로 비해당).
-ignore = [
-    "RUSTSEC-2026-0097", # rand 0.8 unsound — OsRng 직접 사용, 해당 조합 아님
-]
+# rand 0.8.6에 수정본이 있으므로 기존 RUSTSEC-2026-0097 예외를 제거한다.
+ignore = []
 
 [licenses]
 version = 2

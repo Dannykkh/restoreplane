@@ -15,6 +15,10 @@ RestorePlane schedules logical backups for PostgreSQL, MySQL, MariaDB, and SQLit
 >
 > The core features and repository-level automated verification are in place, but no publicly available, production-signed installer exists yet. macOS and Linux are not supported. Production promotion remains `parked` until Authenticode signing, exact-artifact qualification on a clean Windows environment, and approval of operational stop metrics are complete.
 
+## Database Workbench development
+
+The current development source is adding a user-owned Workbench beside the existing Tauri/Rust backup Console: browsing, SQL/manual transactions, reviewed edits, file movement, and backup/restore integration. See the [usage guide (Korean)](docs/runbooks/workbench.md) and [implementation evidence and remaining gaps](docs/plan/database-management-workspace/checklist-status.md). These additions are not part of the previously published `v0.1.0-rc.1`.
+
 ## Console preview
 
 > These screens are rendered from deterministic Playwright demo fixtures. They demonstrate layout and interaction, not evidence of a successful service execution or backup.

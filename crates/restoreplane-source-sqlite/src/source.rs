@@ -67,10 +67,10 @@ impl BackupSource for SqliteSource {
                 },
                 pairs_with_globals_backup_id: None,
                 dump_tool: "sqlite-online-backup",
-                dump_tool_path: PathBuf::from("embedded://rusqlite/0.31.0"),
+                dump_tool_path: PathBuf::from("embedded://rusqlite/0.41.0"),
                 dump_tool_sha256: None,
                 dump_tool_dependencies: Vec::new(),
-                dump_tool_version: format!("rusqlite 0.31.0 / SQLite {}", probe.sqlite_version()),
+                dump_tool_version: format!("rusqlite 0.41.0 / SQLite {}", probe.sqlite_version()),
                 dump_format: "sqlite-database",
                 dump_flags: format!(
                     "online-backup pages-per-step={} busy-timeout-ms={}",

@@ -7,6 +7,8 @@ mod g1_evidence;
 mod payload;
 mod results;
 mod use_cases;
+mod workbench_commands;
+pub use workbench_commands::{WorkbenchCommand, WorkbenchRequest};
 
 pub use authority::{enforce_authority, AuthoritySnapshot, CutoverMode, ExecutionAuthority};
 pub use commands::{

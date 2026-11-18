@@ -1,5 +1,5 @@
 // crates/restoreplane-dest-ssh/src/lib.rs
-//! S07 — SshDest(russh 0.62 SFTP, rename-commit) + Tunnel(direct-tcpip) + STRICT host-key 핀.
+//! S07 — SshDest(russh 0.65 SFTP, rename-commit) + Tunnel(direct-tcpip) + STRICT host-key 핀.
 //!
 //! 두 사용처:
 //!   1. Tunnel(터널) — 바스티온 뒤 DB에 닿는 경유 채널(direct-tcpip → 로컬 소켓 브리지). Destination이
@@ -9,9 +9,10 @@
 //! 공통 하중 = host-key 검증(STRICT 핀). OpenDAL sftp는 Unix 전용이라 Windows에서 빌드 불가 →
 //! 반드시 russh 경로로 SFTP를 처리한다(구조적 결정).
 //!
-//! [편차/실측 — russh 0.62 API]
+//! [편차/실측 — russh 0.65 API]
 //! - Handler는 native async fn in trait(RPITIT) → `#[async_trait]` 미사용(handler.rs).
-//! - `check_server_key(&mut self, &PublicKey) -> Result<bool, Error>`, `Ok(false)`면 연결 거부.
+//! - `check_server_key(&mut self, &PublicKeyOrCertificate) -> Result<bool, Error>`.
+//!   공개키 핀만 승인하고 CA 정책이 없는 인증서는 거부한다. `Ok(false)`면 연결 거부.
 //! - `channel_open_direct_tcpip(host: Into<String>, port: u32, orig: Into<String>, orig_port: u32)`.
 //! - `authenticate_password/publickey`는 `AuthResult` 반환(`.success()`), `decode_secret_key` +
 //!   `PrivateKeyWithHashAlg::new(Arc<PrivateKey>, Option<HashAlg>)`로 개인키 로드.

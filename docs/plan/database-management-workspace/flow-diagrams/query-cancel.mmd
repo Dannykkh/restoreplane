@@ -1,0 +1,25 @@
+flowchart TD
+    %% commands: query.run, query.cancel, query.results, transaction.get
+    start([Explicit SQL run]) --> lookup{Authenticated admitted token exists}
+    lookup -->|Yes| status([Original operation and epoch only - no new SQL])
+    lookup -->|No| check{Policy authority and permit valid}
+    check -->|No| denied([Reject before dispatch])
+    check -->|Yes| capacity{Reserve bounded run capacity}
+    capacity -->|No| denied
+    capacity -->|Yes| accepted[[Admit and bind reservation epoch with version CAS]]
+    accepted --> intent[[Persist fresh-authorized dispatch intent]]
+    intent --> run[Run exact approved SQL]
+    run --> cancel{Cancel requested}
+    cancel -->|No| result[Observe statement and transaction outcome]
+    cancel -->|Yes| barrier[Hold next-run admission barrier]
+    barrier --> target[[Cancel exact physical execution epoch]]
+    target --> settled{Cancel settlement and protocol known}
+    settled -->|No| retire[Retire physical session]
+    retire --> uncertainty([Unknown write or interrupted read])
+    settled -->|Yes| result
+    result --> evidence{Target outcome conclusive}
+    evidence -->|No| unknown([Persist outcome unknown])
+    evidence -->|Yes| final[Persist observed outcomes]
+    final --> sync[Observe protocol and physical cleanup settlement]
+    sync --> done([Release next-run barrier])
+    done --> retained[Bounded terminal data LRU - preserve durable operation]

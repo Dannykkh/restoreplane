@@ -520,6 +520,7 @@ impl Fixture {
                 210,
             ))
             .expect("first discovery");
+        self.finish_discovery(&self.first_discovery_id);
         self.store
             .backup_scopes()
             .create_explicit(ExplicitBackupScopeSpec::new(
@@ -574,6 +575,7 @@ impl Fixture {
                 310,
             ))
             .expect("latest discovery");
+        self.finish_discovery(&self.second_discovery_id);
 
         let occurrence = self
             .store
@@ -735,6 +737,7 @@ impl Fixture {
                 210,
             ))
             .expect("baseline discovery");
+        self.finish_discovery(&self.first_discovery_id);
         self.store
             .backup_scopes()
             .create_explicit(ExplicitBackupScopeSpec::new(
@@ -771,6 +774,17 @@ impl Fixture {
                 310,
             ))
             .expect("latest discovery");
+        self.finish_discovery(&self.second_discovery_id);
+    }
+
+    fn finish_discovery(&self, operation_id: &OperationRunId) {
+        Connection::open(&self.db_path)
+            .unwrap()
+            .execute(
+                "UPDATE operation_runs SET state='succeeded' WHERE id=?1",
+                [operation_id.as_str()],
+            )
+            .unwrap();
     }
 
     fn seed_discovery_operation(&self, operation_id: &OperationRunId, at_ms: i64) {
